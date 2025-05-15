@@ -126,6 +126,16 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 	return nil
 }
 
+// Name of the test node container.
+func (n *node) Name() string {
+	return fmt.Sprintf("%s-%s", n.GetType(), SanitizeContainerName(n.TestName))
+}
+
+// HostName of the test node container.
+func (n *node) HostName() string {
+	return CondenseHostName(n.Name())
+}
+
 // modifyConfigToml disables RPC authentication so that the tests can use the endpoints without configuring auth.
 func (n *DANode) modifyConfigToml(ctx context.Context) error {
 	modifications := make(toml.Toml)

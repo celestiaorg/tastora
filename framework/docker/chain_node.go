@@ -80,6 +80,10 @@ func (tn *ChainNode) GetInternalHostName(ctx context.Context) (string, error) {
 	return tn.HostName(), nil
 }
 
+func (tn *ChainNode) HostName() string {
+	return CondenseHostName(tn.Name())
+}
+
 func (tn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
 	return tn.Client, nil
 }
