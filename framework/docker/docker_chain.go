@@ -93,6 +93,11 @@ type Chain struct {
 	findTxMu     sync.Mutex
 	faucetWallet types.Wallet
 	broadcaster  types.Broadcaster
+
+	// started is a bool indicating if the Chain has been started or not.
+	// it is used to determine if files should be initialized at startup or
+	// if the nodes should just be started.
+	started bool
 }
 
 // getBroadcaster returns a broadcaster that can broadcast messages to this chain.
@@ -208,8 +213,18 @@ func (c *Chain) Height(ctx context.Context) (int64, error) {
 	return c.GetNode().Height(ctx)
 }
 
+// Start initializes and starts all nodes in the chain if not already started, otherwise starts all nodes without initialization.
 func (c *Chain) Start(ctx context.Context) error {
+	if c.started {
+		return c.startAllNodes(ctx)
+	}
+	return c.startAndInitializeNodes(ctx)
+}
+
+// startAndInitializeNodes initializes and starts all chain nodes, configures genesis files, and ensures proper setup for the chain.
+func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	cfg := c.cfg
+	c.started = true
 
 	genesisAmounts := make([][]sdk.Coin, len(c.Validators))
 	genesisSelfDelegation := make([]sdk.Coin, len(c.Validators))
@@ -385,6 +400,24 @@ func (c *Chain) GetNode() *ChainNode {
 // Nodes returns all nodes, including validators and fullnodes.
 func (c *Chain) Nodes() ChainNodes {
 	return append(c.Validators, c.FullNodes...)
+}
+
+// startAllNodes creates and starts new containers for each node.
+// Should only be used if the chain has previously been started with .Start.
+func (c *Chain) startAllNodes(ctx context.Context) error {
+	// prevent client calls during this time
+	c.findTxMu.Lock()
+	defer c.findTxMu.Unlock()
+	var eg errgroup.Group
+	for _, n := range c.Nodes() {
+		eg.Go(func() error {
+			if err := n.createNodeContainer(ctx); err != nil {
+				return err
+			}
+			return n.startContainer(ctx)
+		})
+	}
+	return eg.Wait()
 }
 
 func (c *Chain) Stop(ctx context.Context) error {
