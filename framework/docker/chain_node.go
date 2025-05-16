@@ -326,6 +326,11 @@ func (tn *ChainNode) initClient(addr string) error {
 	return nil
 }
 
+// Stop stops the underlying container.
+func (tn *ChainNode) Stop(ctx context.Context) error {
+	return tn.containerLifecycle.StopContainer(ctx)
+}
+
 // setPeers modifies the config persistent_peers for a node.
 func (tn *ChainNode) setPeers(ctx context.Context, peers string) error {
 	c := make(toml.Toml)

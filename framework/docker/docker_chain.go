@@ -391,10 +391,25 @@ func (c *Chain) Stop(ctx context.Context) error {
 	var eg errgroup.Group
 	for _, n := range c.Nodes() {
 		eg.Go(func() error {
+			if err := n.Stop(ctx); err != nil {
+				return err
+			}
 			return n.RemoveContainer(ctx)
 		})
 	}
 	return eg.Wait()
+}
+
+// UpgradeVersion updates the chain's version across all components, including validators and full nodes, and pulls new images.
+func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
+	c.cfg.ChainConfig.Images[0].Version = version
+	for _, n := range c.Validators {
+		n.Image.Version = version
+	}
+	for _, n := range c.FullNodes {
+		n.Image.Version = version
+	}
+	c.pullImages(ctx)
 }
 
 // creates the test node objects required for bootstrapping tests.

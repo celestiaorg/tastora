@@ -26,13 +26,18 @@ type Chain interface {
 	AddNode(ctx context.Context, overrides map[string]any) error // TODO: use options pattern to allow for overrides.
 	// CreateWallet creates a new wallet with the specified keyName and returns the Wallet instance or an error.
 	CreateWallet(ctx context.Context, keyName string) (Wallet, error)
+	// BroadcastMessages sends multiple messages to the blockchain network using the signingWallet, returning a transaction response.
 	BroadcastMessages(ctx context.Context, signingWallet Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error)
+	// BroadcastBlobMessage broadcasts a transaction that includes a message and associated blobs to the blockchain.
 	BroadcastBlobMessage(ctx context.Context, signingWallet Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error)
+	// UpgradeVersion upgrades the chain to the specified version.
+	UpgradeVersion(ctx context.Context, version string)
 }
 
 type ChainNode interface {
 	// GetType returns if the node is a fullnode or a validator. "fn" or a "val"
 	GetType() string
+	// GetRPCClient retrieves the RPC client associated with the chain node, returning the client instance or an error.
 	GetRPCClient() (rpcclient.Client, error)
 	// GetInternalPeerAddress returns the peer address resolvable within the network.
 	GetInternalPeerAddress(ctx context.Context) (string, error)
