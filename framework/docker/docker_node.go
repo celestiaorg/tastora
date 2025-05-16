@@ -62,7 +62,7 @@ func (n *node) GetType() string {
 	return n.nodeType
 }
 
-// RemoveContainer gracefully stops and removes the container associated with the node using the provided context.
-func (n *node) RemoveContainer(ctx context.Context) error {
+// removeContainer gracefully stops and removes the container associated with the node using the provided context.
+func (n *node) removeContainer(ctx context.Context) error {
 	return n.containerLifecycle.RemoveContainer(ctx)
 }

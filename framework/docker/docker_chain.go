@@ -424,10 +424,10 @@ func (c *Chain) Stop(ctx context.Context) error {
 	var eg errgroup.Group
 	for _, n := range c.Nodes() {
 		eg.Go(func() error {
-			if err := n.Stop(ctx); err != nil {
+			if err := n.stop(ctx); err != nil {
 				return err
 			}
-			return n.RemoveContainer(ctx)
+			return n.removeContainer(ctx)
 		})
 	}
 	return eg.Wait()

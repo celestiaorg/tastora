@@ -32,17 +32,14 @@ type DockerTestSuite struct {
 func (s *DockerTestSuite) SetupSuite() {
 	s.ctx = context.Background()
 
-	// Configure Bech32 prefix, this needs to be set as account.String() uses the global config.
+	// configure Bech32 prefix, this needs to be set as account.String() uses the global config.
 	sdkConf := sdk.GetConfig()
 	sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
 	sdkConf.Seal()
 
-	// Create docker client and network
 	s.dockerClient, s.networkID = DockerSetup(s.T())
 
-	var err error
 	s.logger = zaptest.NewLogger(s.T())
-
 	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{})
 
 	s.provider = s.createDefaultProvider()
@@ -82,10 +79,10 @@ func (s *DockerTestSuite) createDefaultProvider() *Provider {
 			},
 			Type:          "celestia",
 			Name:          "celestia",
-			Version:       "v0.23.0",
+			Version:       "v4.0.0-rc4",
 			NumValidators: &numValidators,
 			NumFullNodes:  &numFullNodes,
-			ChainID:       "celestia",
+			ChainID:       "test",
 			Images: []DockerImage{
 				{
 					Repository: "ghcr.io/celestiaorg/celestia-app",

@@ -91,7 +91,7 @@ func (n *DANode) GetHostRPCAddress() string {
 
 // Stop terminates the DANode by removing its associated container gracefully using the provided context.
 func (n *DANode) Stop(ctx context.Context) error {
-	return n.RemoveContainer(ctx)
+	return n.removeContainer(ctx)
 }
 
 // Start initializes and starts the DANode with the provided core IP and genesis hash in the given context.

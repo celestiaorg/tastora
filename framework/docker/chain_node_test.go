@@ -32,7 +32,7 @@ func TestChainNodeHostName(t *testing.T) {
 		},
 	}, testName, DockerImage{}, 2)
 
-	// Get hostnames
+	// get hostnames
 	hostname1 := node1.HostName()
 	hostname2 := node2.HostName()
 	hostname3 := node3.HostName()
