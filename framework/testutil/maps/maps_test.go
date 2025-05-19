@@ -59,6 +59,13 @@ func TestSetField(t *testing.T) {
 			value:   "fail",
 			wantErr: errors.New("invalid path"),
 		},
+		{
+			name:  "create deep nested field",
+			input: `{}`,
+			path:  "deep.nested.structure.created",
+			value: 99,
+			want:  `{"deep": {"nested": {"structure": {"created": 99}}}}`,
+		},
 	}
 
 	for _, tt := range tests {
