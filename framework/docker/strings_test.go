@@ -1,7 +1,7 @@
 package docker
 
 import (
-	"github.com/chatton/celestia-test/framework/testutil/random"
+	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"math/rand"
 	"testing"
 

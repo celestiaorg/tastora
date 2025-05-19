@@ -3,7 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/chatton/celestia-test/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"io"
 	"net"
 	"regexp"

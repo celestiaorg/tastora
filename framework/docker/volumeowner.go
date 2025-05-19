@@ -3,9 +3,9 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/chatton/celestia-test/framework/docker/consts"
-	dockerinternal "github.com/chatton/celestia-test/framework/docker/internal"
-	"github.com/chatton/celestia-test/framework/testutil/random"
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"time"
 
 	"github.com/docker/docker/api/types/container"

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/chatton/celestia-test/framework/docker/file"
-	"github.com/chatton/celestia-test/framework/testutil/toml"
-	"github.com/chatton/celestia-test/framework/types"
+	"github.com/celestiaorg/tastora/framework/docker/file"
+	"github.com/celestiaorg/tastora/framework/testutil/toml"
+	"github.com/celestiaorg/tastora/framework/types"
 	tmjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/p2p"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
@@ -78,6 +78,10 @@ type ChainNode struct {
 
 func (tn *ChainNode) GetInternalHostName(ctx context.Context) (string, error) {
 	return tn.HostName(), nil
+}
+
+func (tn *ChainNode) HostName() string {
+	return CondenseHostName(tn.Name())
 }
 
 func (tn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
@@ -320,6 +324,11 @@ func (tn *ChainNode) initClient(addr string) error {
 	tn.GrpcConn = grpcConn
 
 	return nil
+}
+
+// stop stops the underlying container.
+func (tn *ChainNode) stop(ctx context.Context) error {
+	return tn.containerLifecycle.StopContainer(ctx)
 }
 
 // setPeers modifies the config persistent_peers for a node.

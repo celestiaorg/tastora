@@ -3,9 +3,9 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/chatton/celestia-test/framework/docker/consts"
-	"github.com/chatton/celestia-test/framework/testutil/toml"
-	"github.com/chatton/celestia-test/framework/types"
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/testutil/toml"
+	"github.com/celestiaorg/tastora/framework/types"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
@@ -91,7 +91,7 @@ func (n *DANode) GetHostRPCAddress() string {
 
 // Stop terminates the DANode by removing its associated container gracefully using the provided context.
 func (n *DANode) Stop(ctx context.Context) error {
-	return n.RemoveContainer(ctx)
+	return n.removeContainer(ctx)
 }
 
 // Start initializes and starts the DANode with the provided core IP and genesis hash in the given context.
@@ -124,6 +124,16 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 	}
 
 	return nil
+}
+
+// Name of the test node container.
+func (n *node) Name() string {
+	return fmt.Sprintf("%s-%s", n.GetType(), SanitizeContainerName(n.TestName))
+}
+
+// HostName of the test node container.
+func (n *node) HostName() string {
+	return CondenseHostName(n.Name())
 }
 
 // modifyConfigToml disables RPC authentication so that the tests can use the endpoints without configuring auth.

@@ -62,17 +62,7 @@ func (n *node) GetType() string {
 	return n.nodeType
 }
 
-// Name of the test node container.
-func (n *node) Name() string {
-	return fmt.Sprintf("%s-%s", n.GetType(), SanitizeContainerName(n.TestName))
-}
-
-// HostName of the test node container.
-func (n *node) HostName() string {
-	return CondenseHostName(n.Name())
-}
-
-// RemoveContainer gracefully stops and removes the container associated with the node using the provided context.
-func (n *node) RemoveContainer(ctx context.Context) error {
+// removeContainer gracefully stops and removes the container associated with the node using the provided context.
+func (n *node) removeContainer(ctx context.Context) error {
 	return n.containerLifecycle.RemoveContainer(ctx)
 }

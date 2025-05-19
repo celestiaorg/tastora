@@ -3,7 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/chatton/celestia-test/framework/testutil/sdkacc"
+	"github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"strconv"
 
 	grpc "google.golang.org/grpc"

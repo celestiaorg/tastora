@@ -6,11 +6,11 @@ import (
 	sdkmath "cosmossdk.io/math"
 	"fmt"
 	"github.com/celestiaorg/go-square/v2/share"
-	"github.com/chatton/celestia-test/framework/docker/consts"
-	addressutil "github.com/chatton/celestia-test/framework/testutil/address"
-	"github.com/chatton/celestia-test/framework/testutil/toml"
-	"github.com/chatton/celestia-test/framework/testutil/wait"
-	"github.com/chatton/celestia-test/framework/types"
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	addressutil "github.com/celestiaorg/tastora/framework/testutil/address"
+	"github.com/celestiaorg/tastora/framework/testutil/toml"
+	"github.com/celestiaorg/tastora/framework/testutil/wait"
+	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
@@ -93,6 +93,11 @@ type Chain struct {
 	findTxMu     sync.Mutex
 	faucetWallet types.Wallet
 	broadcaster  types.Broadcaster
+
+	// started is a bool indicating if the Chain has been started or not.
+	// it is used to determine if files should be initialized at startup or
+	// if the nodes should just be started.
+	started bool
 }
 
 // getBroadcaster returns a broadcaster that can broadcast messages to this chain.
@@ -208,8 +213,18 @@ func (c *Chain) Height(ctx context.Context) (int64, error) {
 	return c.GetNode().Height(ctx)
 }
 
+// Start initializes and starts all nodes in the chain if not already started, otherwise starts all nodes without initialization.
 func (c *Chain) Start(ctx context.Context) error {
+	if c.started {
+		return c.startAllNodes(ctx)
+	}
+	return c.startAndInitializeNodes(ctx)
+}
+
+// startAndInitializeNodes initializes and starts all chain nodes, configures genesis files, and ensures proper setup for the chain.
+func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	cfg := c.cfg
+	c.started = true
 
 	genesisAmounts := make([][]sdk.Coin, len(c.Validators))
 	genesisSelfDelegation := make([]sdk.Coin, len(c.Validators))
@@ -387,14 +402,47 @@ func (c *Chain) Nodes() ChainNodes {
 	return append(c.Validators, c.FullNodes...)
 }
 
+// startAllNodes creates and starts new containers for each node.
+// Should only be used if the chain has previously been started with .Start.
+func (c *Chain) startAllNodes(ctx context.Context) error {
+	// prevent client calls during this time
+	c.findTxMu.Lock()
+	defer c.findTxMu.Unlock()
+	var eg errgroup.Group
+	for _, n := range c.Nodes() {
+		eg.Go(func() error {
+			if err := n.createNodeContainer(ctx); err != nil {
+				return err
+			}
+			return n.startContainer(ctx)
+		})
+	}
+	return eg.Wait()
+}
+
 func (c *Chain) Stop(ctx context.Context) error {
 	var eg errgroup.Group
 	for _, n := range c.Nodes() {
 		eg.Go(func() error {
-			return n.RemoveContainer(ctx)
+			if err := n.stop(ctx); err != nil {
+				return err
+			}
+			return n.removeContainer(ctx)
 		})
 	}
 	return eg.Wait()
+}
+
+// UpgradeVersion updates the chain's version across all components, including validators and full nodes, and pulls new images.
+func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
+	c.cfg.ChainConfig.Images[0].Version = version
+	for _, n := range c.Validators {
+		n.Image.Version = version
+	}
+	for _, n := range c.FullNodes {
+		n.Image.Version = version
+	}
+	c.pullImages(ctx)
 }
 
 // creates the test node objects required for bootstrapping tests.

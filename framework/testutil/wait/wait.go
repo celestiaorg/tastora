@@ -3,7 +3,7 @@ package wait
 import (
 	"context"
 	"fmt"
-	"github.com/chatton/celestia-test/framework/types"
+	"github.com/celestiaorg/tastora/framework/types"
 	"golang.org/x/sync/errgroup"
 	"time"
 )

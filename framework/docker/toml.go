@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/BurntSushi/toml"
-	"github.com/chatton/celestia-test/framework/docker/file"
-	tomlutil "github.com/chatton/celestia-test/framework/testutil/toml"
+	"github.com/celestiaorg/tastora/framework/docker/file"
+	tomlutil "github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )

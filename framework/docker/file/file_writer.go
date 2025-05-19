@@ -5,9 +5,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/chatton/celestia-test/framework/docker/consts"
-	internaldocker "github.com/chatton/celestia-test/framework/docker/internal"
-	"github.com/chatton/celestia-test/framework/testutil/random"
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	internaldocker "github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"time"
 
 	"github.com/docker/docker/api/types/container"

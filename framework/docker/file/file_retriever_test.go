@@ -2,9 +2,9 @@ package file_test
 
 import (
 	"context"
-	"github.com/chatton/celestia-test/framework/docker"
-	"github.com/chatton/celestia-test/framework/docker/consts"
-	"github.com/chatton/celestia-test/framework/docker/file"
+	"github.com/celestiaorg/tastora/framework/docker"
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/docker/file"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"

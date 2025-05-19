@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/celestiaorg/go-square/v2/share"
-	"github.com/chatton/celestia-test/framework/types"
+	"github.com/celestiaorg/tastora/framework/types"
 	"io"
 	"net/http"
 	"strconv"

@@ -1,4 +1,4 @@
-module github.com/chatton/celestia-test
+module github.com/celestiaorg/tastora
 
 go 1.23.6
 
