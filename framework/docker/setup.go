@@ -190,7 +190,8 @@ func Cleanup(t SetupTestingT, cli *client.Client) func() {
 				})
 				if err == nil {
 					containerName := strings.TrimPrefix(c.Names[0], "/")
-					if err := writeToFile(rc, fmt.Sprintf("%s/%s", logDir, t.Name()), fmt.Sprintf("%s.log", containerName)); err != nil {
+					testName := strings.ReplaceAll(t.Name(), "/", "_")
+					if err := writeToFile(rc, fmt.Sprintf("%s/%s", logDir, testName), fmt.Sprintf("%s.log", containerName)); err != nil {
 						t.Logf("Failed to write container logs to file during docker cleanup for container %s: %v", containerName, err)
 					}
 				}
