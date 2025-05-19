@@ -37,7 +37,7 @@ func (s *DockerTestSuite) SetupSuite() {
 	sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
 	sdkConf.Seal()
 
-	s.dockerClient, s.networkID = DockerSetup(s.T())
+	s.dockerClient, s.networkID = Setup(s.T())
 
 	s.logger = zaptest.NewLogger(s.T())
 	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{})
@@ -60,7 +60,7 @@ func (s *DockerTestSuite) SetupSuite() {
 
 // TearDownSuite removes docker resources.
 func (s *DockerTestSuite) TearDownSuite() {
-	DockerCleanup(s.T(), s.dockerClient)()
+	Cleanup(s.T(), s.dockerClient)()
 }
 
 // createDefaultProvider returns a provider with the standard Celestia config used for all tests.

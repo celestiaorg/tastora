@@ -38,8 +38,8 @@ type Image struct {
 
 // NewImage returns a valid Image.
 //
-// "pool" and "networkID" are likely from DockerSetup.
-// "testName" is from a (*testing.T).Name() and should match the t.Name() from DockerSetup to ensure proper cleanup.
+// "pool" and "networkID" are likely from Setup.
+// "testName" is from a (*testing.T).Name() and should match the t.Name() from Setup to ensure proper cleanup.
 //
 // Most arguments (except tag) must be non-zero values or this function panics.
 // If tag is absent, defaults to "latest".

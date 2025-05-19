@@ -18,7 +18,7 @@ func TestFileWriter(t *testing.T) {
 
 	t.Parallel()
 
-	cli, network := docker.DockerSetup(t)
+	cli, network := docker.Setup(t)
 
 	ctx := context.Background()
 	v, err := cli.VolumeCreate(ctx, volumetypes.CreateOptions{

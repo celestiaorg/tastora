@@ -1,14 +1,15 @@
 package docker
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
+	"io"
 	"math/rand"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,8 +21,8 @@ import (
 	"github.com/moby/moby/errdefs"
 )
 
-// DockerSetupTestingT is a subset of testing.T required for DockerSetup.
-type DockerSetupTestingT interface {
+// SetupTestingT is a subset of testing.T required for Setup.
+type SetupTestingT interface {
 	Helper()
 
 	Name() string
@@ -33,7 +34,7 @@ type DockerSetupTestingT interface {
 }
 
 // KeepVolumesOnFailure determines whether volumes associated with a test
-// using DockerSetup are retained or deleted following a test failure.
+// using Setup are retained or deleted following a test failure.
 //
 // The value is false by default, but can be initialized to true by setting the
 // environment variable ICTEST_SKIP_FAILURE_CLEANUP to a non-empty value.
@@ -42,10 +43,10 @@ type DockerSetupTestingT interface {
 // is interchaintest.KeepDockerVolumesOnFailure(bool).
 var KeepVolumesOnFailure = os.Getenv("ICTEST_SKIP_FAILURE_CLEANUP") != ""
 
-// DockerSetup returns a new Docker Client and the ID of a configured network, associated with t.
+// Setup returns a new Docker Client and the ID of a configured network, associated with t.
 //
-// If any part of the setup fails, DockerSetup panics because the test cannot continue.
-func DockerSetup(t DockerSetupTestingT) (*client.Client, string) {
+// If any part of the setup fails, Setup panics because the test cannot continue.
+func Setup(t SetupTestingT) (*client.Client, string) {
 	t.Helper()
 
 	cli, err := client.NewClientWithOpts(client.FromEnv)
@@ -54,11 +55,11 @@ func DockerSetup(t DockerSetupTestingT) (*client.Client, string) {
 	}
 
 	// Clean up docker resources at end of test.
-	t.Cleanup(DockerCleanup(t, cli))
+	t.Cleanup(Cleanup(t, cli))
 
 	// Also eagerly clean up any leftover resources from a previous test run,
 	// e.g. if the test was interrupted.
-	DockerCleanup(t, cli)()
+	Cleanup(t, cli)()
 
 	name := fmt.Sprintf("%s-%s", consts.CelestiaDockerPrefix, random.LowerCaseLetterString(8))
 	octet := uint8(rand.Intn(256))
@@ -161,12 +162,11 @@ func incrementIP(ip net.IP, incrementLevel int) {
 	}
 }
 
-// DockerCleanup will clean up Docker containers, networks, and the other various config files generated in testing.
-func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
+// Cleanup will clean up Docker containers, networks, and the other various config files generated in testing.
+func Cleanup(t SetupTestingT, cli *client.Client) func() {
 	return func() {
-		showContainerLogs := os.Getenv("SHOW_CONTAINER_LOGS")
-		containerLogTail := os.Getenv("CONTAINER_LOG_TAIL")
 		keepContainers := os.Getenv("KEEP_CONTAINERS") != ""
+		logDir := os.Getenv("LOG_DIR")
 
 		ctx := context.TODO()
 		cli.NegotiateAPIVersion(ctx)
@@ -182,21 +182,16 @@ func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
 		}
 
 		for _, c := range cs {
-			if (t.Failed() && showContainerLogs == "") || showContainerLogs == "always" {
-				logTail := "50"
-				if containerLogTail != "" {
-					logTail = containerLogTail
-				}
+			if t.Failed() {
 				rc, err := cli.ContainerLogs(ctx, c.ID, container.LogsOptions{
 					ShowStdout: true,
 					ShowStderr: true,
-					Tail:       logTail,
+					Tail:       "all",
 				})
 				if err == nil {
-					b := new(bytes.Buffer)
-					_, err := b.ReadFrom(rc)
-					if err == nil {
-						t.Logf("\n\nContainer logs - {%s}\n%s", strings.Join(c.Names, " "), b.String())
+					containerName := strings.TrimPrefix(c.Names[0], "/")
+					if err := writeToFile(rc, logDir, fmt.Sprintf("%s.log", containerName)); err != nil {
+						t.Logf("Failed to write container logs to file during docker cleanup for container %s: %v", containerName, err)
 					}
 				}
 			}
@@ -243,7 +238,7 @@ func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
 	}
 }
 
-func PruneVolumesWithRetry(ctx context.Context, t DockerSetupTestingT, cli *client.Client) {
+func PruneVolumesWithRetry(ctx context.Context, t SetupTestingT, cli *client.Client) {
 	if KeepVolumesOnFailure && t.Failed() {
 		return
 	}
@@ -277,13 +272,13 @@ func PruneVolumesWithRetry(ctx context.Context, t DockerSetupTestingT, cli *clie
 	}
 
 	if msg != "" {
-		// Odd to Logf %s, but this is a defensive way to keep the DockerSetupTestingT interface
+		// Odd to Logf %s, but this is a defensive way to keep the SetupTestingT interface
 		// with only Logf and not need to add Log.
 		t.Logf("%s", msg)
 	}
 }
 
-func PruneNetworksWithRetry(ctx context.Context, t DockerSetupTestingT, cli *client.Client) {
+func PruneNetworksWithRetry(ctx context.Context, t SetupTestingT, cli *client.Client) {
 	var deleted []string
 	err := retry.Do(
 		func() error {
@@ -319,4 +314,28 @@ func IsLoggableStopError(err error) bool {
 		return false
 	}
 	return !(errdefs.IsNotModified(err) || errdefs.IsNotFound(err))
+}
+
+// writeToFile writes the contents of an io.ReadCloser to a specified file in the given directory.
+// It ensures the directory exists before creating and writing to the file.
+// Returns an error if directory creation, file creation, or content copy fails.
+func writeToFile(r io.ReadCloser, dir, filename string) error {
+	defer r.Close()
+
+	// ensure the directory exists
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	// create the output file.
+	outPath := filepath.Join(dir, filename)
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	// copy the contents
+	_, err = io.Copy(outFile, r)
+	return err
 }
