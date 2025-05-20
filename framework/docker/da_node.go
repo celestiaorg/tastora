@@ -106,21 +106,21 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 		fmt.Sprintf("P2P_NETWORK=%s", n.cfg.ChainID),
 	}
 
-	switch n.GetType() {
-	case types.BridgeNode:
-		env = append(env, fmt.Sprintf("CELESTIA_CUSTOM=%s:%s", n.cfg.ChainID, startOpts.GenesisBlockHash))
-	case types.LightNode:
-		env = append(env, fmt.Sprintf("CELESTIA_CUSTOM=%s:%s:%s", n.cfg.ChainID, startOpts.GenesisBlockHash, startOpts.P2PAddress))
-	case types.FullNode:
-		panic("full node not yet supported")
+	customEnvVar := fmt.Sprintf("CELESTIA_CUSTOM=%s", n.cfg.ChainID)
+	if startOpts.GenesisBlockHash != "" {
+		customEnvVar = fmt.Sprintf("%s:%s", customEnvVar, startOpts.GenesisBlockHash)
 	}
+	if startOpts.P2PAddress != "" {
+		customEnvVar = fmt.Sprintf("%s:%s", customEnvVar, startOpts.P2PAddress)
+	}
+	env = append(env, customEnvVar)
 
 	if err := n.initNode(ctx, env); err != nil {
-		return fmt.Errorf("failed to initialize p2p network: %w", err)
+		return fmt.Errorf("failed to initialize da node: %w", err)
 	}
 
 	if err := n.startNode(ctx, startOpts, env); err != nil {
-		return fmt.Errorf("failed to start bridge node: %w", err)
+		return fmt.Errorf("failed to start da node: %w", err)
 	}
 
 	return nil
