@@ -196,7 +196,7 @@ func (c *Chain) GetNodes() []types.ChainNode {
 }
 
 func (c *Chain) GetGRPCAddress() string {
-	return fmt.Sprintf("%s:9090", c.GetNode().HostName())
+	return c.GetNode().hostGRPCPort
 }
 
 func (c *Chain) GetVolumeName() string {
