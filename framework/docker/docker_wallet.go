@@ -8,11 +8,11 @@ type Wallet struct {
 	Address          []byte
 	FormattedAddress string
 	KeyName          string
-	Beck32Prefix     string
+	Bech32Prefix     string
 }
 
 func (w *Wallet) GetBech32Prefix() string {
-	return w.Beck32Prefix
+	return w.Bech32Prefix
 }
 
 func (w *Wallet) GetKeyName() string {
