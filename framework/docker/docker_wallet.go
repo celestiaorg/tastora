@@ -28,6 +28,6 @@ func NewWallet(address []byte, formattedAddress string, bechPrefix string, keyNa
 		Address:          address,
 		FormattedAddress: formattedAddress,
 		KeyName:          keyName,
-		Beck32Prefix:     bechPrefix,
+		Bech32Prefix:     bechPrefix,
 	}
 }
