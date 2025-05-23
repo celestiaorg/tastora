@@ -1,9 +1,18 @@
 package docker
 
+import "github.com/celestiaorg/tastora/framework/types"
+
+var _ types.Wallet = &Wallet{}
+
 type Wallet struct {
 	Address          []byte
 	FormattedAddress string
 	KeyName          string
+	Beck32Prefix     string
+}
+
+func (w *Wallet) GetBech32Prefix() string {
+	return w.Beck32Prefix
 }
 
 func (w *Wallet) GetKeyName() string {
@@ -14,10 +23,11 @@ func (w *Wallet) GetFormattedAddress() string {
 	return w.FormattedAddress
 }
 
-func NewWallet(address []byte, formattedAddress string, keyName string) Wallet {
+func NewWallet(address []byte, formattedAddress string, bechPrefix string, keyName string) Wallet {
 	return Wallet{
 		Address:          address,
 		FormattedAddress: formattedAddress,
 		KeyName:          keyName,
+		Beck32Prefix:     bechPrefix,
 	}
 }

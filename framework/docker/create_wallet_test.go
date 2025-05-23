@@ -1,14 +1,20 @@
 package docker
 
-import "cosmossdk.io/math"
+import (
+	"cosmossdk.io/math"
+	wallet "github.com/celestiaorg/tastora/framework/testutil/wallet"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+)
 
 // TestCreateAndFundWallet tests wallet creation and funding.
 func (s *DockerTestSuite) TestCreateAndFundWallet() {
 	amount := math.NewInt(1000000)
-	wallet, err := CreateAndFundTestWallet(s.T(), s.ctx, "test", amount, s.chain)
+	sendAmount := sdk.NewCoins(sdk.NewCoin("utia", amount))
+	testWallet, err := wallet.CreateAndFund(s.ctx, "test", sendAmount, s.chain)
 	s.Require().NoError(err)
-	s.Require().NotNil(wallet)
-	s.Require().NotEmpty(wallet.GetFormattedAddress())
-	s.Require().NotEmpty(wallet.GetKeyName())
-	s.T().Logf("Created and funded wallet with address: %s", wallet.GetFormattedAddress())
+	s.Require().NotNil(testWallet)
+	s.Require().NotEmpty(testWallet.GetFormattedAddress())
+	s.Require().NotEmpty(testWallet.GetKeyName())
+	s.Require().NotEmpty(testWallet.GetBech32Prefix())
+	s.T().Logf("Created and funded wallet with address: %s", testWallet.GetFormattedAddress())
 }

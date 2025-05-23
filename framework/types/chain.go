@@ -32,6 +32,8 @@ type Chain interface {
 	BroadcastBlobMessage(ctx context.Context, signingWallet Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error)
 	// UpgradeVersion upgrades the chain to the specified version.
 	UpgradeVersion(ctx context.Context, version string)
+	// GetFaucetWallet returns the faucet wallet.
+	GetFaucetWallet() Wallet
 }
 
 type ChainNode interface {

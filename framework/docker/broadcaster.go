@@ -81,7 +81,7 @@ func (b *broadcaster) GetFactory(ctx context.Context, wallet types.Wallet) (tx.F
 		return tx.Factory{}, err
 	}
 
-	sdkAdd, err := sdkacc.AddressFromBech32(wallet.GetFormattedAddress(), b.chain.cfg.ChainConfig.Bech32Prefix)
+	sdkAdd, err := sdkacc.AddressFromWallet(wallet)
 	if err != nil {
 		return tx.Factory{}, err
 	}
@@ -116,7 +116,7 @@ func (b *broadcaster) GetClientContext(ctx context.Context, wallet types.Wallet)
 		b.keyrings[wallet] = kr
 	}
 
-	sdkAdd, err := sdkacc.AddressFromBech32(wallet.GetFormattedAddress(), b.chain.cfg.ChainConfig.Bech32Prefix)
+	sdkAdd, err := sdkacc.AddressFromWallet(wallet)
 	if err != nil {
 		return client.Context{}, err
 	}

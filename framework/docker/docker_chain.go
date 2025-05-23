@@ -100,6 +100,11 @@ type Chain struct {
 	started bool
 }
 
+// GetFaucetWallet retrieves the faucet wallet for the chain.
+func (c *Chain) GetFaucetWallet() types.Wallet {
+	return c.faucetWallet
+}
+
 // getBroadcaster returns a broadcaster that can broadcast messages to this chain.
 func (c *Chain) getBroadcaster() types.Broadcaster {
 	if c.broadcaster != nil {
@@ -566,7 +571,7 @@ func (c *Chain) CreateWallet(ctx context.Context, keyName string) (types.Wallet,
 
 	formattedAddres := sdktypes.MustBech32ifyAddressBytes(c.cfg.ChainConfig.Bech32Prefix, addrBytes)
 
-	w := NewWallet(addrBytes, formattedAddres, keyName)
+	w := NewWallet(addrBytes, formattedAddres, c.cfg.ChainConfig.Bech32Prefix, keyName)
 	return &w, nil
 }
 
