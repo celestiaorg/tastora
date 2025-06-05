@@ -117,6 +117,21 @@ func (s *DockerTestSuite) createDefaultProvider() *Provider {
 	return NewProvider(cfg, s.T())
 }
 
+// getGenesisHash returns the genesis hash of the given chain node.
+func (s *DockerTestSuite) getGenesisHash(ctx context.Context) string {
+	node := s.chain.GetNodes()[0]
+	c, err := node.GetRPCClient()
+	s.Require().NoError(err, "failed to get node client")
+
+	first := int64(1)
+	block, err := c.Block(ctx, &first)
+	s.Require().NoError(err, "failed to get block")
+
+	genesisHash := block.Block.Header.Hash().String()
+	s.Require().NotEmpty(genesisHash, "genesis hash is empty")
+	return genesisHash
+}
+
 // enable indexing of transactions so Broadcasting of transactions works.
 func appOverrides() toml.Toml {
 	tomlCfg := make(toml.Toml)

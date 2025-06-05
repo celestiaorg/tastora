@@ -94,6 +94,7 @@ type DANodeStartOption func(*DANodeStartOptions)
 
 // DANodeStartOptions represents the configuration options required for starting a DA node.
 type DANodeStartOptions struct {
+	ChainID string
 	// StartArguments specifies any additional start arguments after "celestia start <type>"
 	StartArguments []string
 	// EnvironmentVariables specifies any environment variables that should be passed to the DANode
@@ -102,7 +103,7 @@ type DANodeStartOptions struct {
 }
 
 // WithAdditionalStartArguments sets the additional start arguments to be used.
-func WithAdditionalStartArguments(startArgs []string) DANodeStartOption {
+func WithAdditionalStartArguments(startArgs ...string) DANodeStartOption {
 	return func(o *DANodeStartOptions) {
 		o.StartArguments = startArgs
 	}
@@ -112,5 +113,12 @@ func WithAdditionalStartArguments(startArgs []string) DANodeStartOption {
 func WithEnvironmentVariables(envVars map[string]string) DANodeStartOption {
 	return func(o *DANodeStartOptions) {
 		o.EnvironmentVariables = envVars
+	}
+}
+
+// WithChainID sets the chainID.
+func WithChainID(chainID string) DANodeStartOption {
+	return func(o *DANodeStartOptions) {
+		o.ChainID = chainID
 	}
 }

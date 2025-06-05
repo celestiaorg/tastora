@@ -9,6 +9,7 @@ import (
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
+	"sync"
 )
 
 var _ types.DANode = &DANode{}
@@ -34,7 +35,6 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 
 	bn := &DANode{
 		nodeType: nodeType,
-		cfg:      *cfg.DANodeConfig,
 		log: cfg.Logger.With(
 			zap.String("node_type", nodeType.String()),
 		),
@@ -71,8 +71,8 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 // DANode is a docker implementation of a celestia bridge node.
 type DANode struct {
 	*node
+	mu       sync.Mutex
 	nodeType types.DANodeType
-	cfg      DANodeConfig
 	log      *zap.Logger
 	// ports that are resolvable from the test runners themselves.
 	hostRPCPort string
@@ -97,11 +97,13 @@ func (n *DANode) Stop(ctx context.Context) error {
 // Start initializes and starts the DANode with the provided core IP and genesis hash in the given context.
 // It returns an error if the node initialization or startup fails.
 func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	startOpts := types.DANodeStartOptions{
-		EnvironmentVariables: map[string]string{
-			"P2P_NETWORK": n.cfg.ChainID,
-		},
+		ChainID: "test",
 	}
+
 	for _, fn := range opts {
 		fn(&startOpts)
 	}
@@ -111,7 +113,7 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	if err := n.initNode(ctx, env); err != nil {
+	if err := n.initNode(ctx, startOpts.ChainID, env); err != nil {
 		return fmt.Errorf("failed to initialize da node: %w", err)
 	}
 
@@ -174,9 +176,9 @@ func (n *DANode) startNode(ctx context.Context, additionalStartArgs []string, en
 }
 
 // initNode initializes the DANode by running the "init" command for the specified DANode type, network, and keyring settings.
-func (n *DANode) initNode(ctx context.Context, env []string) error {
+func (n *DANode) initNode(ctx context.Context, chainID string, env []string) error {
 	// note: my_celes_key is the default key name for the da node.
-	cmd := []string{"celestia", n.nodeType.String(), "init", "--p2p.network", n.cfg.ChainID, "--keyring.keyname", "my_celes_key", "--node.store", n.homeDir}
+	cmd := []string{"celestia", n.nodeType.String(), "init", "--p2p.network", chainID, "--keyring.keyname", "my_celes_key", "--node.store", n.homeDir}
 	_, _, err := n.exec(ctx, n.log, cmd, env)
 	return err
 }
