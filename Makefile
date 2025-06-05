@@ -1,5 +1,5 @@
 test: ## Run unit tests
-	@go test -cover -timeout=30m -failfast ./...
+	@go test -cover -timeout=30m -parallel=4 ./...
 .PHONY: test
 
 # Runs linters without modifying files

@@ -8,6 +8,11 @@ import (
 
 // TestDANetworkCreation tests the creation of a DataAvailabilityNetwork with one of each type of node.
 func (s *DockerTestSuite) TestDANetworkCreation() {
+	if testing.Short() {
+		s.T().Skip("skipping due to short mode")
+	}
+	s.T().Parallel()
+
 	ctx := context.Background()
 	var (
 		bridgeNodes []types.DANode
@@ -53,7 +58,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 		)
 		s.Require().NoError(err)
 	})
-	
+
 	s.T().Run("full node can be started", func(t *testing.T) {
 		p2pInfo, err := bridgeNode.GetP2PInfo(ctx)
 		s.Require().NoError(err, "failed to get bridge node p2p info")
