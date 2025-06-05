@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path"
+	"testing"
+	"time"
+
 	"github.com/celestiaorg/go-square/v2/share"
 	squaretx "github.com/celestiaorg/go-square/v2/tx"
 	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
@@ -11,9 +15,6 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdktx "github.com/cosmos/cosmos-sdk/client/tx"
-	"path"
-	"testing"
-	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -181,14 +182,14 @@ func (b *broadcaster) defaultTxFactory(clientCtx client.Context, account client.
 		WithSequence(account.GetSequence()).
 		WithSignMode(signing.SignMode_SIGN_MODE_DIRECT).
 		WithGasAdjustment(chainConfig.GasAdjustment).
-		WithGas(flags.DefaultGasLimit).
+		WithGas(1000000). // Higher gas limit for blob transactions (5x default)
 		WithGasPrices(chainConfig.GasPrices).
 		WithMemo("celestia-test").
 		WithTxConfig(clientCtx.TxConfig).
 		WithAccountRetriever(clientCtx.AccountRetriever).
 		WithKeybase(clientCtx.Keyring).
 		WithChainID(clientCtx.ChainID).
-		WithSimulateAndExecute(false)
+		WithSimulateAndExecute(false) // Use fixed gas amount to avoid keyring access issues
 }
 
 // BroadcastBlobMessage uses the provided Broadcaster to broadcast all the provided message which will be signed

@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
