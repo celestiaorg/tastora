@@ -18,11 +18,6 @@ func (p *Provider) GetDataAvailabilityNetwork(ctx context.Context) (types.DataAv
 	return newDataAvailabilityNetwork(ctx, p.t.Name(), p.cfg)
 }
 
-// GetDANode retrieves a node of the specified type.
-func (p *Provider) GetDANode(ctx context.Context, nodeType types.DANodeType) (types.DANode, error) {
-	return nil, nil
-}
-
 // GetChain returns an initialized Chain instance based on the provided configuration and test name context.
 // It creates necessary underlying resources and validates the configuration before instantiating the Chain.
 func (p *Provider) GetChain(ctx context.Context) (types.Chain, error) {

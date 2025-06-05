@@ -37,6 +37,7 @@ type DataAvailabilityNetwork struct {
 	daNodes []*DANode
 }
 
+// GetBridgeNodes retrieves all nodes of type BridgeNode from the DataAvailabilityNetwork.
 func (d *DataAvailabilityNetwork) GetBridgeNodes() []types.DANode {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -44,6 +45,7 @@ func (d *DataAvailabilityNetwork) GetBridgeNodes() []types.DANode {
 	return d.getNodesOfType(types.BridgeNode)
 }
 
+// GetFullNodes retrieves all nodes of type FullNode from the DataAvailabilityNetwork.
 func (d *DataAvailabilityNetwork) GetFullNodes() []types.DANode {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -51,6 +53,7 @@ func (d *DataAvailabilityNetwork) GetFullNodes() []types.DANode {
 	return d.getNodesOfType(types.FullNode)
 }
 
+// GetLightNodes retrieves all nodes of type LightNode from the DataAvailabilityNetwork.
 func (d *DataAvailabilityNetwork) GetLightNodes() []types.DANode {
 	d.mu.Lock()
 	defer d.mu.Unlock()

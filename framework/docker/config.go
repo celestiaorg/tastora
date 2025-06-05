@@ -14,8 +14,6 @@ type Config struct {
 	DockerNetworkID string
 	// ChainConfig defines configuration specific to the app chain.
 	ChainConfig *ChainConfig
-	// DANodeConfig defines the configuration specific to bridge nodes.
-	DANodeConfig *DANodeConfig
 	// DataAvailabilityNetworkConfig defines the configuration for the data availability network settings.
 	DataAvailabilityNetworkConfig *DataAvailabilityNetworkConfig
 }
@@ -69,16 +67,14 @@ type ChainConfig struct {
 	Env []string
 }
 
+// DataAvailabilityNetworkConfig defines the configuration for the data availability network, including node counts and image settings.
 type DataAvailabilityNetworkConfig struct {
-	FullNodeCount   int
+	// FullNodeCount specifies the number of full nodes to deploy in the data availability network.
+	FullNodeCount int
+	// BridgeNodeCount specifies the number of bridge nodes to deploy in the data availability network.
 	BridgeNodeCount int
-	LightNodeCount  int
-	Image           DockerImage
-}
-
-type DANodeConfig struct {
-	// ChainID should be the chain ID of the host being pointed to by --core.ip
-	ChainID string
-	// Docker images required for running bridge nodes.
-	Images []DockerImage
+	// LightNodeCount specifies the number of light nodes to deploy in the data availability network.
+	LightNodeCount int
+	// Image specifies the Docker image used for nodes in the data availability network.
+	Image DockerImage
 }
