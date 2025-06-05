@@ -79,7 +79,7 @@ func (s *DockerTestSuite) createDefaultProvider() *Provider {
 			},
 			Type:          "celestia",
 			Name:          "celestia",
-			Version:       "v4.0.0-rc4",
+			Version:       "v4.0.0-rc6",
 			NumValidators: &numValidators,
 			NumFullNodes:  &numFullNodes,
 			ChainID:       "test",
@@ -101,6 +101,16 @@ func (s *DockerTestSuite) createDefaultProvider() *Provider {
 			},
 			EncodingConfig:      &s.encConfig,
 			AdditionalStartArgs: []string{"--force-no-bbr", "--grpc.enable", "--grpc.address", "0.0.0.0:9090", "--rpc.grpc_laddr=tcp://0.0.0.0:9098"},
+		},
+		DataAvailabilityNetworkConfig: &DataAvailabilityNetworkConfig{
+			FullNodeCount:   1,
+			BridgeNodeCount: 1,
+			LightNodeCount:  1,
+			Image: DockerImage{
+				Repository: "ghcr.io/celestiaorg/celestia-node",
+				Version:    "v0.23.0-mocha",
+				UIDGID:     "10001:10001",
+			},
 		},
 	}
 

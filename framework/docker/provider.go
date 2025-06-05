@@ -15,12 +15,12 @@ type Provider struct {
 
 // GetDataAvailabilityNetwork returns a new instance of the DataAvailabilityNetwork.
 func (p *Provider) GetDataAvailabilityNetwork(ctx context.Context) (types.DataAvailabilityNetwork, error) {
-	return NewDataAvailabilityNetwork(), nil
+	return newDataAvailabilityNetwork(ctx, p.t.Name(), p.cfg)
 }
 
 // GetDANode retrieves a node of the specified type.
 func (p *Provider) GetDANode(ctx context.Context, nodeType types.DANodeType) (types.DANode, error) {
-	return newDANode(ctx, p.t.Name(), p.cfg, nodeType)
+	return nil, nil
 }
 
 // GetChain returns an initialized Chain instance based on the provided configuration and test name context.

@@ -16,6 +16,8 @@ type Config struct {
 	ChainConfig *ChainConfig
 	// DANodeConfig defines the configuration specific to bridge nodes.
 	DANodeConfig *DANodeConfig
+	// DataAvailabilityNetworkConfig defines the configuration for the data availability network settings.
+	DataAvailabilityNetworkConfig *DataAvailabilityNetworkConfig
 }
 
 type ChainConfig struct {
@@ -65,6 +67,13 @@ type ChainConfig struct {
 	AdditionalStartArgs []string
 	// Environment variables for chain nodes
 	Env []string
+}
+
+type DataAvailabilityNetworkConfig struct {
+	FullNodeCount   int
+	BridgeNodeCount int
+	LightNodeCount  int
+	Image           DockerImage
 }
 
 type DANodeConfig struct {

@@ -9,9 +9,9 @@ import (
 )
 
 type DockerImage struct {
-	Repository string `json:"repository" yaml:"repository"`
-	Version    string `json:"version" yaml:"version"`
-	UIDGID     string `json:"uid-gid" yaml:"uid-gid"`
+	Repository string
+	Version    string
+	UIDGID     string
 }
 
 func NewDockerImage(repository, version, uidGID string) DockerImage {

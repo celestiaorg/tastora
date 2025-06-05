@@ -1,16 +1,28 @@
 package docker
 
 import (
+	"context"
+	"fmt"
 	"github.com/celestiaorg/tastora/framework/types"
 	"sync"
 )
 
 var _ types.DataAvailabilityNetwork = &DataAvailabilityNetwork{}
 
-func NewDataAvailabilityNetwork() *DataAvailabilityNetwork {
-	return &DataAvailabilityNetwork{
-		daNodes: []*DANode{},
+func newDataAvailabilityNetwork(ctx context.Context, testName string, cfg Config) (*DataAvailabilityNetwork, error) {
+	if cfg.DataAvailabilityNetworkConfig == nil {
+		return nil, fmt.Errorf("data availability network config is nil")
 	}
+
+	daNodes, err := createDANodes(ctx, testName, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data availability network nodes: %w", err)
+	}
+
+	return &DataAvailabilityNetwork{
+		cfg:     cfg,
+		daNodes: daNodes,
+	}, nil
 }
 
 // DataAvailabilityNetwork represents a docker network containing multiple nodes.
@@ -18,6 +30,7 @@ func NewDataAvailabilityNetwork() *DataAvailabilityNetwork {
 // It ensures thread-safe operations with mutex locking for concurrent access to its DANodes.
 type DataAvailabilityNetwork struct {
 	mu      sync.Mutex
+	cfg     Config
 	daNodes []*DANode
 }
 
@@ -51,4 +64,28 @@ func (d *DataAvailabilityNetwork) getNodesOfType(typ types.DANodeType) []types.D
 		}
 	}
 	return daNodes
+}
+
+// createDANodes initializes and returns a list of DANodes (bridge, full, and light nodes) based on the given configuration.
+// It returns an error if any node creation fails.
+func createDANodes(ctx context.Context, testName string, cfg Config) ([]*DANode, error) {
+	var daNodes []*DANode
+
+	for _, nodeType := range []struct {
+		count int
+		typ   types.DANodeType
+	}{
+		{cfg.DataAvailabilityNetworkConfig.BridgeNodeCount, types.BridgeNode},
+		{cfg.DataAvailabilityNetworkConfig.FullNodeCount, types.FullNode},
+		{cfg.DataAvailabilityNetworkConfig.LightNodeCount, types.LightNode},
+	} {
+		for i := 0; i < nodeType.count; i++ {
+			n, err := newDANode(ctx, testName, cfg, i, nodeType.typ)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create %s node: %w", nodeType.typ, err)
+			}
+			daNodes = append(daNodes, n)
+		}
+	}
+	return daNodes, nil
 }

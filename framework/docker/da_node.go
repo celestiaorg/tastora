@@ -25,12 +25,12 @@ var daNodePorts = nat.PortMap{
 }
 
 // newDANode initializes and returns a new DANode instance using the provided context, test name, and configuration.
-func newDANode(ctx context.Context, testName string, cfg Config, nodeType types.DANodeType) (types.DANode, error) {
-	if cfg.DANodeConfig == nil {
-		return nil, fmt.Errorf("bridge node config is nil")
+func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeType types.DANodeType) (*DANode, error) {
+	if cfg.DataAvailabilityNetworkConfig == nil {
+		return nil, fmt.Errorf("data availability network config is nil")
 	}
 
-	image := cfg.DANodeConfig.Images[0]
+	image := cfg.DataAvailabilityNetworkConfig.Image
 
 	bn := &DANode{
 		nodeType: nodeType,
@@ -38,7 +38,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, nodeType types.
 		log: cfg.Logger.With(
 			zap.String("node_type", nodeType.String()),
 		),
-		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", nodeType.String()),
+		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", idx, nodeType.String()),
 	}
 
 	bn.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, bn.Name())
@@ -128,7 +128,7 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 
 // Name of the test node container.
 func (n *node) Name() string {
-	return fmt.Sprintf("%s-%s", n.GetType(), SanitizeContainerName(n.TestName))
+	return fmt.Sprintf("%s-%d-%s", n.GetType(), n.Index, SanitizeContainerName(n.TestName))
 }
 
 // HostName of the test node container.
