@@ -13,6 +13,11 @@ type Provider struct {
 	cfg Config
 }
 
+// GetDataAvailabilityNetwork returns a new instance of the DataAvailabilityNetwork.
+func (p *Provider) GetDataAvailabilityNetwork(ctx context.Context) (types.DataAvailabilityNetwork, error) {
+	return NewDataAvailabilityNetwork(), nil
+}
+
 // GetDANode retrieves a node of the specified type.
 func (p *Provider) GetDANode(ctx context.Context, nodeType types.DANodeType) (types.DANode, error) {
 	return newDANode(ctx, p.t.Name(), p.cfg, nodeType)
