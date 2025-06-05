@@ -5,37 +5,37 @@ import (
 	"sync"
 )
 
-var _ types.DANetwork = &DANetwork{}
+var _ types.DataAvailabilityNetwork = &DataAvailabilityNetwork{}
 
-func NewDANetwork(nodes ...*DANode) *DANetwork {
-	return &DANetwork{
-		daNodes: nodes,
+func NewDataAvailabilityNetwork() *DataAvailabilityNetwork {
+	return &DataAvailabilityNetwork{
+		daNodes: []*DANode{},
 	}
 }
 
-// DANetwork represents a docker network containing multiple nodes.
+// DataAvailabilityNetwork represents a docker network containing multiple nodes.
 // It manages the lifecycle and interaction of nodes, including their addition and retrieval by specific types.
 // It ensures thread-safe operations with mutex locking for concurrent access to its DANodes.
-type DANetwork struct {
+type DataAvailabilityNetwork struct {
 	mu      sync.Mutex
 	daNodes []*DANode
 }
 
-func (d *DANetwork) GetBridgeNodes() []types.DANode {
+func (d *DataAvailabilityNetwork) GetBridgeNodes() []types.DANode {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	return d.getNodesOfType(types.BridgeNode)
 }
 
-func (d *DANetwork) GetFullNodes() []types.DANode {
+func (d *DataAvailabilityNetwork) GetFullNodes() []types.DANode {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	return d.getNodesOfType(types.FullNode)
 }
 
-func (d *DANetwork) GetLightNodes() []types.DANode {
+func (d *DataAvailabilityNetwork) GetLightNodes() []types.DANode {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -43,7 +43,7 @@ func (d *DANetwork) GetLightNodes() []types.DANode {
 }
 
 // getNodesOfType retrieves all nodes from the network of the specified type.
-func (d *DANetwork) getNodesOfType(typ types.DANodeType) []types.DANode {
+func (d *DataAvailabilityNetwork) getNodesOfType(typ types.DANodeType) []types.DANode {
 	var daNodes []types.DANode
 	for _, n := range d.daNodes {
 		if n.GetType() == typ {

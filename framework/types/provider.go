@@ -12,6 +12,6 @@ type Provider interface {
 	GetChain(ctx context.Context) (Chain, error)
 	// GetDANode returns an implementation of the Node interface.
 	GetDANode(ctx context.Context, nodeType DANodeType) (DANode, error)
-	// GetDANetwork retrieves an implementation of the DANetwork.
-	GetDANetwork(ctx context.Context) (DANetwork, error)
+	// GetDANetwork retrieves an implementation of the DataAvailabilityNetwork.
+	GetDANetwork(ctx context.Context) (DataAvailabilityNetwork, error)
 }
