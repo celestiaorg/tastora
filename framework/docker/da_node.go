@@ -97,29 +97,25 @@ func (n *DANode) Stop(ctx context.Context) error {
 // Start initializes and starts the DANode with the provided core IP and genesis hash in the given context.
 // It returns an error if the node initialization or startup fails.
 func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) error {
-	startOpts := types.DANodeStartOptions{}
+	startOpts := types.DANodeStartOptions{
+		EnvironmentVariables: map[string]string{
+			"P2P_NETWORK": n.cfg.ChainID,
+		},
+	}
 	for _, fn := range opts {
 		fn(&startOpts)
 	}
 
-	env := []string{
-		fmt.Sprintf("P2P_NETWORK=%s", n.cfg.ChainID),
+	var env []string
+	for k, v := range startOpts.EnvironmentVariables {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
-
-	customEnvVar := fmt.Sprintf("CELESTIA_CUSTOM=%s", n.cfg.ChainID)
-	if startOpts.GenesisBlockHash != "" {
-		customEnvVar = fmt.Sprintf("%s:%s", customEnvVar, startOpts.GenesisBlockHash)
-	}
-	if startOpts.P2PAddress != "" {
-		customEnvVar = fmt.Sprintf("%s:%s", customEnvVar, startOpts.P2PAddress)
-	}
-	env = append(env, customEnvVar)
 
 	if err := n.initNode(ctx, env); err != nil {
 		return fmt.Errorf("failed to initialize da node: %w", err)
 	}
 
-	if err := n.startNode(ctx, startOpts, env); err != nil {
+	if err := n.startNode(ctx, startOpts.StartArguments, env); err != nil {
 		return fmt.Errorf("failed to start da node: %w", err)
 	}
 
@@ -154,8 +150,8 @@ func (n *DANode) modifyConfigToml(ctx context.Context) error {
 }
 
 // startNode initializes and starts the DANode container and updates its configuration based on the provided options.
-func (n *DANode) startNode(ctx context.Context, opts types.DANodeStartOptions, env []string) error {
-	if err := n.createNodeContainer(ctx, opts, env); err != nil {
+func (n *DANode) startNode(ctx context.Context, additionalStartArgs []string, env []string) error {
+	if err := n.createNodeContainer(ctx, additionalStartArgs, env); err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
 	}
 
@@ -179,19 +175,19 @@ func (n *DANode) startNode(ctx context.Context, opts types.DANodeStartOptions, e
 
 // initNode initializes the DANode by running the "init" command for the specified DANode type, network, and keyring settings.
 func (n *DANode) initNode(ctx context.Context, env []string) error {
-	// note: my_celes_key is the default key name for the bridge node.
+	// note: my_celes_key is the default key name for the da node.
 	cmd := []string{"celestia", n.nodeType.String(), "init", "--p2p.network", n.cfg.ChainID, "--keyring.keyname", "my_celes_key", "--node.store", n.homeDir}
 	_, _, err := n.exec(ctx, n.log, cmd, env)
 	return err
 }
 
 // createNodeContainer creates and initializes a container for the DANode with specified context, options, and environment variables.
-func (n *DANode) createNodeContainer(ctx context.Context, opts types.DANodeStartOptions, env []string) error {
-	cmd := []string{"celestia", n.nodeType.String(), "start", "--p2p.network", n.cfg.ChainID, "--core.ip", opts.CoreIP, "--rpc.addr", "0.0.0.0", "--rpc.port", "26658", "--keyring.keyname", "my_celes_key", "--node.store", n.homeDir}
+func (n *DANode) createNodeContainer(ctx context.Context, additionalStartArgs []string, env []string) error {
+	cmd := []string{"celestia", n.nodeType.String(), "start"}
+	cmd = append(cmd, additionalStartArgs...)
 	usingPorts := nat.PortMap{}
 	for k, v := range daNodePorts {
 		usingPorts[k] = v
 	}
-
 	return n.containerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.bind(), nil, n.HostName(), cmd, env, []string{})
 }

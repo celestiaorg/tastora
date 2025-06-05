@@ -9,6 +9,9 @@ import (
 
 var _ types.DataAvailabilityNetwork = &DataAvailabilityNetwork{}
 
+// newDataAvailabilityNetwork initializes a DataAvailabilityNetwork using the provided context, testName, and configuration.
+// Returns a pointer to DataAvailabilityNetwork and an error if initialization fails.
+// It creates DANodes based on the configuration.
 func newDataAvailabilityNetwork(ctx context.Context, testName string, cfg Config) (*DataAvailabilityNetwork, error) {
 	if cfg.DataAvailabilityNetworkConfig == nil {
 		return nil, fmt.Errorf("data availability network config is nil")
@@ -70,7 +73,6 @@ func (d *DataAvailabilityNetwork) getNodesOfType(typ types.DANodeType) []types.D
 // It returns an error if any node creation fails.
 func createDANodes(ctx context.Context, testName string, cfg Config) ([]*DANode, error) {
 	var daNodes []*DANode
-
 	for _, nodeType := range []struct {
 		count int
 		typ   types.DANodeType
