@@ -40,6 +40,10 @@ func (s *DockerTestSuite) SetupSuite() {
 
 	s.logger = zaptest.NewLogger(s.T())
 	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{})
+}
+
+func (s *DockerTestSuite) SetupTest() {
+	s.dockerClient, s.networkID = DockerSetup(s.T())
 
 	s.provider = s.createDefaultProvider()
 	chain, err := s.provider.GetChain(s.ctx)
@@ -48,17 +52,10 @@ func (s *DockerTestSuite) SetupSuite() {
 
 	err = s.chain.Start(s.ctx)
 	s.Require().NoError(err)
-
-	s.T().Cleanup(func() {
-		err := s.chain.Stop(s.ctx)
-		if err != nil {
-			s.T().Logf("Failed to stop chain: %s", err)
-		}
-	})
 }
 
-// TearDownSuite removes docker resources.
-func (s *DockerTestSuite) TearDownSuite() {
+// TearDownTest removes docker resources.
+func (s *DockerTestSuite) TearDownTest() {
 	DockerCleanup(s.T(), s.dockerClient)()
 }
 

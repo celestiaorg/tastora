@@ -12,7 +12,6 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 	if testing.Short() {
 		s.T().Skip("skipping due to short mode")
 	}
-	s.T().Parallel()
 
 	ctx := context.Background()
 	var (
@@ -110,8 +109,6 @@ func (s *DockerTestSuite) TestModifyConfigFileDANetwork() {
 	if testing.Short() {
 		s.T().Skip("skipping due to short mode")
 	}
-	s.T().Parallel()
-
 	ctx := context.Background()
 	var bridgeNodes []types.DANode
 

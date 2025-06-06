@@ -9,7 +9,7 @@ func (s *DockerTestSuite) TestUpgradeVersion() {
 	err := s.chain.Stop(s.ctx)
 	s.Require().NoError(err)
 
-	s.chain.UpgradeVersion(s.ctx, "v4.0.0-rc6")
+	s.chain.UpgradeVersion(s.ctx, "v4.0.2-mocha")
 
 	err = s.chain.Start(s.ctx)
 	s.Require().NoError(err)
