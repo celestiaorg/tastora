@@ -75,7 +75,7 @@ func (n *node) stopContainer(ctx context.Context) error {
 	return n.containerLifecycle.StopContainer(ctx)
 }
 
-// stopContainer starts the container associated with the node using the provided context.
+// startContainer starts the container associated with the node using the provided context.
 func (n *node) startContainer(ctx context.Context) error {
 	return n.containerLifecycle.StartContainer(ctx)
 }
