@@ -25,6 +25,6 @@ func (s *DockerTestSuite) TestUpgradeVersion() {
 
 	abciInfo, err := rpcClient.ABCIInfo(s.ctx)
 	s.Require().NoError(err, "failed to fetch ABCI info")
-	s.Require().Equal("4.0.0-rc6", abciInfo.Response.GetVersion(), "version mismatch")
+	s.Require().Equal("4.0.2-mocha", abciInfo.Response.GetVersion(), "version mismatch")
 	s.Require().Equal(uint64(4), abciInfo.Response.GetAppVersion(), "app_version mismatch")
 }
