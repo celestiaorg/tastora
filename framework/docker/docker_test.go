@@ -5,7 +5,6 @@ import (
 	"github.com/moby/moby/client"
 	"testing"
 
-	"github.com/celestiaorg/tastora/framework/testutil/maps"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
@@ -79,32 +78,61 @@ func (s *DockerTestSuite) createDefaultProvider() *Provider {
 			},
 			Type:          "celestia",
 			Name:          "celestia",
-			Version:       "v4.0.0-rc4",
+			Version:       "v4.0.0-rc6",
 			NumValidators: &numValidators,
 			NumFullNodes:  &numFullNodes,
 			ChainID:       "test",
 			Images: []DockerImage{
 				{
 					Repository: "ghcr.io/celestiaorg/celestia-app",
-					Version:    "v4.0.0-rc4",
+					Version:    "v4.0.0-rc6",
 					UIDGID:     "10001:10001",
 				},
 			},
-			Bin:           "celestia-appd",
-			Bech32Prefix:  "celestia",
-			Denom:         "utia",
-			CoinType:      "118",
-			GasPrices:     "0.025utia",
-			GasAdjustment: 1.3,
-			ModifyGenesis: func(config Config, bytes []byte) ([]byte, error) {
-				return maps.SetField(bytes, "consensus.params.version.app", "4")
+			Bin:            "celestia-appd",
+			Bech32Prefix:   "celestia",
+			Denom:          "utia",
+			CoinType:       "118",
+			GasPrices:      "0.025utia",
+			GasAdjustment:  1.3,
+			EncodingConfig: &s.encConfig,
+			AdditionalStartArgs: []string{
+				"--force-no-bbr",
+				"--grpc.enable",
+				"--grpc.address",
+				"0.0.0.0:9090",
+				"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
+				"--timeout-commit", "1s", // shorter block time.
 			},
-			EncodingConfig:      &s.encConfig,
-			AdditionalStartArgs: []string{"--force-no-bbr", "--grpc.enable", "--grpc.address", "0.0.0.0:9090", "--rpc.grpc_laddr=tcp://0.0.0.0:9098"},
+		},
+		DataAvailabilityNetworkConfig: &DataAvailabilityNetworkConfig{
+			FullNodeCount:   1,
+			BridgeNodeCount: 1,
+			LightNodeCount:  1,
+			Image: DockerImage{
+				Repository: "ghcr.io/celestiaorg/celestia-node",
+				Version:    "v0.23.0-mocha",
+				UIDGID:     "10001:10001",
+			},
 		},
 	}
 
 	return NewProvider(cfg, s.T())
+}
+
+// getGenesisHash returns the genesis hash of the given chain node.
+func (s *DockerTestSuite) getGenesisHash(ctx context.Context) string {
+	node := s.chain.GetNodes()[0]
+	c, err := node.GetRPCClient()
+	s.Require().NoError(err, "failed to get node client")
+
+	first := int64(1)
+	block, err := c.Block(ctx, &first)
+	s.Require().NoError(err, "failed to get block")
+
+	genesisHash := block.Block.Header.Hash().String()
+	s.Require().NotEmpty(genesisHash, "genesis hash is empty")
+	return genesisHash
 }
 
 // enable indexing of transactions so Broadcasting of transactions works.

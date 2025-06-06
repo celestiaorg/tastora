@@ -13,9 +13,9 @@ type Provider struct {
 	cfg Config
 }
 
-// GetDANode retrieves a node of the specified type.
-func (p *Provider) GetDANode(ctx context.Context, nodeType types.DANodeType) (types.DANode, error) {
-	return newDANode(ctx, p.t.Name(), p.cfg, nodeType)
+// GetDataAvailabilityNetwork returns a new instance of the DataAvailabilityNetwork.
+func (p *Provider) GetDataAvailabilityNetwork(ctx context.Context) (types.DataAvailabilityNetwork, error) {
+	return newDataAvailabilityNetwork(ctx, p.t.Name(), p.cfg)
 }
 
 // GetChain returns an initialized Chain instance based on the provided configuration and test name context.

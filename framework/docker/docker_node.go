@@ -17,6 +17,7 @@ type node struct {
 	containerLifecycle *ContainerLifecycle
 	homeDir            string
 	nodeType           string
+	Index              int
 }
 
 // newNode creates a new node instance with the required parameters.
@@ -26,6 +27,7 @@ func newNode(
 	testName string,
 	image DockerImage,
 	homeDir string,
+	idx int,
 	nodeType string,
 ) *node {
 	return &node{
@@ -34,6 +36,7 @@ func newNode(
 		TestName:     testName,
 		Image:        image,
 		homeDir:      homeDir,
+		Index:        idx,
 		nodeType:     nodeType,
 	}
 }

@@ -60,7 +60,6 @@ type ChainNodes []*ChainNode
 
 type ChainNode struct {
 	*node
-	Index     int
 	cfg       Config
 	Validator bool
 	Client    rpcclient.Client
@@ -101,8 +100,7 @@ func NewDockerChainNode(log *zap.Logger, validator bool, cfg Config, testName st
 		),
 		Validator: validator,
 		cfg:       cfg,
-		node:      newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var/cosmos-chain", cfg.ChainConfig.Name), nodeType),
-		Index:     index,
+		node:      newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var/cosmos-chain", cfg.ChainConfig.Name), index, nodeType),
 	}
 
 	tn.containerLifecycle = NewContainerLifecycle(log, cfg.DockerClient, tn.Name())
