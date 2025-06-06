@@ -16,6 +16,9 @@ type Config struct {
 	ChainConfig *ChainConfig
 	// DataAvailabilityNetworkConfig defines the configuration for the data availability network settings.
 	DataAvailabilityNetworkConfig *DataAvailabilityNetworkConfig
+	// DANodeConfig provides a simple interface for single-node DA configuration.
+	// It automatically creates a DataAvailabilityNetworkConfig with one bridge node.
+	DANodeConfig *DANodeConfig
 }
 
 type ChainConfig struct {
@@ -77,4 +80,13 @@ type DataAvailabilityNetworkConfig struct {
 	LightNodeCount int
 	// Image specifies the Docker image used for nodes in the data availability network.
 	Image DockerImage
+}
+
+// DANodeConfig provides a simple interface for single-node DA configuration.
+// It automatically creates a DataAvailabilityNetworkConfig with one bridge node.
+type DANodeConfig struct {
+	// ChainID for the DA node
+	ChainID string
+	// Images specifies the Docker images used for the DA node.
+	Images []DockerImage
 }

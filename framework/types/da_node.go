@@ -3,8 +3,9 @@ package types
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/go-square/v2/share"
 	"regexp"
+
+	"github.com/celestiaorg/go-square/v2/share"
 )
 
 var p2pAddressPattern *regexp.Regexp
@@ -121,5 +122,27 @@ func WithEnvironmentVariables(envVars map[string]string) DANodeStartOption {
 func WithChainID(chainID string) DANodeStartOption {
 	return func(o *DANodeStartOptions) {
 		o.ChainID = chainID
+	}
+}
+
+// WithCoreIP sets the core IP address for the DA node to connect to.
+func WithCoreIP(coreIP string) DANodeStartOption {
+	return func(o *DANodeStartOptions) {
+		if o.EnvironmentVariables == nil {
+			o.EnvironmentVariables = make(map[string]string)
+		}
+		// Store core IP for later use in building CELESTIA_CUSTOM
+		o.EnvironmentVariables["CELESTIA_CORE_IP"] = coreIP
+	}
+}
+
+// WithGenesisBlockHash sets the genesis block hash for the DA node.
+func WithGenesisBlockHash(genesisHash string) DANodeStartOption {
+	return func(o *DANodeStartOptions) {
+		if o.EnvironmentVariables == nil {
+			o.EnvironmentVariables = make(map[string]string)
+		}
+		// Store genesis hash for later use in building CELESTIA_CUSTOM
+		o.EnvironmentVariables["CELESTIA_GENESIS_HASH"] = genesisHash
 	}
 }

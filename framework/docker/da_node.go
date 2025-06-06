@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
@@ -10,7 +11,6 @@ import (
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
-	"sync"
 )
 
 var _ types.DANode = &DANode{}
@@ -110,15 +110,42 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 	}
 
 	var env []string
-	for k, v := range startOpts.EnvironmentVariables {
-		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	var startArgs []string
+
+	// Get core IP and genesis hash from environment variables
+	coreIP := startOpts.EnvironmentVariables["CELESTIA_CORE_IP"]
+	genesisHash := startOpts.EnvironmentVariables["CELESTIA_GENESIS_HASH"]
+
+	// Build CELESTIA_CUSTOM if genesis hash is provided
+	if genesisHash != "" {
+		celestiaCustom := types.BuildCelestiaCustomEnvVar(startOpts.ChainID, genesisHash, "")
+		env = append(env, fmt.Sprintf("CELESTIA_CUSTOM=%s", celestiaCustom))
 	}
+
+	// Add core IP as start argument for bridge nodes
+	if coreIP != "" && n.nodeType == types.BridgeNode {
+		startArgs = append(startArgs, "--core.ip", coreIP)
+	}
+
+	// Always add RPC address binding to listen on all interfaces
+	startArgs = append(startArgs, "--rpc.addr", "0.0.0.0")
+
+	// Add other environment variables
+	for k, v := range startOpts.EnvironmentVariables {
+		// Skip the helper vars as they're processed separately
+		if k != "CELESTIA_CORE_IP" && k != "CELESTIA_GENESIS_HASH" {
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+
+	// Add any additional start arguments
+	startArgs = append(startArgs, startOpts.StartArguments...)
 
 	if err := n.initNode(ctx, startOpts.ChainID, env); err != nil {
 		return fmt.Errorf("failed to initialize da node: %w", err)
 	}
 
-	if err := n.startNode(ctx, startOpts.StartArguments, env); err != nil {
+	if err := n.startNode(ctx, startArgs, env); err != nil {
 		return fmt.Errorf("failed to start da node: %w", err)
 	}
 

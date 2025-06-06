@@ -42,13 +42,23 @@ type ValidatorWithDABridgeTestSuite struct {
 func (s *ValidatorWithDABridgeTestSuite) SetupSuite() {
 	s.ctx = context.Background()
 
-	// Configure Bech32 prefix for Celestia addresses
-	sdkConf := sdk.GetConfig()
-	sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
-	sdkConf.Seal()
-
 	s.dockerClient, s.networkID = docker.DockerSetup(s.T())
 	s.logger = zaptest.NewLogger(s.T())
+
+	// Configure Bech32 prefix for Celestia addresses (only if not already sealed)
+	sdkConf := sdk.GetConfig()
+	// Check if config is already sealed to avoid panic
+	if sdkConf.GetBech32AccountAddrPrefix() != "celestia" {
+		// Only set if not already set to avoid "Config is sealed" error
+		defer func() {
+			if r := recover(); r != nil {
+				// Config was already sealed, continue with test
+				s.logger.Info("SDK config already sealed, continuing with existing configuration")
+			}
+		}()
+		sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
+		sdkConf.Seal()
+	}
 	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{})
 
 	// Setup chain (single validator)
@@ -120,14 +130,14 @@ func (s *ValidatorWithDABridgeTestSuite) createDefaultProvider() *docker.Provide
 			EncodingConfig:      &s.encConfig,
 			AdditionalStartArgs: []string{"--force-no-bbr", "--grpc.enable", "--grpc.address", "0.0.0.0:9090", "--rpc.grpc_laddr=tcp://0.0.0.0:9098", "--timeout-commit", "1s"},
 		},
-		DataAvailabilityNetworkConfig: &docker.DataAvailabilityNetworkConfig{
-			BridgeNodeCount: 1,
-			FullNodeCount:   0,
-			LightNodeCount:  0,
-			Image: docker.DockerImage{
-				Repository: "ghcr.io/celestiaorg/celestia-node",
-				Version:    "v0.23.0-mocha",
-				UIDGID:     "10001:10001",
+		DANodeConfig: &docker.DANodeConfig{
+			ChainID: "test",
+			Images: []docker.DockerImage{
+				{
+					Repository: "ghcr.io/celestiaorg/celestia-node",
+					Version:    "v0.23.0-mocha",
+					UIDGID:     "10001:10001",
+				},
 			},
 		},
 	}
@@ -139,9 +149,9 @@ func (s *ValidatorWithDABridgeTestSuite) createDefaultProvider() *docker.Provide
 func (s *ValidatorWithDABridgeTestSuite) setupDABridge() error {
 	s.logger.Info("Setting up DA bridge node")
 
-	// Get the validator's hostname
+	// Get the validator's core IP and genesis hash
 	validatorNode := s.chain.GetNodes()[0]
-	coreHostname, err := validatorNode.GetInternalHostName(s.ctx)
+	coreIP, err := validatorNode.GetInternalHostName(s.ctx)
 	if err != nil {
 		return err
 	}
@@ -152,56 +162,50 @@ func (s *ValidatorWithDABridgeTestSuite) setupDABridge() error {
 		return err
 	}
 
-	// Get DA bridge node from the provider
-	daNetwork, err := s.provider.GetDataAvailabilityNetwork(s.ctx)
+	// Create DA bridge node
+	cfg := docker.Config{
+		Logger:          s.logger,
+		DockerClient:    s.dockerClient,
+		DockerNetworkID: s.networkID,
+		DANodeConfig: &docker.DANodeConfig{
+			ChainID: "test",
+			Images: []docker.DockerImage{
+				{
+					Repository: "ghcr.io/celestiaorg/celestia-node",
+					Version:    "v0.23.0-mocha",
+					UIDGID:     "10001:10001",
+				},
+			},
+		},
+	}
+
+	daBridge, err := s.createDABridge(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to get DA network: %w", err)
+		return err
 	}
 
-	bridgeNodes := daNetwork.GetBridgeNodes()
-	if len(bridgeNodes) == 0 {
-		return fmt.Errorf("no bridge nodes available in DA network")
-	}
+	s.daBridge = daBridge
 
-	s.daBridge = bridgeNodes[0]
-
-	// Use dns4 multiaddr format for hostname instead of ip4
-	celestiaCustom := types.BuildCelestiaCustomEnvVar("test", genesisHash, fmt.Sprintf("/dns4/%s/tcp/26657", coreHostname))
-
-	// Start the DA bridge node with environment variables
+	// Start the DA bridge node
 	err = s.daBridge.Start(s.ctx,
-		types.WithChainID("test"),
-		types.WithEnvironmentVariables(map[string]string{
-			"CELESTIA_CUSTOM": celestiaCustom,
-		}),
+		types.WithCoreIP(coreIP),
+		types.WithGenesisBlockHash(genesisHash),
 	)
 	if err != nil {
 		return err
 	}
 
 	s.logger.Info("DA bridge node started successfully",
-		zap.String("core_hostname", coreHostname),
-		zap.String("genesis_hash", genesisHash),
-		zap.String("celestia_custom", celestiaCustom))
+		zap.String("core_ip", coreIP),
+		zap.String("genesis_hash", genesisHash))
 
 	return nil
 }
 
-// createDABridge creates a DA bridge node instance using the provider - DEPRECATED: use setupDABridge instead
+// createDABridge creates a DA bridge node instance using the provider
 func (s *ValidatorWithDABridgeTestSuite) createDABridge(cfg docker.Config) (types.DANode, error) {
-	// This method is no longer used but kept for compatibility
 	provider := docker.NewProvider(cfg, s.T())
-	daNetwork, err := provider.GetDataAvailabilityNetwork(s.ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get DA network: %w", err)
-	}
-
-	bridgeNodes := daNetwork.GetBridgeNodes()
-	if len(bridgeNodes) == 0 {
-		return nil, fmt.Errorf("no bridge nodes available in DA network")
-	}
-
-	return bridgeNodes[0], nil
+	return provider.GetDANode(s.ctx, types.BridgeNode)
 }
 
 // getGenesisBlockHash retrieves the genesis block hash from the validator
