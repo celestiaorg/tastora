@@ -94,6 +94,7 @@ type DANodeStartOption func(*DANodeStartOptions)
 
 // DANodeStartOptions represents the configuration options required for starting a DA node.
 type DANodeStartOptions struct {
+	// ChainID is the chain ID.
 	ChainID string
 	// StartArguments specifies any additional start arguments after "celestia start <type>"
 	StartArguments []string

@@ -20,7 +20,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 		fullNodes   []types.DANode
 	)
 
-	// default configuration ues 1/1/1 for Bridge/Light/Full da nodes.
+	// default configuration uses 1/1/1 for Bridge/Light/Full da nodes.
 	daNetwork, err := s.provider.GetDataAvailabilityNetwork(ctx)
 	s.Require().NoError(err)
 
@@ -48,6 +48,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 
 	s.T().Run("bridge node can be started", func(t *testing.T) {
 		err = bridgeNode.Start(ctx,
+			types.WithChainID(chainID),
 			types.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
 			types.WithEnvironmentVariables(
 				map[string]string{
@@ -67,6 +68,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 		s.Require().NoError(err, "failed to get bridge node p2p address")
 
 		err = fullNode.Start(ctx,
+			types.WithChainID(chainID),
 			types.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
 			types.WithEnvironmentVariables(
 				map[string]string{
@@ -86,6 +88,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 		s.Require().NoError(err, "failed to get full node p2p address")
 
 		err = lightNode.Start(ctx,
+			types.WithChainID(chainID),
 			types.WithAdditionalStartArguments("--p2p.network", chainID, "--rpc.addr", "0.0.0.0"),
 			types.WithEnvironmentVariables(
 				map[string]string{

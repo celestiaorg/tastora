@@ -5,7 +5,6 @@ import (
 	"github.com/moby/moby/client"
 	"testing"
 
-	"github.com/celestiaorg/tastora/framework/testutil/maps"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
@@ -86,21 +85,25 @@ func (s *DockerTestSuite) createDefaultProvider() *Provider {
 			Images: []DockerImage{
 				{
 					Repository: "ghcr.io/celestiaorg/celestia-app",
-					Version:    "v4.0.0-rc4",
+					Version:    "v4.0.0-rc6",
 					UIDGID:     "10001:10001",
 				},
 			},
-			Bin:           "celestia-appd",
-			Bech32Prefix:  "celestia",
-			Denom:         "utia",
-			CoinType:      "118",
-			GasPrices:     "0.025utia",
-			GasAdjustment: 1.3,
-			ModifyGenesis: func(config Config, bytes []byte) ([]byte, error) {
-				return maps.SetField(bytes, "consensus.params.version.app", "4")
+			Bin:            "celestia-appd",
+			Bech32Prefix:   "celestia",
+			Denom:          "utia",
+			CoinType:       "118",
+			GasPrices:      "0.025utia",
+			GasAdjustment:  1.3,
+			EncodingConfig: &s.encConfig,
+			AdditionalStartArgs: []string{
+				"--force-no-bbr",
+				"--grpc.enable",
+				"--grpc.address",
+				"0.0.0.0:9090",
+				"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
+				"--timeout-commit", "1s", // shorter block time.
 			},
-			EncodingConfig:      &s.encConfig,
-			AdditionalStartArgs: []string{"--force-no-bbr", "--grpc.enable", "--grpc.address", "0.0.0.0:9090", "--rpc.grpc_laddr=tcp://0.0.0.0:9098"},
 		},
 		DataAvailabilityNetworkConfig: &DataAvailabilityNetworkConfig{
 			FullNodeCount:   1,
