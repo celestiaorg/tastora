@@ -102,6 +102,9 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 
 	startOpts := types.DANodeStartOptions{
 		ChainID: "test",
+		// by default disable RPC authentication, if any custom overrides are applied,
+		// they will need to explicitly disable rpc auth also if that is required.
+		ConfigModifications: disableRPCAuthModification(),
 	}
 
 	for _, fn := range opts {
@@ -117,7 +120,7 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 		return fmt.Errorf("failed to initialize da node: %w", err)
 	}
 
-	if err := n.startNode(ctx, startOpts.StartArguments, env); err != nil {
+	if err := n.startNode(ctx, startOpts.StartArguments, startOpts.ConfigModifications, env); err != nil {
 		return fmt.Errorf("failed to start da node: %w", err)
 	}
 
@@ -134,31 +137,33 @@ func (n *node) HostName() string {
 	return CondenseHostName(n.Name())
 }
 
-// modifyConfigToml disables RPC authentication so that the tests can use the endpoints without configuring auth.
-func (n *DANode) modifyConfigToml(ctx context.Context) error {
-	modifications := make(toml.Toml)
-	rpc := make(toml.Toml)
-	rpc["SkipAuth"] = true
-	modifications["RPC"] = rpc
-	return ModifyConfigFile(
-		ctx,
-		n.log,
-		n.DockerClient,
-		n.TestName,
-		n.VolumeName,
-		"config.toml",
-		modifications,
-	)
+// ModifyConfigFiles modifies the specified config files with the provided TOML modifications.
+func (n *DANode) ModifyConfigFiles(ctx context.Context, configModifications map[string]toml.Toml) error {
+	for filePath, modifications := range configModifications {
+		if err := ModifyConfigFile(
+			ctx,
+			n.log,
+			n.DockerClient,
+			n.TestName,
+			n.VolumeName,
+			filePath,
+			modifications,
+		); err != nil {
+			return fmt.Errorf("failed to modify %s: %w", filePath, err)
+		}
+	}
+	return nil
 }
 
 // startNode initializes and starts the DANode container and updates its configuration based on the provided options.
-func (n *DANode) startNode(ctx context.Context, additionalStartArgs []string, env []string) error {
+func (n *DANode) startNode(ctx context.Context, additionalStartArgs []string, configModifications map[string]toml.Toml, env []string) error {
 	if err := n.createNodeContainer(ctx, additionalStartArgs, env); err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
 	}
 
-	if err := n.modifyConfigToml(ctx); err != nil {
-		return fmt.Errorf("failed to disable RPC auth: %w", err)
+	// apply any config modifications
+	if err := n.ModifyConfigFiles(ctx, configModifications); err != nil {
+		return fmt.Errorf("failed to apply config modifications: %w", err)
 	}
 
 	if err := n.containerLifecycle.StartContainer(ctx); err != nil {
@@ -192,4 +197,14 @@ func (n *DANode) createNodeContainer(ctx context.Context, additionalStartArgs []
 		usingPorts[k] = v
 	}
 	return n.containerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.bind(), nil, n.HostName(), cmd, env, []string{})
+}
+
+// disableRPCAuthModification provides a modification which disables RPC authentication so that the tests can use the endpoints without configuring auth.
+func disableRPCAuthModification() map[string]toml.Toml {
+	modifications := toml.Toml{
+		"RPC": toml.Toml{
+			"SkipAuth": true,
+		},
+	}
+	return map[string]toml.Toml{"config.toml": modifications}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/go-square/v2/share"
+	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"regexp"
 )
 
@@ -76,10 +77,15 @@ type DANode interface {
 	GetType() DANodeType
 	// GetHeader returns a header at a specified height.
 	GetHeader(ctx context.Context, height uint64) (Header, error)
+	// GetAllBlobs retrieves all blobs at the specified block height filtered by the provided namespaces.
 	GetAllBlobs(ctx context.Context, height uint64, namespaces []share.Namespace) ([]Blob, error)
 	// GetHostRPCAddress returns the externally resolvable RPC address of the node.
 	GetHostRPCAddress() string
+	// GetP2PInfo retrieves peer-to-peer network information including the PeerID and network addresses for the node.
 	GetP2PInfo(ctx context.Context) (P2PInfo, error)
+	// ModifyConfigFiles modifies the specified config files with the provided TOML modifications.
+	// the keys are the relative paths to the config file to be modified.
+	ModifyConfigFiles(ctx context.Context, configModifications map[string]toml.Toml) error
 }
 
 type Blob struct {
@@ -101,6 +107,9 @@ type DANodeStartOptions struct {
 	// EnvironmentVariables specifies any environment variables that should be passed to the DANode
 	// e.g. the CELESTIA_CUSTOM environment variable.
 	EnvironmentVariables map[string]string
+	// ConfigModifications specifies modifications to be applied to config files.
+	// The map key is the file path, and the value is the TOML modifications to apply.
+	ConfigModifications map[string]toml.Toml
 }
 
 // WithAdditionalStartArguments sets the additional start arguments to be used.
@@ -121,5 +130,12 @@ func WithEnvironmentVariables(envVars map[string]string) DANodeStartOption {
 func WithChainID(chainID string) DANodeStartOption {
 	return func(o *DANodeStartOptions) {
 		o.ChainID = chainID
+	}
+}
+
+// WithConfigModifications sets the config modifications to be applied to config files.
+func WithConfigModifications(configModifications map[string]toml.Toml) DANodeStartOption {
+	return func(o *DANodeStartOptions) {
+		o.ConfigModifications = configModifications
 	}
 }
