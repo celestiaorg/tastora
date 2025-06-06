@@ -102,7 +102,10 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 	})
 }
 
-// TestDANetworkCreation tests the creation of a DataAvailabilityNetwork with one of each type of node.
+// TestModifyConfigFileDANetwork ensures modification of config files is possible by
+// - disabling auth at startup
+// - enabling auth and making sure it is not possible to query RPC
+// - disabling auth again and verifying it is possible to query RPC
 func (s *DockerTestSuite) TestModifyConfigFileDANetwork() {
 	if testing.Short() {
 		s.T().Skip("skipping due to short mode")
