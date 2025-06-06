@@ -71,9 +71,10 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 // DANode is a docker implementation of a celestia bridge node.
 type DANode struct {
 	*node
-	mu       sync.Mutex
-	nodeType types.DANodeType
-	log      *zap.Logger
+	mu             sync.Mutex
+	hasBeenStarted bool
+	nodeType       types.DANodeType
+	log            *zap.Logger
 	// ports that are resolvable from the test runners themselves.
 	hostRPCPort string
 	hostP2PPort string
@@ -89,9 +90,9 @@ func (n *DANode) GetHostRPCAddress() string {
 	return n.hostRPCPort
 }
 
-// Stop terminates the DANode by removing its associated container gracefully using the provided context.
+// Stop terminates the DANode by stopping its associated container gracefully using the provided context.
 func (n *DANode) Stop(ctx context.Context) error {
-	return n.removeContainer(ctx)
+	return n.stopContainer(ctx)
 }
 
 // Start initializes and starts the DANode with the provided core IP and genesis hash in the given context.
@@ -100,6 +101,14 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	// if the container has already been started, we just start the container with existing settings.
+	if n.hasBeenStarted {
+		return n.startContainer(ctx)
+	}
+	return n.startAndInitialize(ctx, opts...)
+}
+
+func (n *DANode) startAndInitialize(ctx context.Context, opts ...types.DANodeStartOption) error {
 	startOpts := types.DANodeStartOptions{
 		ChainID: "test",
 		// by default disable RPC authentication, if any custom overrides are applied,
@@ -124,6 +133,7 @@ func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) err
 		return fmt.Errorf("failed to start da node: %w", err)
 	}
 
+	n.hasBeenStarted = true
 	return nil
 }
 
