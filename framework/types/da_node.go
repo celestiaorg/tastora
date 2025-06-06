@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/go-square/v2/share"
+	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"regexp"
-	"strings"
 )
 
 var p2pAddressPattern *regexp.Regexp
@@ -77,10 +77,15 @@ type DANode interface {
 	GetType() DANodeType
 	// GetHeader returns a header at a specified height.
 	GetHeader(ctx context.Context, height uint64) (Header, error)
+	// GetAllBlobs retrieves all blobs at the specified block height filtered by the provided namespaces.
 	GetAllBlobs(ctx context.Context, height uint64, namespaces []share.Namespace) ([]Blob, error)
 	// GetHostRPCAddress returns the externally resolvable RPC address of the node.
 	GetHostRPCAddress() string
+	// GetP2PInfo retrieves peer-to-peer network information including the PeerID and network addresses for the node.
 	GetP2PInfo(ctx context.Context) (P2PInfo, error)
+	// ModifyConfigFiles modifies the specified config files with the provided TOML modifications.
+	// the keys are the relative paths to the config file to be modified.
+	ModifyConfigFiles(ctx context.Context, configModifications map[string]toml.Toml) error
 }
 
 type Blob struct {
@@ -95,53 +100,42 @@ type DANodeStartOption func(*DANodeStartOptions)
 
 // DANodeStartOptions represents the configuration options required for starting a DA node.
 type DANodeStartOptions struct {
-	// P2PAddress specifies the peer-to-peer network address used when starting a light node.
-	P2PAddress string
-	// GenesisBlockHash specifies the hash of the genesis block used to initialize the DA node.
-	GenesisBlockHash string
-	// CoreIP specifies the IP address of the core node.
-	CoreIP string
+	// ChainID is the chain ID.
+	ChainID string
+	// StartArguments specifies any additional start arguments after "celestia start <type>"
+	StartArguments []string
+	// EnvironmentVariables specifies any environment variables that should be passed to the DANode
+	// e.g. the CELESTIA_CUSTOM environment variable.
+	EnvironmentVariables map[string]string
+	// ConfigModifications specifies modifications to be applied to config files.
+	// The map key is the file path, and the value is the TOML modifications to apply.
+	ConfigModifications map[string]toml.Toml
 }
 
-// Validate checks if the required fields in DANodeStartOptions are correctly set based on the provided DANodeType.
-// Returns an error if validation fails.
-func (o DANodeStartOptions) Validate(nodeType DANodeType) error {
-	switch nodeType {
-	case LightNode:
-		if strings.TrimSpace(o.P2PAddress) == "" {
-			return fmt.Errorf("p2p address is required for %s nodes", nodeType)
-		}
-		// also perform the same validation for bridge nodes on light nodes.
-		fallthrough
-	case BridgeNode:
-		if strings.TrimSpace(o.CoreIP) == "" {
-			return fmt.Errorf("core ip is required for %s nodes", nodeType)
-		}
-		if strings.TrimSpace(o.GenesisBlockHash) == "" {
-			return fmt.Errorf("genesis block hash is required for %s nodes", nodeType)
-		}
-	case FullNode:
-	}
-	return nil
-}
-
-// WithP2PAddress sets the peer-to-peer network address in the DA node start options.
-func WithP2PAddress(addr string) DANodeStartOption {
+// WithAdditionalStartArguments sets the additional start arguments to be used.
+func WithAdditionalStartArguments(startArgs ...string) DANodeStartOption {
 	return func(o *DANodeStartOptions) {
-		o.P2PAddress = addr
+		o.StartArguments = startArgs
 	}
 }
 
-// WithGenesisBlockHash sets the genesis block hash in the DA node start options.
-func WithGenesisBlockHash(hash string) DANodeStartOption {
+// WithEnvironmentVariables sets the environment variables to be used.
+func WithEnvironmentVariables(envVars map[string]string) DANodeStartOption {
 	return func(o *DANodeStartOptions) {
-		o.GenesisBlockHash = hash
+		o.EnvironmentVariables = envVars
 	}
 }
 
-// WithCoreIP sets the IP address of the core node in the DA node start options.
-func WithCoreIP(ip string) DANodeStartOption {
+// WithChainID sets the chainID.
+func WithChainID(chainID string) DANodeStartOption {
 	return func(o *DANodeStartOptions) {
-		o.CoreIP = ip
+		o.ChainID = chainID
+	}
+}
+
+// WithConfigModifications sets the config modifications to be applied to config files.
+func WithConfigModifications(configModifications map[string]toml.Toml) DANodeStartOption {
+	return func(o *DANodeStartOptions) {
+		o.ConfigModifications = configModifications
 	}
 }

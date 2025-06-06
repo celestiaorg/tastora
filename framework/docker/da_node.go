@@ -9,6 +9,7 @@ import (
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
+	"sync"
 )
 
 var _ types.DANode = &DANode{}
@@ -25,20 +26,19 @@ var daNodePorts = nat.PortMap{
 }
 
 // newDANode initializes and returns a new DANode instance using the provided context, test name, and configuration.
-func newDANode(ctx context.Context, testName string, cfg Config, nodeType types.DANodeType) (types.DANode, error) {
-	if cfg.DANodeConfig == nil {
-		return nil, fmt.Errorf("bridge node config is nil")
+func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeType types.DANodeType) (*DANode, error) {
+	if cfg.DataAvailabilityNetworkConfig == nil {
+		return nil, fmt.Errorf("data availability network config is nil")
 	}
 
-	image := cfg.DANodeConfig.Images[0]
+	image := cfg.DataAvailabilityNetworkConfig.Image
 
 	bn := &DANode{
 		nodeType: nodeType,
-		cfg:      *cfg.DANodeConfig,
 		log: cfg.Logger.With(
 			zap.String("node_type", nodeType.String()),
 		),
-		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", nodeType.String()),
+		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", idx, nodeType.String()),
 	}
 
 	bn.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, bn.Name())
@@ -71,9 +71,10 @@ func newDANode(ctx context.Context, testName string, cfg Config, nodeType types.
 // DANode is a docker implementation of a celestia bridge node.
 type DANode struct {
 	*node
-	nodeType types.DANodeType
-	cfg      DANodeConfig
-	log      *zap.Logger
+	mu             sync.Mutex
+	hasBeenStarted bool
+	nodeType       types.DANodeType
+	log            *zap.Logger
 	// ports that are resolvable from the test runners themselves.
 	hostRPCPort string
 	hostP2PPort string
@@ -89,46 +90,56 @@ func (n *DANode) GetHostRPCAddress() string {
 	return n.hostRPCPort
 }
 
-// Stop terminates the DANode by removing its associated container gracefully using the provided context.
+// Stop terminates the DANode by stopping its associated container gracefully using the provided context.
 func (n *DANode) Stop(ctx context.Context) error {
-	return n.removeContainer(ctx)
+	return n.stopContainer(ctx)
 }
 
 // Start initializes and starts the DANode with the provided core IP and genesis hash in the given context.
 // It returns an error if the node initialization or startup fails.
 func (n *DANode) Start(ctx context.Context, opts ...types.DANodeStartOption) error {
-	startOpts := types.DANodeStartOptions{}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// if the container has already been started, we just start the container with existing settings.
+	if n.hasBeenStarted {
+		return n.startContainer(ctx)
+	}
+	return n.startAndInitialize(ctx, opts...)
+}
+
+func (n *DANode) startAndInitialize(ctx context.Context, opts ...types.DANodeStartOption) error {
+	startOpts := types.DANodeStartOptions{
+		ChainID: "test",
+		// by default disable RPC authentication, if any custom overrides are applied,
+		// they will need to explicitly disable rpc auth also if that is required.
+		ConfigModifications: disableRPCAuthModification(),
+	}
+
 	for _, fn := range opts {
 		fn(&startOpts)
 	}
 
-	env := []string{
-		fmt.Sprintf("P2P_NETWORK=%s", n.cfg.ChainID),
+	var env []string
+	for k, v := range startOpts.EnvironmentVariables {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	customEnvVar := fmt.Sprintf("CELESTIA_CUSTOM=%s", n.cfg.ChainID)
-	if startOpts.GenesisBlockHash != "" {
-		customEnvVar = fmt.Sprintf("%s:%s", customEnvVar, startOpts.GenesisBlockHash)
-	}
-	if startOpts.P2PAddress != "" {
-		customEnvVar = fmt.Sprintf("%s:%s", customEnvVar, startOpts.P2PAddress)
-	}
-	env = append(env, customEnvVar)
-
-	if err := n.initNode(ctx, env); err != nil {
+	if err := n.initNode(ctx, startOpts.ChainID, env); err != nil {
 		return fmt.Errorf("failed to initialize da node: %w", err)
 	}
 
-	if err := n.startNode(ctx, startOpts, env); err != nil {
+	if err := n.startNode(ctx, startOpts.StartArguments, startOpts.ConfigModifications, env); err != nil {
 		return fmt.Errorf("failed to start da node: %w", err)
 	}
 
+	n.hasBeenStarted = true
 	return nil
 }
 
 // Name of the test node container.
 func (n *node) Name() string {
-	return fmt.Sprintf("%s-%s", n.GetType(), SanitizeContainerName(n.TestName))
+	return fmt.Sprintf("%s-%d-%s", n.GetType(), n.Index, SanitizeContainerName(n.TestName))
 }
 
 // HostName of the test node container.
@@ -136,31 +147,33 @@ func (n *node) HostName() string {
 	return CondenseHostName(n.Name())
 }
 
-// modifyConfigToml disables RPC authentication so that the tests can use the endpoints without configuring auth.
-func (n *DANode) modifyConfigToml(ctx context.Context) error {
-	modifications := make(toml.Toml)
-	rpc := make(toml.Toml)
-	rpc["SkipAuth"] = true
-	modifications["RPC"] = rpc
-	return ModifyConfigFile(
-		ctx,
-		n.log,
-		n.DockerClient,
-		n.TestName,
-		n.VolumeName,
-		"config.toml",
-		modifications,
-	)
+// ModifyConfigFiles modifies the specified config files with the provided TOML modifications.
+func (n *DANode) ModifyConfigFiles(ctx context.Context, configModifications map[string]toml.Toml) error {
+	for filePath, modifications := range configModifications {
+		if err := ModifyConfigFile(
+			ctx,
+			n.log,
+			n.DockerClient,
+			n.TestName,
+			n.VolumeName,
+			filePath,
+			modifications,
+		); err != nil {
+			return fmt.Errorf("failed to modify %s: %w", filePath, err)
+		}
+	}
+	return nil
 }
 
 // startNode initializes and starts the DANode container and updates its configuration based on the provided options.
-func (n *DANode) startNode(ctx context.Context, opts types.DANodeStartOptions, env []string) error {
-	if err := n.createNodeContainer(ctx, opts, env); err != nil {
+func (n *DANode) startNode(ctx context.Context, additionalStartArgs []string, configModifications map[string]toml.Toml, env []string) error {
+	if err := n.createNodeContainer(ctx, additionalStartArgs, env); err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
 	}
 
-	if err := n.modifyConfigToml(ctx); err != nil {
-		return fmt.Errorf("failed to disable RPC auth: %w", err)
+	// apply any config modifications
+	if err := n.ModifyConfigFiles(ctx, configModifications); err != nil {
+		return fmt.Errorf("failed to apply config modifications: %w", err)
 	}
 
 	if err := n.containerLifecycle.StartContainer(ctx); err != nil {
@@ -178,20 +191,30 @@ func (n *DANode) startNode(ctx context.Context, opts types.DANodeStartOptions, e
 }
 
 // initNode initializes the DANode by running the "init" command for the specified DANode type, network, and keyring settings.
-func (n *DANode) initNode(ctx context.Context, env []string) error {
-	// note: my_celes_key is the default key name for the bridge node.
-	cmd := []string{"celestia", n.nodeType.String(), "init", "--p2p.network", n.cfg.ChainID, "--keyring.keyname", "my_celes_key", "--node.store", n.homeDir}
+func (n *DANode) initNode(ctx context.Context, chainID string, env []string) error {
+	// note: my_celes_key is the default key name for the da node.
+	cmd := []string{"celestia", n.nodeType.String(), "init", "--p2p.network", chainID, "--keyring.keyname", "my_celes_key", "--node.store", n.homeDir}
 	_, _, err := n.exec(ctx, n.log, cmd, env)
 	return err
 }
 
 // createNodeContainer creates and initializes a container for the DANode with specified context, options, and environment variables.
-func (n *DANode) createNodeContainer(ctx context.Context, opts types.DANodeStartOptions, env []string) error {
-	cmd := []string{"celestia", n.nodeType.String(), "start", "--p2p.network", n.cfg.ChainID, "--core.ip", opts.CoreIP, "--rpc.addr", "0.0.0.0", "--rpc.port", "26658", "--keyring.keyname", "my_celes_key", "--node.store", n.homeDir}
+func (n *DANode) createNodeContainer(ctx context.Context, additionalStartArgs []string, env []string) error {
+	cmd := []string{"celestia", n.nodeType.String(), "start"}
+	cmd = append(cmd, additionalStartArgs...)
 	usingPorts := nat.PortMap{}
 	for k, v := range daNodePorts {
 		usingPorts[k] = v
 	}
-
 	return n.containerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.bind(), nil, n.HostName(), cmd, env, []string{})
+}
+
+// disableRPCAuthModification provides a modification which disables RPC authentication so that the tests can use the endpoints without configuring auth.
+func disableRPCAuthModification() map[string]toml.Toml {
+	modifications := toml.Toml{
+		"RPC": toml.Toml{
+			"SkipAuth": true,
+		},
+	}
+	return map[string]toml.Toml{"config.toml": modifications}
 }

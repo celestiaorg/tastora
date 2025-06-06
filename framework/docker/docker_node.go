@@ -17,6 +17,7 @@ type node struct {
 	containerLifecycle *ContainerLifecycle
 	homeDir            string
 	nodeType           string
+	Index              int
 }
 
 // newNode creates a new node instance with the required parameters.
@@ -26,6 +27,7 @@ func newNode(
 	testName string,
 	image DockerImage,
 	homeDir string,
+	idx int,
 	nodeType string,
 ) *node {
 	return &node{
@@ -34,6 +36,7 @@ func newNode(
 		TestName:     testName,
 		Image:        image,
 		homeDir:      homeDir,
+		Index:        idx,
 		nodeType:     nodeType,
 	}
 }
@@ -65,4 +68,14 @@ func (n *node) GetType() string {
 // removeContainer gracefully stops and removes the container associated with the node using the provided context.
 func (n *node) removeContainer(ctx context.Context) error {
 	return n.containerLifecycle.RemoveContainer(ctx)
+}
+
+// stopContainer gracefully stops the container associated with the node using the provided context.
+func (n *node) stopContainer(ctx context.Context) error {
+	return n.containerLifecycle.StopContainer(ctx)
+}
+
+// startContainer starts the container associated with the node using the provided context.
+func (n *node) startContainer(ctx context.Context) error {
+	return n.containerLifecycle.StartContainer(ctx)
 }
