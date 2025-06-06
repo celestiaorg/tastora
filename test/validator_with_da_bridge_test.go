@@ -139,9 +139,9 @@ func (s *ValidatorWithDABridgeTestSuite) createDefaultProvider() *docker.Provide
 func (s *ValidatorWithDABridgeTestSuite) setupDABridge() error {
 	s.logger.Info("Setting up DA bridge node")
 
-	// Get the validator's core IP and genesis hash
+	// Get the validator's hostname
 	validatorNode := s.chain.GetNodes()[0]
-	coreIP, err := validatorNode.GetInternalHostName(s.ctx)
+	coreHostname, err := validatorNode.GetInternalHostName(s.ctx)
 	if err != nil {
 		return err
 	}
@@ -165,8 +165,8 @@ func (s *ValidatorWithDABridgeTestSuite) setupDABridge() error {
 
 	s.daBridge = bridgeNodes[0]
 
-	// Create CELESTIA_CUSTOM environment variable for core connection
-	celestiaCustom := types.BuildCelestiaCustomEnvVar("test", genesisHash, fmt.Sprintf("/ip4/%s/tcp/26657", coreIP))
+	// Use dns4 multiaddr format for hostname instead of ip4
+	celestiaCustom := types.BuildCelestiaCustomEnvVar("test", genesisHash, fmt.Sprintf("/dns4/%s/tcp/26657", coreHostname))
 
 	// Start the DA bridge node with environment variables
 	err = s.daBridge.Start(s.ctx,
@@ -180,7 +180,7 @@ func (s *ValidatorWithDABridgeTestSuite) setupDABridge() error {
 	}
 
 	s.logger.Info("DA bridge node started successfully",
-		zap.String("core_ip", coreIP),
+		zap.String("core_hostname", coreHostname),
 		zap.String("genesis_hash", genesisHash),
 		zap.String("celestia_custom", celestiaCustom))
 
