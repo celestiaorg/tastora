@@ -1,7 +1,7 @@
 package docker
 
 import (
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"net"
 	"regexp"
@@ -9,7 +9,7 @@ import (
 
 // GetHostPort returns a resource's published port with an address.
 // cont is the type returned by the Docker client's ContainerInspect method.
-func GetHostPort(cont types.ContainerJSON, portID string) string {
+func GetHostPort(cont container.InspectResponse, portID string) string {
 	if cont.NetworkSettings == nil {
 		return ""
 	}

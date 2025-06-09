@@ -2,24 +2,24 @@ package docker
 
 import (
 	"github.com/celestiaorg/tastora/framework/testutil/random"
+	"github.com/docker/docker/api/types/container"
 	"math/rand"
 	"testing"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGetHostPort(t *testing.T) {
 	for _, tt := range []struct {
-		Container types.ContainerJSON
+		Container container.InspectResponse
 		PortID    string
 		Want      string
 	}{
 		{
-			types.ContainerJSON{
-				NetworkSettings: &types.NetworkSettings{
-					NetworkSettingsBase: types.NetworkSettingsBase{
+			container.InspectResponse{
+				NetworkSettings: &container.NetworkSettings{
+					NetworkSettingsBase: container.NetworkSettingsBase{
 						Ports: nat.PortMap{
 							nat.Port("test"): []nat.PortBinding{
 								{HostIP: "1.2.3.4", HostPort: "8080"},
@@ -31,9 +31,9 @@ func TestGetHostPort(t *testing.T) {
 			}, "test", "1.2.3.4:8080",
 		},
 		{
-			types.ContainerJSON{
-				NetworkSettings: &types.NetworkSettings{
-					NetworkSettingsBase: types.NetworkSettingsBase{
+			container.InspectResponse{
+				NetworkSettings: &container.NetworkSettings{
+					NetworkSettingsBase: container.NetworkSettingsBase{
 						Ports: nat.PortMap{
 							nat.Port("test"): []nat.PortBinding{
 								{HostIP: "0.0.0.0", HostPort: "3000"},
@@ -44,8 +44,8 @@ func TestGetHostPort(t *testing.T) {
 			}, "test", "0.0.0.0:3000",
 		},
 
-		{types.ContainerJSON{}, "", ""},
-		{types.ContainerJSON{NetworkSettings: &types.NetworkSettings{}}, "does-not-matter", ""},
+		{container.InspectResponse{}, "", ""},
+		{container.InspectResponse{NetworkSettings: &container.NetworkSettings{}}, "does-not-matter", ""},
 	} {
 		require.Equal(t, tt.Want, GetHostPort(tt.Container, tt.PortID), tt)
 	}
