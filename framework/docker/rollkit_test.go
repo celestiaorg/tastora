@@ -16,8 +16,9 @@ func rollkitProvider(t *testing.T) types.Provider {
 		DockerClient:    client,
 		DockerNetworkID: network,
 		RollkitChainConfig: &RollkitChainConfig{
-			ChainID: "test",
-			Bin:     "testapp",
+			ChainID:              "test",
+			Bin:                  "testapp",
+			AggregatorPassphrase: "12345678",
 		},
 	}
 	return NewProvider(cfg, t)
@@ -29,5 +30,11 @@ func TestRollkit(t *testing.T) {
 	rollkit, err := provider.GetRollkitChain(context.Background())
 	require.NoError(t, err)
 
-	_ = rollkit
+	nodes := rollkit.GetNodes()
+	require.Len(t, nodes, 1)
+	aggregatorNode := nodes[0]
+
+	err = aggregatorNode.Start(context.Background())
+	require.NoError(t, err)
+
 }

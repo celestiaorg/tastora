@@ -136,7 +136,12 @@ func (c *Chain) AddNode(ctx context.Context, overrides map[string]any) error {
 func (c *Chain) AddFullNodes(ctx context.Context, configFileOverrides map[string]any, inc int) error {
 	// Get peer string for existing nodes
 
-	peers, err := addressutil.BuildInternalPeerAddressList(ctx, c.GetNodes())
+	var peerAddressers []addressutil.PeerAddresser
+	for _, n := range c.Nodes() {
+		peerAddressers = append(peerAddressers, n)
+	}
+
+	peers, err := addressutil.BuildInternalPeerAddressList(ctx, peerAddressers)
 	if err != nil {
 		return err
 	}
@@ -370,12 +375,12 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	typedNodes := make([]types.ChainNode, len(chainNodes))
+	peerAddressers := make([]addressutil.PeerAddresser, len(chainNodes))
 	for i, n := range chainNodes {
-		typedNodes[i] = n
+		peerAddressers[i] = n
 	}
 
-	peers, err := addressutil.BuildInternalPeerAddressList(ctx, typedNodes)
+	peers, err := addressutil.BuildInternalPeerAddressList(ctx, peerAddressers)
 	if err != nil {
 		return err
 	}

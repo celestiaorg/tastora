@@ -7,15 +7,20 @@ import (
 	"strings"
 )
 
+type PeerAddresser interface {
+	GetInternalPeerAddress(ctx context.Context) (string, error)
+	GetType() string
+}
+
 // BuildInternalPeerAddressList constructs a comma-separated list of internal peer addresses from the given nodes.
 // It returns an error if any node fails to provide a peer address.
-func BuildInternalPeerAddressList(ctx context.Context, nodes []types.ChainNode) (string, error) {
-	addrs := make([]string, 0, len(nodes))
+func BuildInternalPeerAddressList(ctx context.Context, peer []PeerAddresser) (string, error) {
+	addrs := make([]string, 0, len(peer))
 
-	for _, node := range nodes {
-		addr, err := node.GetInternalPeerAddress(ctx)
+	for _, p := range peer {
+		addr, err := p.GetInternalPeerAddress(ctx)
 		if err != nil {
-			return "", fmt.Errorf("failed to get peer address from node of type %s: %w", node.GetType(), err)
+			return "", fmt.Errorf("failed to get peer address from node of type %s: %w", p.GetType(), err)
 		}
 		addrs = append(addrs, addr)
 	}
