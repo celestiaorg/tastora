@@ -101,8 +101,8 @@ type RollkitChainConfig struct {
 	Bin string
 	// AggregatorPassphrase is the passphrase used when a node is an aggregator.
 	AggregatorPassphrase string
-	// Additional start command arguments
-	//AdditionalStartArgs []string
-	// Additional init command arguments
-	//AdditionalInitArgs []string
+	// NumNodes
+	NumNodes int
+	// Image specifies the Docker image used for the rollkit nodes.
+	Image DockerImage
 }

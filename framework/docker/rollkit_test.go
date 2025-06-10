@@ -19,6 +19,12 @@ func rollkitProvider(t *testing.T) types.Provider {
 			ChainID:              "test",
 			Bin:                  "testapp",
 			AggregatorPassphrase: "12345678",
+			NumNodes:             1,
+			Image: DockerImage{
+				Repository: "rollkit",
+				Version:    "latest",
+				UIDGID:     "2000",
+			},
 		},
 	}
 	return NewProvider(cfg, t)
@@ -33,6 +39,9 @@ func TestRollkit(t *testing.T) {
 	nodes := rollkit.GetNodes()
 	require.Len(t, nodes, 1)
 	aggregatorNode := nodes[0]
+
+	err = aggregatorNode.Init(context.Background())
+	require.NoError(t, err)
 
 	err = aggregatorNode.Start(context.Background())
 	require.NoError(t, err)

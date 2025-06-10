@@ -34,9 +34,9 @@ type RollkitNode struct {
 	hostP2PPort  string
 }
 
-func NewRollkitNode(log *zap.Logger, cfg Config, testName string, image DockerImage, index int) *RollkitNode {
+func NewRollkitNode(cfg Config, testName string, image DockerImage, index int) *RollkitNode {
 	rn := &RollkitNode{
-		log: log.With(
+		log: cfg.Logger.With(
 			zap.Int("i", index),
 			zap.Bool("aggregator", index == 0),
 		),
@@ -44,7 +44,7 @@ func NewRollkitNode(log *zap.Logger, cfg Config, testName string, image DockerIm
 		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "rollkit"), index, "rollkit"),
 	}
 
-	rn.containerLifecycle = NewContainerLifecycle(log, cfg.DockerClient, rn.Name())
+	rn.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, rn.Name())
 	return rn
 }
 
@@ -55,7 +55,7 @@ func (rn *RollkitNode) Name() string {
 
 func (rn *RollkitNode) logger() *zap.Logger {
 	return rn.cfg.Logger.With(
-		zap.String("chain_id", rn.cfg.ChainConfig.ChainID),
+		zap.String("chain_id", rn.cfg.RollkitChainConfig.ChainID),
 		zap.String("test", rn.TestName),
 	)
 }
@@ -72,7 +72,7 @@ func (rn *RollkitNode) Init(ctx context.Context, initArguments ...string) error 
 
 	cmd := []string{rn.cfg.RollkitChainConfig.Bin, "--home", rn.homeDir, "--chain_id", rn.cfg.RollkitChainConfig.ChainID, "init"}
 	if rn.isAggregator() {
-		cmd = append(cmd, "--rollkit.node.aggregator", "--rollkit.node.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase)
+		cmd = append(cmd, "--rollkit.node.aggregator", "--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase)
 	}
 
 	cmd = append(cmd, initArguments...)
@@ -96,7 +96,6 @@ func (rn *RollkitNode) Start(ctx context.Context, startArguments ...string) erro
 
 // createRollkitContainer initializes but does not start a container for the ChainNode with the specified configuration and context.
 func (rn *RollkitNode) createRollkitContainer(ctx context.Context, additionalStartArgs ...string) error {
-	chainCfg := rn.cfg.ChainConfig
 
 	usingPorts := nat.PortMap{}
 	for k, v := range sentryPorts {
@@ -110,13 +109,13 @@ func (rn *RollkitNode) createRollkitContainer(ctx context.Context, additionalSta
 		"start",
 	}
 	if rn.isAggregator() {
-		startCmd = append(startCmd, "--rollkit.node.aggregator", "--rollkit.node.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase)
+		startCmd = append(startCmd, "--rollkit.node.aggregator", "--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase)
 	}
 
 	// any custom arguments passed in on top of the required ones.
 	startCmd = append(startCmd, additionalStartArgs...)
 
-	return rn.containerLifecycle.CreateContainer(ctx, rn.TestName, rn.NetworkID, rn.Image, usingPorts, "", rn.bind(), nil, rn.HostName(), startCmd, chainCfg.Env, []string{})
+	return rn.containerLifecycle.CreateContainer(ctx, rn.TestName, rn.NetworkID, rn.Image, usingPorts, "", rn.bind(), nil, rn.HostName(), startCmd, rn.cfg.RollkitChainConfig.Env, []string{})
 }
 
 // startContainer starts the container for the RollkitNode, initializes its ports, and ensures the node is synced before returning.
