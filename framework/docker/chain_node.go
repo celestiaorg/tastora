@@ -164,10 +164,7 @@ func (tn *ChainNode) initHomeFolder(ctx context.Context) error {
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
 
-	_, _, err := tn.execBin(ctx,
-		"init", CondenseMoniker(tn.Name()),
-		"--chain-id", tn.cfg.ChainConfig.ChainID,
-	)
+	_, _, err := tn.execBin(ctx, tn.getInitCommand()...)
 	return err
 }
 
@@ -353,20 +350,6 @@ func (tn *ChainNode) setPeers(ctx context.Context, peers string) error {
 func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 	chainCfg := tn.cfg.ChainConfig
 
-	var cmd []string
-	if chainCfg.NoHostMount {
-		startCmd := fmt.Sprintf("cp -r %s %s_nomnt && %s start --home %s_nomnt", tn.homeDir, tn.homeDir, chainCfg.Bin, tn.homeDir)
-		if len(chainCfg.AdditionalStartArgs) > 0 {
-			startCmd = fmt.Sprintf("%s %s", startCmd, chainCfg.AdditionalStartArgs)
-		}
-		cmd = []string{"sh", "-c", startCmd}
-	} else {
-		cmd = []string{chainCfg.Bin, "start", "--home", tn.homeDir}
-		if len(chainCfg.AdditionalStartArgs) > 0 {
-			cmd = append(cmd, chainCfg.AdditionalStartArgs...)
-		}
-	}
-
 	usingPorts := nat.PortMap{}
 	for k, v := range sentryPorts {
 		usingPorts[k] = v
@@ -396,7 +379,7 @@ func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 		tn.log.Info("Port overrides", fields...)
 	}
 
-	return tn.containerLifecycle.CreateContainer(ctx, tn.TestName, tn.NetworkID, tn.Image, usingPorts, "", tn.bind(), nil, tn.HostName(), cmd, chainCfg.Env, []string{})
+	return tn.containerLifecycle.CreateContainer(ctx, tn.TestName, tn.NetworkID, tn.Image, usingPorts, "", tn.bind(), nil, tn.HostName(), tn.getStartCommand(), chainCfg.Env, []string{})
 }
 
 func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) error {
@@ -556,6 +539,24 @@ func (tn *ChainNode) gentx(ctx context.Context, name string, genesisSelfDelegati
 
 	_, _, err := tn.execBin(ctx, command...)
 	return err
+}
+
+// getStartCommand retrieves additional start arguments for a chain node based on its configuration settings.
+func (tn *ChainNode) getStartCommand() []string {
+	cmd := []string{tn.cfg.ChainConfig.Bin, "start", "--home", tn.homeDir}
+	if len(tn.cfg.ChainConfig.ChainNodeConfig) > 0 && len(tn.cfg.ChainConfig.ChainNodeConfig[tn.Index].AdditionalStartArgs) > 0 {
+		return append(cmd, tn.cfg.ChainConfig.ChainNodeConfig[tn.Index].AdditionalStartArgs...)
+	}
+	return append(cmd, tn.cfg.ChainConfig.AdditionalStartArgs...)
+}
+
+// getInitCommand retrieves additional start arguments for a chain node based on its configuration settings.
+func (tn *ChainNode) getInitCommand() []string {
+	cmd := []string{"init", CondenseMoniker(tn.Name()), "--chain-id", tn.cfg.ChainConfig.ChainID}
+	if len(tn.cfg.ChainConfig.ChainNodeConfig) > 0 && len(tn.cfg.ChainConfig.ChainNodeConfig[tn.Index].AdditionalInitArgs) > 0 {
+		return append(cmd, tn.cfg.ChainConfig.ChainNodeConfig[tn.Index].AdditionalInitArgs...)
+	}
+	return append(cmd, tn.cfg.ChainConfig.AdditionalInitArgs...)
 }
 
 // accountKeyBech32 retrieves the named key's address in bech32 account format.
