@@ -81,6 +81,10 @@ type DANode interface {
 	GetAllBlobs(ctx context.Context, height uint64, namespaces []share.Namespace) ([]Blob, error)
 	// GetHostRPCAddress returns the externally resolvable RPC address of the node.
 	GetHostRPCAddress() string
+	GetInternalHostName() (string, error)
+	// GetInternalRPCAddress returns the internal RPC address of the node resolvable within the network.
+	//GetInternalRPCAddress() string
+	GetAuthToken() (string, error)
 	// GetP2PInfo retrieves peer-to-peer network information including the PeerID and network addresses for the node.
 	GetP2PInfo(ctx context.Context) (P2PInfo, error)
 	// ModifyConfigFiles modifies the specified config files with the provided TOML modifications.

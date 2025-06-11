@@ -112,6 +112,17 @@ func (s *DockerTestSuite) createDefaultProvider() *Provider {
 				UIDGID:     "10001:10001",
 			},
 		},
+		RollkitChainConfig: &RollkitChainConfig{
+			ChainID:              "test",
+			Bin:                  "testapp",
+			AggregatorPassphrase: "12345678",
+			NumNodes:             1,
+			Image: DockerImage{
+				Repository: "rollkit",
+				Version:    "latest",
+				UIDGID:     "2000",
+			},
+		},
 	}
 
 	return NewProvider(cfg, s.T())

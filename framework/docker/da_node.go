@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
@@ -75,9 +76,26 @@ type DANode struct {
 	hasBeenStarted bool
 	nodeType       types.DANodeType
 	log            *zap.Logger
+	// adminAuthToken is a token that has admin access, it should be generated after init.
+	adminAuthToken string
 	// ports that are resolvable from the test runners themselves.
 	hostRPCPort string
 	hostP2PPort string
+}
+
+func (n *DANode) GetAuthToken() (string, error) {
+	if n.adminAuthToken == "" {
+		return "", fmt.Errorf("admin token has not yet been generated for da node: %s", n.Name())
+	}
+	return n.adminAuthToken, nil
+}
+
+//func (n *DANode) GetInternalRPCAddress() string {
+//	return "26657"
+//}
+
+func (n *DANode) GetInternalHostName() (string, error) {
+	return n.HostName(), nil
 }
 
 // GetType returns the type of the DANode as defined by the types.DANodeType enum.
@@ -127,6 +145,10 @@ func (n *DANode) startAndInitialize(ctx context.Context, opts ...types.DANodeSta
 
 	if err := n.initNode(ctx, startOpts.ChainID, env); err != nil {
 		return fmt.Errorf("failed to initialize da node: %w", err)
+	}
+
+	if err := n.initAuthToken(ctx); err != nil {
+		return fmt.Errorf("failed to initialize auth token: %w", err)
 	}
 
 	if err := n.startNode(ctx, startOpts.StartArguments, startOpts.ConfigModifications, env); err != nil {
@@ -207,6 +229,21 @@ func (n *DANode) createNodeContainer(ctx context.Context, additionalStartArgs []
 		usingPorts[k] = v
 	}
 	return n.containerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.bind(), nil, n.HostName(), cmd, env, []string{})
+}
+
+// initAuthToken initialises an admin auth token.
+func (n *DANode) initAuthToken(ctx context.Context) error {
+	// Command to generate admin token
+	cmd := []string{"celestia", n.nodeType.String(), "auth", "admin"}
+
+	// Run the command inside the container
+	stdout, stderr, err := n.exec(ctx, n.log, cmd, nil)
+	if err != nil {
+		return fmt.Errorf("failed to generate auth token (stderr=%q): %w", stderr, err)
+	}
+
+	n.adminAuthToken = string(bytes.TrimSpace(stdout))
+	return nil
 }
 
 // disableRPCAuthModification provides a modification which disables RPC authentication so that the tests can use the endpoints without configuring auth.

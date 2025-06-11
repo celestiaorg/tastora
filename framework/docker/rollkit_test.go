@@ -2,48 +2,74 @@ package docker
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"github.com/celestiaorg/tastora/framework/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
+	"math/rand"
 	"testing"
 )
 
-func rollkitProvider(t *testing.T) types.Provider {
-	client, network := DockerSetup(t)
+func (s *DockerTestSuite) TestRollkit() {
+	ctx := context.Background()
+	daNetwork, err := s.provider.GetDataAvailabilityNetwork(ctx)
+	s.Require().NoError(err)
 
-	cfg := Config{
-		Logger:          zaptest.NewLogger(t),
-		DockerClient:    client,
-		DockerNetworkID: network,
-		RollkitChainConfig: &RollkitChainConfig{
-			ChainID:              "test",
-			Bin:                  "testapp",
-			AggregatorPassphrase: "12345678",
-			NumNodes:             1,
-			Image: DockerImage{
-				Repository: "rollkit",
-				Version:    "latest",
-				UIDGID:     "2000",
-			},
-		},
-	}
-	return NewProvider(cfg, t)
-}
+	genesisHash := s.getGenesisHash(ctx)
 
-func TestRollkit(t *testing.T) {
-	provider := rollkitProvider(t)
+	hostname, err := s.chain.GetNodes()[0].GetInternalHostName(ctx)
+	s.Require().NoError(err, "failed to get internal hostname")
 
-	rollkit, err := provider.GetRollkitChain(context.Background())
-	require.NoError(t, err)
+	bridgeNode := daNetwork.GetBridgeNodes()[0]
+	chainID := s.chain.cfg.ChainConfig.ChainID
+
+	s.T().Run("bridge node can be started", func(t *testing.T) {
+		err = bridgeNode.Start(ctx,
+			types.WithChainID(chainID),
+			types.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
+			types.WithEnvironmentVariables(
+				map[string]string{
+					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, ""),
+					"P2P_NETWORK":     chainID,
+				},
+			),
+		)
+		s.Require().NoError(err)
+	})
+
+	rollkit, err := s.provider.GetRollkitChain(context.Background())
+	s.Require().NoError(err)
 
 	nodes := rollkit.GetNodes()
-	require.Len(t, nodes, 1)
+	s.Require().Len(nodes, 1)
 	aggregatorNode := nodes[0]
 
 	err = aggregatorNode.Init(context.Background())
-	require.NoError(t, err)
+	s.Require().NoError(err)
 
-	err = aggregatorNode.Start(context.Background())
-	require.NoError(t, err)
+	bridgeNodeHostName, err := bridgeNode.GetInternalHostName()
+	s.Require().NoError(err)
 
+	authToken, err := bridgeNode.GetAuthToken()
+	s.Require().NoError(err)
+	s.T().Logf("auth token: %s", authToken)
+
+	daAddress := fmt.Sprintf("http://%s:26658", bridgeNodeHostName)
+	err = aggregatorNode.Start(context.Background(),
+		"--rollkit.da.address", daAddress,
+		"--rollkit.da.auth_token", authToken,
+		"--rollkit.da.namespace", GenerateValidNamespaceHex(),
+	)
+	s.Require().NoError(err)
+}
+
+func GenerateValidNamespaceHex() string {
+	ns := make([]byte, 29)
+	ns[0] = 0x00 // version 0
+	// First 18 bytes of namespace ID must be zero → bytes 1-18
+	for i := 1; i < 19; i++ {
+		ns[i] = 0x00
+	}
+	// Last 10 bytes of namespace ID → random
+	_, _ = rand.Read(ns[19:])
+	return hex.EncodeToString(ns)
 }
