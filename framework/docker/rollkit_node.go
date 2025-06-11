@@ -2,16 +2,21 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/file"
 	"github.com/celestiaorg/tastora/framework/types"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"path"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -26,6 +31,8 @@ type RollkitNode struct {
 
 	Client   rpcclient.Client
 	GrpcConn *grpc.ClientConn
+
+	CelestiaAddress string
 
 	// Ports set during startContainer.
 	hostRPCPort  string
@@ -78,7 +85,56 @@ func (rn *RollkitNode) Init(ctx context.Context, initArguments ...string) error 
 	cmd = append(cmd, initArguments...)
 
 	_, _, err := rn.exec(ctx, rn.logger(), cmd, rn.cfg.RollkitChainConfig.Env)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to initialize rollkit node: %w", err)
+	}
+	
+	if err := rn.initAddress(ctx); err != nil {
+		return fmt.Errorf("failed to initialize address: %w", err)
+	}
+	return nil
+}
+
+// keyData matches Rollkit signer.json exactly
+type keyData struct {
+	PrivKeyEncrypted []byte `json:"priv_key_encrypted"`
+	Nonce            []byte `json:"nonce"`
+	PubKeyBytes      []byte `json:"pub_key"`
+	Salt             []byte `json:"salt,omitempty"`
+}
+
+func (rn *RollkitNode) readFile(ctx context.Context, relPath string) ([]byte, error) {
+	fr := file.NewRetriever(rn.logger(), rn.DockerClient, rn.TestName)
+	content, err := fr.SingleFileContent(ctx, rn.VolumeName, relPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file at %s: %w", relPath, err)
+	}
+	return content, nil
+}
+
+// InitAddress extracts the Cosmos (Celestia) address from signer.json
+func (rn *RollkitNode) initAddress(ctx context.Context) error {
+	// signer.json path → <homeDir>/signer/signer.json
+	signerFilePath := filepath.Join(rn.homeDir, "signer", "signer.json")
+
+	// Read the file from the Docker volume
+	content, err := rn.readFile(ctx, signerFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read signer.json: %w", err)
+	}
+
+	// Unmarshal into keyData struct
+	var signer keyData
+	if err := json.Unmarshal(content, &signer); err != nil {
+		return fmt.Errorf("failed to unmarshal signer.json: %w", err)
+	}
+
+	// Derive address from PubKeyBytes
+	pubKey := ed25519.PubKey{Key: signer.PubKeyBytes}
+	addr := sdk.AccAddress(pubKey.Address())
+
+	rn.CelestiaAddress = addr.String()
+	return nil
 }
 
 // Start starts an individual rollkit node.

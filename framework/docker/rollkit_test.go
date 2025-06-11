@@ -36,6 +36,23 @@ func (s *DockerTestSuite) TestRollkit() {
 		s.Require().NoError(err)
 	})
 
+	//s.Require().NoError(err)
+	//
+	//s.T().Logf("bridge node address: %s", bridgeNodeWallet.GetFormattedAddress())
+	//
+	//fromAddress, err := sdkacc.AddressFromWallet(s.chain.GetFaucetWallet())
+	//s.Require().NoError(err)
+	//
+	//toAddress, err := sdkacc.AddressFromWallet(bridgeNodeWallet)
+	//s.Require().NoError(err)
+
+	// fund the bridge node wallet with some coins.
+	//bankSend := banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
+	//_, err = s.chain.BroadcastMessages(ctx, s.chain.GetFaucetWallet(), bankSend)
+	//s.Require().NoError(err)
+	//
+	//s.Require().NoError(wait.ForBlocks(ctx, 5, s.chain))
+
 	rollkit, err := s.provider.GetRollkitChain(context.Background())
 	s.Require().NoError(err)
 

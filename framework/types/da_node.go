@@ -84,6 +84,7 @@ type DANode interface {
 	GetInternalHostName() (string, error)
 	// GetInternalRPCAddress returns the internal RPC address of the node resolvable within the network.
 	//GetInternalRPCAddress() string
+	GetWallet() (Wallet, error)
 	GetAuthToken() (string, error)
 	// GetP2PInfo retrieves peer-to-peer network information including the PeerID and network addresses for the node.
 	GetP2PInfo(ctx context.Context) (P2PInfo, error)
