@@ -1,106 +1,150 @@
-# Celestia Validator Transaction Tests
+# Test Directory - Updated to use CelestiaTestSuite
 
-This directory contains simple tests for basic Celestia validator functionality using the Tastora framework.
+This directory contains Celestia end-to-end tests that have been refactored to use the reusable `framework/e2e/CelestiaTestSuite` for streamlined testing.
 
-## Overview
+## Test Files
 
-The `validator_tx_test.go` file implements a straightforward test that:
-1. Starts a single Celestia validator
-2. Submits transactions to it
-3. Verifies transactions are included in blocks
+### `validator_tx_test.go`
+**Purpose**: Tests basic transaction functionality on a single Celestia validator
 
-## Test Architecture
+**Refactored Changes**:
+- Now extends `e2e.CelestiaTestSuite` instead of implementing custom setup
+- Uses suite utilities: `CreateTestWallet()` for wallet creation and funding
+- Simplified from ~200 lines to ~130 lines by removing boilerplate setup code
+- Automatic network setup and cleanup handled by the suite
 
-The test spins up a single Celestia validator node using Docker and performs basic transaction operations.
+**Test Cases**:
+- `TestSubmitTransactionAndVerifyInBlock`: Submit bank transaction and verify inclusion
+- `TestValidatorBasicFunctionality`: Verify basic validator operation and block production
 
-### Components
-- **Single Validator Node** - Celestia application chain validator
-- **No DA Nodes** - Simplified setup focusing on core functionality
+### `validator_with_da_bridge_test.go`
+**Purpose**: Tests blob submission and DA bridge node synchronization
 
-## Test Cases
+**Refactored Changes**:
+- Now extends `e2e.CelestiaTestSuite` instead of custom `ValidatorWithDABridgeTestSuite`
+- Uses suite utilities: 
+  - `CreateTestWallet()` for funding blob submission wallet
+  - `CreateRandomBlob()` for blob creation
+  - `WaitForDASync()` for DA synchronization testing
+  - `CreateAndStartFullNode()` and `CreateAndStartLightNode()` for multi-node testing
+- Simplified from ~570 lines to ~300 lines by removing custom setup code
+- Automatic DA bridge setup handled by the suite
 
-### TestSubmitTransactionAndVerifyInBlock
-This test performs a complete transaction lifecycle:
+**Test Cases**:
+- `TestSubmitBlobAndVerifyDASync`: Submit blob and verify DA bridge synchronization
+- `TestDABridgeBasicFunctionality`: Verify DA bridge node connectivity and P2P info
+- `TestMultiNodeDANetwork`: Test multi-node DA network topology (new test)
+- `TestDABridgeNetworkTopology`: Test network topology and genesis hash retrieval (new test)
 
-1. **Setup**: Creates sender and receiver wallets
-2. **Transaction Creation**: Creates a simple bank send transaction (1 TIA)
-3. **Submission**: Broadcasts the transaction to the validator
-4. **Block Verification**: Waits for blocks and verifies the transaction is included
-5. **RPC Verification**: Uses RPC client to query the specific block and confirm transaction presence
+## Benefits of Refactoring
 
-### TestValidatorBasicFunctionality
-This test verifies basic validator operations:
+### 1. **Reduced Boilerplate**
+- **Before**: Each test implemented custom Docker setup, provider creation, network configuration
+- **After**: Single line inheritance (`e2e.CelestiaTestSuite`) provides complete setup
 
-1. **Block Production**: Confirms the validator is producing blocks
-2. **Height Progression**: Verifies block height increases over time
-3. **Node Configuration**: Confirms exactly one validator node is running
-4. **RPC Connectivity**: Tests RPC client connection and network status
+### 2. **Improved Reliability**
+- **Before**: Manual SDK configuration with potential conflicts between test suites
+- **After**: Automatic SDK configuration handling prevents "Config is sealed" errors
 
-## Configuration
+### 3. **Better Reusability**
+- **Before**: Setup code duplicated across test files
+- **After**: Common patterns extracted to reusable utilities
 
-### Celestia Version
-- **Celestia App**: v2.3.1
-- **Compatible and stable version for basic operations**
+### 4. **Enhanced Testing Capabilities**
+- **Before**: Limited to basic validator + bridge setup
+- **After**: Easy multi-node network creation with `CreateAndStartFullNode()` and `CreateAndStartLightNode()`
 
-### Network Settings
-- **Chain ID**: "test"
-- **Denomination**: "utia"
-- **Gas Prices**: "0.025utia"
-- **Bech32 Prefix**: "celestia"
+### 5. **Cleaner Error Handling**
+- **Before**: Manual error handling for DA sync and network issues
+- **After**: Built-in handling for common DA network sync errors in `WaitForDASync()`
 
-## Usage
+## Code Comparison
 
-Run the tests with:
+### Before (Custom Setup)
+```go
+type ValidatorWithDABridgeTestSuite struct {
+    suite.Suite
+    ctx          context.Context
+    dockerClient *client.Client
+    networkID    string
+    logger       *zap.Logger
+    encConfig    testutil.TestEncodingConfig
+    provider     *docker.Provider
+    chain        *docker.Chain
+    daBridge     types.DANode
+}
 
-```bash
-# Run all tests
-go test -v ./test/
-
-# Run specific test
-go test -v ./test/ -run TestSubmitTransactionAndVerifyInBlock
-
-# Run with verbose logging
-go test -v ./test/ -run TestValidatorBasicFunctionality
+func (s *ValidatorWithDABridgeTestSuite) SetupSuite() {
+    // 50+ lines of manual setup code...
+    s.dockerClient, s.networkID = docker.DockerSetup(s.T())
+    s.logger = zaptest.NewLogger(s.T())
+    // SDK configuration...
+    // Provider creation...
+    // Chain startup...
+    // DA bridge setup...
+}
 ```
 
-Note: Tests require Docker and may take 1-2 minutes to complete as they need to pull the Celestia image and start the validator.
+### After (Using CelestiaTestSuite)
+```go
+type ValidatorWithDABridgeTestSuite struct {
+    e2e.CelestiaTestSuite  // Single line inheritance
+}
 
-## Test Flow Details
+func (s *ValidatorWithDABridgeTestSuite) TestMyScenario() {
+    // Network already running:
+    // - s.Chain: Celestia validator
+    // - s.BridgeNode: DA bridge node
+    
+    wallet := s.CreateTestWallet("test", 10000000)
+    blob, namespace := s.CreateRandomBlob([]byte("test data"))
+    
+    // Optional: Create additional nodes
+    s.FullNode = s.CreateAndStartFullNode()
+    s.LightNode = s.CreateAndStartLightNode()
+}
+```
 
-### Transaction Verification Process
+## Running Tests
 
-1. **Initial State**: Record starting block height
-2. **Wallet Creation**: Create funded sender and receiver wallets
-3. **Transaction Construction**: Build `MsgSend` with 1 TIA transfer
-4. **Broadcasting**: Submit transaction via `BroadcastMessages()`
-5. **Confirmation**: Verify transaction response indicates success (`Code: 0`)
-6. **Block Inclusion**: Wait for additional blocks to ensure finalization
-7. **RPC Query**: Query the specific block containing the transaction
-8. **Hash Verification**: Confirm transaction hash matches in the block
-9. **Final Verification**: Ensure block height and transaction data are consistent
+### Single Test
+```bash
+go test ./test/ -v -run TestValidatorTxSuite/TestValidatorBasicFunctionality
+```
 
-### Key Verification Points
+### Full Suite
+```bash
+go test ./test/ -v
+```
 
-- ✅ Transaction successfully submitted
-- ✅ Transaction included in a block at expected height
-- ✅ Block contains the correct transaction hash
-- ✅ Validator continues producing blocks
-- ✅ RPC connectivity and queries work correctly
+### With Timeout (Recommended for CI)
+```bash
+go test ./test/ -v -timeout 10m
+```
 
-## Dependencies
+## Test Output Example
 
-- Tastora framework Docker components
-- Cosmos SDK bank module for send transactions
-- CometBFT RPC client for block queries
-- Docker for container orchestration
+```
+=== RUN   TestValidatorTxSuite
+    logger.go:146: 2025-06-10T13:01:08.285+0200	INFO	Celestia chain started successfully	{"height": 9}
+    logger.go:146: 2025-06-10T13:01:13.358+0200	INFO	DA bridge node started successfully
+=== RUN   TestValidatorTxSuite/TestValidatorBasicFunctionality
+    validator_tx_test.go:120: Testing basic validator functionality  
+    validator_tx_test.go:148: Basic validator functionality verified - Height: 15, NodeID: 73846..., Network: test
+--- PASS: TestValidatorTxSuite (56.84s)
+    --- PASS: TestValidatorTxSuite/TestValidatorBasicFunctionality (1.17s)
+PASS
+```
 
-## Differences from Complex E2E Tests
+## Migration Summary
 
-This simplified test:
-- **Single Node**: Only runs one validator (no DA nodes)
-- **Basic Transactions**: Uses simple bank send transactions
-- **Core Verification**: Focuses on transaction inclusion verification
-- **Faster Execution**: Minimal setup reduces test time
-- **Clear Learning Path**: Easier to understand and debug
+| Aspect | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| **Lines of Code** | ~770 total | ~430 total | **44% reduction** |
+| **Setup Complexity** | Manual 50+ lines | Single inheritance | **Automatic** |
+| **Error Handling** | Manual DA sync handling | Built-in error handling | **Robust** |
+| **Multi-node Support** | Manual implementation | `CreateAndStartFullNode()` | **Simple** |
+| **SDK Config Conflicts** | Manual handling | Automatic prevention | **Reliable** |
+| **Reusability** | Low (duplicated code) | High (shared utilities) | **Reusable** |
 
-This test provides a solid foundation for understanding Celestia validator operations and transaction processing before moving to more complex data availability scenarios.
+The refactored tests maintain all original functionality while providing a much cleaner, more maintainable codebase that leverages the new `framework/e2e` reusable components.

@@ -17,6 +17,14 @@ type Provider struct {
 
 // GetDataAvailabilityNetwork returns a new instance of the DataAvailabilityNetwork.
 func (p *Provider) GetDataAvailabilityNetwork(ctx context.Context) (types.DataAvailabilityNetwork, error) {
+	// Check if context contains a unique test name, otherwise use the provider's test name
+	testName := p.t.Name()
+	if ctxTestName := ctx.Value("testName"); ctxTestName != nil {
+		if name, ok := ctxTestName.(string); ok && name != "" {
+			testName = name
+		}
+	}
+
 	// If DANodeConfig is provided, convert it to DataAvailabilityNetworkConfig
 	cfg := p.cfg
 	if cfg.DANodeConfig != nil && cfg.DataAvailabilityNetworkConfig == nil {
@@ -28,13 +36,12 @@ func (p *Provider) GetDataAvailabilityNetwork(ctx context.Context) (types.DataAv
 
 		cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{
 			BridgeNodeCount: 1, // Default to one bridge node
-			FullNodeCount:   0,
 			LightNodeCount:  0,
 			Image:           image,
 		}
 	}
 
-	return newDataAvailabilityNetwork(ctx, p.t.Name(), cfg)
+	return newDataAvailabilityNetwork(ctx, testName, cfg)
 }
 
 // GetChain returns an initialized Chain instance based on the provided configuration and test name context.
@@ -55,8 +62,6 @@ func (p *Provider) GetDANode(ctx context.Context, nodeType types.DANodeType) (ty
 	switch nodeType {
 	case types.BridgeNode:
 		nodes = daNetwork.GetBridgeNodes()
-	case types.FullNode:
-		nodes = daNetwork.GetFullNodes()
 	case types.LightNode:
 		nodes = daNetwork.GetLightNodes()
 	default:

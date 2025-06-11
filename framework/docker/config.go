@@ -29,7 +29,7 @@ type ChainConfig struct {
 	// Version of the docker image to use.
 	// Must be set.
 	Version string
-	// How many validators and how many full nodes to use when instantiating the chain.
+	// How many validators to use when instantiating the chain.
 	NumValidators, NumFullNodes *int
 	// Chain ID, e.g. cosmoshub-4
 	ChainID string
@@ -72,8 +72,6 @@ type ChainConfig struct {
 
 // DataAvailabilityNetworkConfig defines the configuration for the data availability network, including node counts and image settings.
 type DataAvailabilityNetworkConfig struct {
-	// FullNodeCount specifies the number of full nodes to deploy in the data availability network.
-	FullNodeCount int
 	// BridgeNodeCount specifies the number of bridge nodes to deploy in the data availability network.
 	BridgeNodeCount int
 	// LightNodeCount specifies the number of light nodes to deploy in the data availability network.

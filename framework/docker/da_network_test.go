@@ -2,8 +2,9 @@ package docker
 
 import (
 	"context"
-	"github.com/celestiaorg/tastora/framework/types"
 	"testing"
+
+	"github.com/celestiaorg/tastora/framework/types"
 )
 
 // TestDANetworkCreation tests the creation of a DataAvailabilityNetwork with one of each type of node.
@@ -17,7 +18,6 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 	var (
 		bridgeNodes []types.DANode
 		lightNodes  []types.DANode
-		fullNodes   []types.DANode
 	)
 
 	// default configuration uses 1/1/1 for Bridge/Light/Full da nodes.
@@ -30,9 +30,6 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 
 		lightNodes = daNetwork.GetLightNodes()
 		s.Require().Len(lightNodes, 1)
-
-		fullNodes = daNetwork.GetFullNodes()
-		s.Require().Len(fullNodes, 1)
 	})
 
 	genesisHash := s.getGenesisHash(ctx)
@@ -41,7 +38,6 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 	s.Require().NoError(err, "failed to get internal hostname")
 
 	bridgeNode := bridgeNodes[0]
-	fullNode := fullNodes[0]
 	lightNode := lightNodes[0]
 
 	chainID := s.chain.cfg.ChainConfig.ChainID
@@ -60,32 +56,12 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 		s.Require().NoError(err)
 	})
 
-	s.T().Run("full node can be started", func(t *testing.T) {
+	s.T().Run("light node can be started", func(t *testing.T) {
 		p2pInfo, err := bridgeNode.GetP2PInfo(ctx)
 		s.Require().NoError(err, "failed to get bridge node p2p info")
 
 		p2pAddr, err := p2pInfo.GetP2PAddress()
 		s.Require().NoError(err, "failed to get bridge node p2p address")
-
-		err = fullNode.Start(ctx,
-			types.WithChainID(chainID),
-			types.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
-			types.WithEnvironmentVariables(
-				map[string]string{
-					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, p2pAddr),
-					"P2P_NETWORK":     chainID,
-				},
-			),
-		)
-		s.Require().NoError(err)
-	})
-
-	s.T().Run("light node can be started", func(t *testing.T) {
-		p2pInfo, err := fullNode.GetP2PInfo(ctx)
-		s.Require().NoError(err, "failed to get full node p2p info")
-
-		p2pAddr, err := p2pInfo.GetP2PAddress()
-		s.Require().NoError(err, "failed to get full node p2p address")
 
 		err = lightNode.Start(ctx,
 			types.WithChainID(chainID),

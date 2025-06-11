@@ -55,7 +55,6 @@ type DANodeType int
 const (
 	BridgeNode DANodeType = iota
 	LightNode
-	FullNode
 )
 
 func (n DANodeType) String() string {
@@ -65,7 +64,6 @@ func (n DANodeType) String() string {
 var nodeStrings = [...]string{
 	"bridge",
 	"light",
-	"full",
 }
 
 type DANode interface {
@@ -73,7 +71,7 @@ type DANode interface {
 	Start(ctx context.Context, opts ...DANodeStartOption) error
 	// Stop stops the node.
 	Stop(ctx context.Context) error
-	// GetType returns the type of node. E.g. "bridge" / "light" / "full"
+	// GetType returns the type of node. E.g. "bridge" / "light"
 	GetType() DANodeType
 	// GetHeader returns a header at a specified height.
 	GetHeader(ctx context.Context, height uint64) (Header, error)
@@ -144,5 +142,16 @@ func WithGenesisBlockHash(genesisHash string) DANodeStartOption {
 		}
 		// Store genesis hash for later use in building CELESTIA_CUSTOM
 		o.EnvironmentVariables["CELESTIA_GENESIS_HASH"] = genesisHash
+	}
+}
+
+// WithP2PAddress sets the P2P address for the DA node to connect to.
+func WithP2PAddress(p2pAddr string) DANodeStartOption {
+	return func(o *DANodeStartOptions) {
+		if o.EnvironmentVariables == nil {
+			o.EnvironmentVariables = make(map[string]string)
+		}
+		// Store P2P address for later use in building CELESTIA_CUSTOM
+		o.EnvironmentVariables["CELESTIA_P2P_ADDRESS"] = p2pAddr
 	}
 }
