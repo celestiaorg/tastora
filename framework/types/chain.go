@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+
 	"github.com/celestiaorg/go-square/v2/share"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -22,7 +23,7 @@ type Chain interface {
 	GetVolumeName() string // TODO: this should be removed and is a temporary function for docker only PoC.
 	// GetNodes returns a slice of ChainNodes.
 	GetNodes() []ChainNode
-	// AddNode adds a full node to the chain. overrides can be provided to make modifications to any config files before starting.
+	// AddNode adds a node to the chain. overrides can be provided to make modifications to any config files before starting.
 	AddNode(ctx context.Context, overrides map[string]any) error // TODO: use options pattern to allow for overrides.
 	// CreateWallet creates a new wallet with the specified keyName and returns the Wallet instance or an error.
 	CreateWallet(ctx context.Context, keyName string) (Wallet, error)

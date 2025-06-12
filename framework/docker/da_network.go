@@ -3,8 +3,9 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/types"
 	"sync"
+
+	"github.com/celestiaorg/tastora/framework/types"
 )
 
 var _ types.DataAvailabilityNetwork = &DataAvailabilityNetwork{}
@@ -45,14 +46,6 @@ func (d *DataAvailabilityNetwork) GetBridgeNodes() []types.DANode {
 	return d.getNodesOfType(types.BridgeNode)
 }
 
-// GetFullNodes retrieves all nodes of type FullNode from the DataAvailabilityNetwork.
-func (d *DataAvailabilityNetwork) GetFullNodes() []types.DANode {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	return d.getNodesOfType(types.FullNode)
-}
-
 // GetLightNodes retrieves all nodes of type LightNode from the DataAvailabilityNetwork.
 func (d *DataAvailabilityNetwork) GetLightNodes() []types.DANode {
 	d.mu.Lock()
@@ -81,7 +74,6 @@ func createDANodes(ctx context.Context, testName string, cfg Config) ([]*DANode,
 		typ   types.DANodeType
 	}{
 		{cfg.DataAvailabilityNetworkConfig.BridgeNodeCount, types.BridgeNode},
-		{cfg.DataAvailabilityNetworkConfig.FullNodeCount, types.FullNode},
 		{cfg.DataAvailabilityNetworkConfig.LightNodeCount, types.LightNode},
 	} {
 		for i := 0; i < nodeType.count; i++ {

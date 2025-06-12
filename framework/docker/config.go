@@ -16,6 +16,9 @@ type Config struct {
 	ChainConfig *ChainConfig
 	// DataAvailabilityNetworkConfig defines the configuration for the data availability network settings.
 	DataAvailabilityNetworkConfig *DataAvailabilityNetworkConfig
+	// DANodeConfig provides a simple interface for single-node DA configuration.
+	// It automatically creates a DataAvailabilityNetworkConfig with one bridge node.
+	DANodeConfig *DANodeConfig
 }
 
 type ChainConfig struct {
@@ -26,7 +29,7 @@ type ChainConfig struct {
 	// Version of the docker image to use.
 	// Must be set.
 	Version string
-	// How many validators and how many full nodes to use when instantiating the chain.
+	// How many validators to use when instantiating the chain.
 	NumValidators, NumFullNodes *int
 	// Chain ID, e.g. cosmoshub-4
 	ChainID string
@@ -69,12 +72,19 @@ type ChainConfig struct {
 
 // DataAvailabilityNetworkConfig defines the configuration for the data availability network, including node counts and image settings.
 type DataAvailabilityNetworkConfig struct {
-	// FullNodeCount specifies the number of full nodes to deploy in the data availability network.
-	FullNodeCount int
 	// BridgeNodeCount specifies the number of bridge nodes to deploy in the data availability network.
 	BridgeNodeCount int
 	// LightNodeCount specifies the number of light nodes to deploy in the data availability network.
 	LightNodeCount int
 	// Image specifies the Docker image used for nodes in the data availability network.
 	Image DockerImage
+}
+
+// DANodeConfig provides a simple interface for single-node DA configuration.
+// It automatically creates a DataAvailabilityNetworkConfig with one bridge node.
+type DANodeConfig struct {
+	// ChainID for the DA node
+	ChainID string
+	// Images specifies the Docker images used for the DA node.
+	Images []DockerImage
 }

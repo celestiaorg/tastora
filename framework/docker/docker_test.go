@@ -2,8 +2,9 @@ package docker
 
 import (
 	"context"
-	"github.com/moby/moby/client"
 	"testing"
+
+	"github.com/moby/moby/client"
 
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -103,7 +104,6 @@ func (s *DockerTestSuite) createDefaultProvider() *Provider {
 			},
 		},
 		DataAvailabilityNetworkConfig: &DataAvailabilityNetworkConfig{
-			FullNodeCount:   1,
 			BridgeNodeCount: 1,
 			LightNodeCount:  1,
 			Image: DockerImage{
