@@ -45,7 +45,7 @@ func (s *ExampleCelestiaTestSuite) TestBlobCreation() {
 
 	s.Assert().NotNil(blob)
 	s.Assert().NotEmpty(namespace)
-	s.Assert().Equal(testData, blob.Data)
+	s.Assert().Equal(testData, blob.Data())
 
 	s.T().Logf("Created blob with namespace: %s", namespace.String())
 }

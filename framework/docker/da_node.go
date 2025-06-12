@@ -128,6 +128,14 @@ func (n *DANode) startAndInitialize(ctx context.Context, opts ...types.DANodeSta
 	coreIP := startOpts.EnvironmentVariables["CELESTIA_CORE_IP"]
 	genesisHash := startOpts.EnvironmentVariables["CELESTIA_GENESIS_HASH"]
 
+	// Configure core endpoint in config file if coreIP is provided
+	if coreIP != "" && n.nodeType == types.BridgeNode {
+		startOpts.ConfigModifications = mergeConfigModifications(
+			startOpts.ConfigModifications,
+			coreEndpointConfigModification(coreIP),
+		)
+	}
+
 	// Build CELESTIA_CUSTOM if genesis hash is provided
 	if genesisHash != "" {
 		celestiaCustom := types.BuildCelestiaCustomEnvVar(startOpts.ChainID, genesisHash, "")
@@ -137,10 +145,14 @@ func (n *DANode) startAndInitialize(ctx context.Context, opts ...types.DANodeSta
 	// Add core IP as start argument for bridge nodes
 	if coreIP != "" && n.nodeType == types.BridgeNode {
 		startArgs = append(startArgs, "--core.ip", coreIP)
+		// Add the gRPC port for the core node (celestia-app runs gRPC on port 9090)
+		startArgs = append(startArgs, "--core.grpc.port", "9090")
 	}
 
 	// Always add RPC address binding to listen on all interfaces
 	startArgs = append(startArgs, "--rpc.addr", "0.0.0.0")
+	// Explicitly set RPC port to match what the code expects
+	startArgs = append(startArgs, "--rpc.port", "26658")
 
 	// Add other environment variables
 	for k, v := range startOpts.EnvironmentVariables {
@@ -237,11 +249,48 @@ func (n *DANode) createNodeContainer(ctx context.Context, additionalStartArgs []
 	return n.containerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.bind(), nil, n.HostName(), cmd, env, []string{})
 }
 
+// coreEndpointConfigModification provides configuration modifications to set the core endpoint for bridge nodes.
+func coreEndpointConfigModification(coreIP string) map[string]toml.Toml {
+	modifications := toml.Toml{
+		"Core": toml.Toml{
+			"IP":   coreIP,
+			"Port": "9090",
+		},
+	}
+	return map[string]toml.Toml{"config.toml": modifications}
+}
+
+// mergeConfigModifications merges multiple config modification maps.
+func mergeConfigModifications(configs ...map[string]toml.Toml) map[string]toml.Toml {
+	result := make(map[string]toml.Toml)
+
+	for _, config := range configs {
+		for filename, modifications := range config {
+			if existing, exists := result[filename]; exists {
+				// Merge the TOML modifications
+				merged := make(toml.Toml)
+				for k, v := range existing {
+					merged[k] = v
+				}
+				for k, v := range modifications {
+					merged[k] = v
+				}
+				result[filename] = merged
+			} else {
+				result[filename] = modifications
+			}
+		}
+	}
+
+	return result
+}
+
 // disableRPCAuthModification provides a modification which disables RPC authentication so that the tests can use the endpoints without configuring auth.
 func disableRPCAuthModification() map[string]toml.Toml {
 	modifications := toml.Toml{
 		"RPC": toml.Toml{
 			"SkipAuth": true,
+			"Address":  "0.0.0.0:26658",
 		},
 	}
 	return map[string]toml.Toml{"config.toml": modifications}

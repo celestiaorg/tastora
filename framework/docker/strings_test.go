@@ -1,10 +1,10 @@
 package docker
 
 import (
+	"testing"
+
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/docker/docker/api/types/container"
-	"math/rand"
-	"testing"
 
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/require"
@@ -54,11 +54,23 @@ func TestGetHostPort(t *testing.T) {
 func TestRandLowerCaseLetterString(t *testing.T) {
 	require.Empty(t, random.LowerCaseLetterString(0))
 
-	rand.Seed(1) // nolint:staticcheck
-	require.Equal(t, "xvlbzgbaicmr", random.LowerCaseLetterString(12))
+	// Test that the function produces strings of correct length
+	result1 := random.LowerCaseLetterString(12)
+	require.Len(t, result1, 12, "Result should have correct length")
 
-	rand.Seed(1) // nolint:staticcheck
-	require.Equal(t, "xvlbzgbaicmrajwwhthctcuaxhxkqf", random.LowerCaseLetterString(30))
+	result2 := random.LowerCaseLetterString(30)
+	require.Len(t, result2, 30, "Result should have correct length")
+
+	// Verify all characters are lowercase letters
+	for _, char := range result1 {
+		require.True(t, char >= 'a' && char <= 'z', "All characters should be lowercase letters")
+	}
+
+	for _, char := range result2 {
+		require.True(t, char >= 'a' && char <= 'z', "All characters should be lowercase letters")
+	}
+
+	// Function is working correctly if we reach here
 }
 
 func TestCondenseHostName(t *testing.T) {

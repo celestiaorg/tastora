@@ -204,8 +204,19 @@ func (s *ValidatorWithDABridgeTestSuite) TestDABridgeBasicFunctionality() {
 	nodeType := s.BridgeNode.GetType()
 	s.Assert().Equal(types.BridgeNode, nodeType)
 
-	// Verify DA bridge P2P info
-	p2pInfo, err := s.BridgeNode.GetP2PInfo(ctx)
+	// Verify DA bridge P2P info with retry logic
+	var p2pInfo types.P2PInfo
+	var err error
+
+	// Retry getting P2P info for up to 30 seconds
+	for i := 0; i < 30; i++ {
+		p2pInfo, err = s.BridgeNode.GetP2PInfo(ctx)
+		if err == nil {
+			break
+		}
+		s.T().Logf("Waiting for bridge RPC API to be ready, attempt %d/30: %v", i+1, err)
+		time.Sleep(1 * time.Second)
+	}
 	s.Require().NoError(err)
 	s.Assert().NotEmpty(p2pInfo.PeerID)
 	s.Assert().NotEmpty(p2pInfo.Addresses)
@@ -245,8 +256,18 @@ func (s *ValidatorWithDABridgeTestSuite) TestDABridgeNetworkTopology() {
 	s.Assert().NotEmpty(genesisHash)
 	s.Assert().Len(genesisHash, 64) // Should be a valid hex hash
 
-	// Test 3: Test DA bridge can query headers
-	header, err := s.BridgeNode.GetHeader(ctx, 1)
+	// Test 3: Test DA bridge can query headers with retry logic
+	var header types.Header
+
+	// Retry getting header for up to 30 seconds
+	for i := 0; i < 30; i++ {
+		header, err = s.BridgeNode.GetHeader(ctx, 1)
+		if err == nil {
+			break
+		}
+		s.T().Logf("Waiting for bridge header query to be ready, attempt %d/30: %v", i+1, err)
+		time.Sleep(1 * time.Second)
+	}
 	s.Require().NoError(err)
 	s.Assert().Equal(uint64(1), header.Height)
 
