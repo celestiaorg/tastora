@@ -7,8 +7,6 @@ import (
 
 	"github.com/celestiaorg/go-square/v2/share"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
-
-	"github.com/celestiaorg/go-square/v2/share"
 )
 
 var p2pAddressPattern *regexp.Regexp
