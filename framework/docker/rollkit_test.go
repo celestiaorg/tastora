@@ -2,17 +2,15 @@ package docker
 
 import (
 	"context"
+	"cosmossdk.io/math"
 	"encoding/hex"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/types"
-	"math/rand"
-	"testing"
-	"time"
-
-	"cosmossdk.io/math"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
+	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"math/rand"
+	"testing"
 )
 
 func (s *DockerTestSuite) TestRollkit() {
@@ -42,6 +40,22 @@ func (s *DockerTestSuite) TestRollkit() {
 		s.Require().NoError(err)
 	})
 
+	daWallet, err := bridgeNode.GetWallet()
+	s.Require().NoError(err)
+	s.T().Logf("da node celestia address: %s", daWallet.GetFormattedAddress())
+
+	// Fund the da node address
+	fromAddress, err := sdkacc.AddressFromWallet(s.chain.GetFaucetWallet())
+	s.Require().NoError(err)
+
+	toAddress, err := sdk.AccAddressFromBech32(daWallet.GetFormattedAddress())
+	s.Require().NoError(err)
+
+	// Fund the rollkit node wallet with coins
+	bankSend := banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
+	_, err = s.chain.BroadcastMessages(ctx, s.chain.GetFaucetWallet(), bankSend)
+	s.Require().NoError(err)
+
 	rollkit, err := s.provider.GetRollkitChain(context.Background())
 	s.Require().NoError(err)
 
@@ -57,14 +71,11 @@ func (s *DockerTestSuite) TestRollkit() {
 	s.T().Logf("rollkit node celestia address: %s", rollkitAddress)
 
 	// Fund the rollkit node address
-	fromAddress, err := sdkacc.AddressFromWallet(s.chain.GetFaucetWallet())
-	s.Require().NoError(err)
-
-	toAddress, err := sdk.AccAddressFromBech32(rollkitAddress)
+	toAddress, err = sdk.AccAddressFromBech32(rollkitAddress)
 	s.Require().NoError(err)
 
 	// Fund the rollkit node wallet with coins
-	bankSend := banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
+	bankSend = banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
 	_, err = s.chain.BroadcastMessages(ctx, s.chain.GetFaucetWallet(), bankSend)
 	s.Require().NoError(err)
 
@@ -78,12 +89,12 @@ func (s *DockerTestSuite) TestRollkit() {
 	daAddress := fmt.Sprintf("http://%s:26658", bridgeNodeHostName)
 	err = aggregatorNode.Start(context.Background(),
 		"--rollkit.da.address", daAddress,
+		"--rollkit.da.gas_price", "0.025",
 		"--rollkit.da.auth_token", authToken,
+		"--rollkit.rpc.address", "0.0.0.0:7331", // bind to 0.0.0.0 so rpc is reachable from test host.
 		"--rollkit.da.namespace", GenerateValidNamespaceHex(),
 	)
 	s.Require().NoError(err)
-	
-	time.Sleep(1 * time.Hour)
 }
 
 func GenerateValidNamespaceHex() string {

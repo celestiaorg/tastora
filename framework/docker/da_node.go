@@ -99,10 +99,6 @@ func (n *DANode) GetAuthToken() (string, error) {
 	return n.adminAuthToken, nil
 }
 
-//func (n *DANode) GetInternalRPCAddress() string {
-//	return "26657"
-//}
-
 func (n *DANode) GetInternalHostName() (string, error) {
 	return n.HostName(), nil
 }

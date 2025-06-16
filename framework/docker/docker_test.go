@@ -107,8 +107,8 @@ func (s *DockerTestSuite) createDefaultProvider() *Provider {
 			BridgeNodeCount: 1,
 			LightNodeCount:  1,
 			Image: DockerImage{
-				Repository: "ghcr.io/celestiaorg/celestia-node",
-				Version:    "v0.23.0-mocha",
+				Repository: "celestia-node",
+				Version:    "latest",
 				UIDGID:     "10001:10001",
 			},
 		},

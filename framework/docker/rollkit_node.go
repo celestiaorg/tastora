@@ -1,14 +1,13 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	"github.com/celestiaorg/tastora/framework/types"
-	rpcclient "github.com/cometbft/cometbft/rpc/client"
-	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -16,6 +15,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"net/http"
 	"path"
 	"path/filepath"
 	"sync"
@@ -24,13 +24,24 @@ import (
 
 var _ types.RollkitNode = &RollkitNode{}
 
+const (
+	rollkitRpcPort = "7331/tcp"
+)
+
+var rollkitSentryPorts = nat.PortMap{
+	nat.Port(p2pPort):        {},
+	nat.Port(rollkitRpcPort): {}, // rollkit uses a different rpc port
+	nat.Port(grpcPort):       {},
+	nat.Port(apiPort):        {},
+	nat.Port(privValPort):    {},
+}
+
 type RollkitNode struct {
 	*node
 	cfg Config
 	log *zap.Logger
 	mu  sync.Mutex
 
-	Client   rpcclient.Client
 	GrpcConn *grpc.ClientConn
 
 	CelestiaAddress string
@@ -97,14 +108,10 @@ func (rn *RollkitNode) Init(ctx context.Context, initArguments ...string) error 
 		return fmt.Errorf("failed to initialize rollkit node: %w", err)
 	}
 
-	// Debug: Find signer.json by searching the entire container filesystem
-	if err := rn.findSignerFile(ctx); err != nil {
-		rn.logger().Error("failed to find signer file", zap.Error(err))
-	}
-
 	if err := rn.initAddress(ctx); err != nil {
 		return fmt.Errorf("failed to initialize address: %w", err)
 	}
+
 	return nil
 }
 
@@ -125,69 +132,14 @@ func (rn *RollkitNode) readFile(ctx context.Context, relPath string) ([]byte, er
 	return content, nil
 }
 
-func (rn *RollkitNode) findSignerFile(ctx context.Context) error {
-	// Search entire container filesystem for signer.json
-	cmd := []string{"find", "/", "-name", "signer.json", "-type", "f", "2>/dev/null"}
-	stdout, stderr, err := rn.exec(ctx, rn.logger(), cmd, nil)
-	if err != nil {
-		rn.logger().Info("find command failed", zap.Error(err), zap.String("stderr", string(stderr)))
-	} else {
-		rn.logger().Info("signer.json search results", zap.String("found_files", string(stdout)))
-	}
-	return nil
-}
-
-func (rn *RollkitNode) listDirectory(ctx context.Context, dirPath string) error {
-	// Use exec to list directory contents
-	cmd := []string{"ls", "-la", dirPath}
-	stdout, stderr, err := rn.exec(ctx, rn.logger(), cmd, nil)
-	if err != nil {
-		return fmt.Errorf("failed to list directory %s: %w (stderr: %s)", dirPath, err, stderr)
-	}
-	rn.logger().Info("directory contents", zap.String("path", dirPath), zap.String("contents", string(stdout)))
-	return nil
-}
-
-// InitAddress extracts the Cosmos (Celestia) address from signer.json
+// initAddress extracts the celestia address from signer.json
 func (rn *RollkitNode) initAddress(ctx context.Context) error {
-	// Debug: List directory contents to find where signer.json is actually created
-	rn.logger().Info("Debugging rollkit directory structure")
-
-	// List home directory
-	if err := rn.listDirectory(ctx, rn.homeDir); err != nil {
-		rn.logger().Error("failed to list home directory", zap.Error(err))
-	}
-
-	// List config directory if it exists
-	configDir := filepath.Join(rn.homeDir, "config")
-	if err := rn.listDirectory(ctx, configDir); err != nil {
-		rn.logger().Info("config directory not found or empty", zap.Error(err))
-	}
-
-	// Try to find signer.json in various locations
-	possiblePaths := []string{
-		filepath.Join("config", "signer.json"),
-	}
-
-	var content []byte
-	var err error
-	var usedPath string
-
-	for _, signerFilePath := range possiblePaths {
-		content, err = rn.readFile(ctx, signerFilePath)
-		if err == nil {
-			usedPath = signerFilePath
-			rn.logger().Info("found signer.json", zap.String("path", usedPath))
-			break
-		}
-		rn.logger().Info("tried path", zap.String("path", signerFilePath), zap.Error(err))
-	}
-
+	signerPath := filepath.Join("config", "signer.json")
+	content, err := rn.readFile(ctx, signerPath)
 	if err != nil {
-		return fmt.Errorf("failed to read signer.json from any location (tried %v): %w", possiblePaths, err)
+		return fmt.Errorf("failed to read signer.json from %s: %w", signerPath, err)
 	}
 
-	// Unmarshal into keyData struct
 	var signer keyData
 	if err := json.Unmarshal(content, &signer); err != nil {
 		return fmt.Errorf("failed to unmarshal signer.json: %w", err)
@@ -205,7 +157,7 @@ func (rn *RollkitNode) initAddress(ctx context.Context) error {
 	addr := sdk.AccAddress(pubKey.Address())
 
 	rn.CelestiaAddress = addr.String()
-	rn.logger().Info("derived celestia address", 
+	rn.logger().Info("derived celestia address",
 		zap.String("address", rn.CelestiaAddress),
 		zap.String("pub_key_address_hex", hex.EncodeToString(pubKey.Address())),
 	)
@@ -229,7 +181,7 @@ func (rn *RollkitNode) Start(ctx context.Context, startArguments ...string) erro
 func (rn *RollkitNode) createRollkitContainer(ctx context.Context, additionalStartArgs ...string) error {
 
 	usingPorts := nat.PortMap{}
-	for k, v := range sentryPorts {
+	for k, v := range rollkitSentryPorts {
 		usingPorts[k] = v
 	}
 
@@ -258,7 +210,7 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 	}
 
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := rn.containerLifecycle.GetHostPorts(ctx, rpcPort, grpcPort, apiPort, p2pPort)
+	hostPorts, err := rn.containerLifecycle.GetHostPorts(ctx, rollkitRpcPort, grpcPort, apiPort, p2pPort)
 	if err != nil {
 		return err
 	}
@@ -272,10 +224,13 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 	// wait a short period of time for the node to come online.
 	time.Sleep(5 * time.Second)
 
-	// simple readiness check - just verify RPC is responding
-	timeout := time.After(30 * time.Second)
+	// simple readiness check - verify Connect RPC health endpoint is responding
+	timeout := time.After(60 * time.Second)
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+
+	healthURL := fmt.Sprintf("http://%s/rollkit.v1.HealthService/Livez", rn.hostRPCPort)
+	client := &http.Client{Timeout: 5 * time.Second}
 
 	for {
 		select {
@@ -284,10 +239,31 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 		case <-timeout:
 			return fmt.Errorf("node did not become ready within timeout")
 		case <-ticker.C:
-			_, err := rn.Client.Status(ctx)
+			// Create Connect RPC request with empty JSON body
+			reqBody := bytes.NewBufferString("{}")
+			req, err := http.NewRequest("POST", healthURL, reqBody)
+			if err != nil {
+				rn.logger().Debug("rollkit node not ready yet", 
+					zap.String("url", healthURL),
+					zap.Error(err))
+				continue
+			}
+			req.Header.Set("Content-Type", "application/json")
+			
+			resp, err := client.Do(req)
 			if err == nil {
-				// RPC is responding, node is ready
-				return nil
+				resp.Body.Close()
+				if resp.StatusCode == 200 {
+					rn.logger().Info("rollkit node is ready")
+					return nil
+				}
+				rn.logger().Debug("rollkit node not ready yet", 
+					zap.String("url", healthURL),
+					zap.Int("status", resp.StatusCode))
+			} else {
+				rn.logger().Debug("rollkit node not ready yet", 
+					zap.String("url", healthURL),
+					zap.Error(err))
 			}
 		}
 	}
@@ -301,13 +277,6 @@ func (rn *RollkitNode) initClient(addr string) error {
 	}
 
 	httpClient.Timeout = 10 * time.Second
-	rpcClient, err := rpchttp.NewWithClient(addr, "/websocket", httpClient)
-	if err != nil {
-		return err
-	}
-
-	rn.Client = rpcClient
-
 	grpcConn, err := grpc.NewClient(
 		rn.hostGRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
