@@ -7,6 +7,12 @@ import (
 	"github.com/celestiaorg/tastora/framework/types"
 	"math/rand"
 	"testing"
+	"time"
+
+	"cosmossdk.io/math"
+	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
 func (s *DockerTestSuite) TestRollkit() {
@@ -36,23 +42,6 @@ func (s *DockerTestSuite) TestRollkit() {
 		s.Require().NoError(err)
 	})
 
-	//s.Require().NoError(err)
-	//
-	//s.T().Logf("bridge node address: %s", bridgeNodeWallet.GetFormattedAddress())
-	//
-	//fromAddress, err := sdkacc.AddressFromWallet(s.chain.GetFaucetWallet())
-	//s.Require().NoError(err)
-	//
-	//toAddress, err := sdkacc.AddressFromWallet(bridgeNodeWallet)
-	//s.Require().NoError(err)
-
-	// fund the bridge node wallet with some coins.
-	//bankSend := banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
-	//_, err = s.chain.BroadcastMessages(ctx, s.chain.GetFaucetWallet(), bankSend)
-	//s.Require().NoError(err)
-	//
-	//s.Require().NoError(wait.ForBlocks(ctx, 5, s.chain))
-
 	rollkit, err := s.provider.GetRollkitChain(context.Background())
 	s.Require().NoError(err)
 
@@ -61,6 +50,22 @@ func (s *DockerTestSuite) TestRollkit() {
 	aggregatorNode := nodes[0]
 
 	err = aggregatorNode.Init(context.Background())
+	s.Require().NoError(err)
+
+	// Get the Celestia address from the rollkit node
+	rollkitAddress := aggregatorNode.(*RollkitNode).CelestiaAddress
+	s.T().Logf("rollkit node celestia address: %s", rollkitAddress)
+
+	// Fund the rollkit node address
+	fromAddress, err := sdkacc.AddressFromWallet(s.chain.GetFaucetWallet())
+	s.Require().NoError(err)
+
+	toAddress, err := sdk.AccAddressFromBech32(rollkitAddress)
+	s.Require().NoError(err)
+
+	// Fund the rollkit node wallet with coins
+	bankSend := banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
+	_, err = s.chain.BroadcastMessages(ctx, s.chain.GetFaucetWallet(), bankSend)
 	s.Require().NoError(err)
 
 	bridgeNodeHostName, err := bridgeNode.GetInternalHostName()
@@ -77,6 +82,8 @@ func (s *DockerTestSuite) TestRollkit() {
 		"--rollkit.da.namespace", GenerateValidNamespaceHex(),
 	)
 	s.Require().NoError(err)
+	
+	time.Sleep(1 * time.Hour)
 }
 
 func GenerateValidNamespaceHex() string {

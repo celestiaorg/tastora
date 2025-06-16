@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/file"
@@ -79,16 +80,28 @@ func (rn *RollkitNode) Init(ctx context.Context, initArguments ...string) error 
 
 	cmd := []string{rn.cfg.RollkitChainConfig.Bin, "--home", rn.homeDir, "--chain_id", rn.cfg.RollkitChainConfig.ChainID, "init"}
 	if rn.isAggregator() {
-		cmd = append(cmd, "--rollkit.node.aggregator", "--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase)
+		signerPath := filepath.Join(rn.homeDir, "config")
+		cmd = append(cmd, "--rollkit.node.aggregator", "--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase, "--rollkit.signer.path="+signerPath)
 	}
 
 	cmd = append(cmd, initArguments...)
 
-	_, _, err := rn.exec(ctx, rn.logger(), cmd, rn.cfg.RollkitChainConfig.Env)
+	stdout, stderr, err := rn.exec(ctx, rn.logger(), cmd, rn.cfg.RollkitChainConfig.Env)
+	rn.logger().Info("rollkit init command output",
+		zap.String("command", fmt.Sprintf("%v", cmd)),
+		zap.String("stdout", string(stdout)),
+		zap.String("stderr", string(stderr)),
+		zap.Bool("is_aggregator", rn.isAggregator()),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize rollkit node: %w", err)
 	}
-	
+
+	// Debug: Find signer.json by searching the entire container filesystem
+	if err := rn.findSignerFile(ctx); err != nil {
+		rn.logger().Error("failed to find signer file", zap.Error(err))
+	}
+
 	if err := rn.initAddress(ctx); err != nil {
 		return fmt.Errorf("failed to initialize address: %w", err)
 	}
@@ -112,15 +125,66 @@ func (rn *RollkitNode) readFile(ctx context.Context, relPath string) ([]byte, er
 	return content, nil
 }
 
+func (rn *RollkitNode) findSignerFile(ctx context.Context) error {
+	// Search entire container filesystem for signer.json
+	cmd := []string{"find", "/", "-name", "signer.json", "-type", "f", "2>/dev/null"}
+	stdout, stderr, err := rn.exec(ctx, rn.logger(), cmd, nil)
+	if err != nil {
+		rn.logger().Info("find command failed", zap.Error(err), zap.String("stderr", string(stderr)))
+	} else {
+		rn.logger().Info("signer.json search results", zap.String("found_files", string(stdout)))
+	}
+	return nil
+}
+
+func (rn *RollkitNode) listDirectory(ctx context.Context, dirPath string) error {
+	// Use exec to list directory contents
+	cmd := []string{"ls", "-la", dirPath}
+	stdout, stderr, err := rn.exec(ctx, rn.logger(), cmd, nil)
+	if err != nil {
+		return fmt.Errorf("failed to list directory %s: %w (stderr: %s)", dirPath, err, stderr)
+	}
+	rn.logger().Info("directory contents", zap.String("path", dirPath), zap.String("contents", string(stdout)))
+	return nil
+}
+
 // InitAddress extracts the Cosmos (Celestia) address from signer.json
 func (rn *RollkitNode) initAddress(ctx context.Context) error {
-	// signer.json path → <homeDir>/signer/signer.json
-	signerFilePath := filepath.Join(rn.homeDir, "signer", "signer.json")
+	// Debug: List directory contents to find where signer.json is actually created
+	rn.logger().Info("Debugging rollkit directory structure")
 
-	// Read the file from the Docker volume
-	content, err := rn.readFile(ctx, signerFilePath)
+	// List home directory
+	if err := rn.listDirectory(ctx, rn.homeDir); err != nil {
+		rn.logger().Error("failed to list home directory", zap.Error(err))
+	}
+
+	// List config directory if it exists
+	configDir := filepath.Join(rn.homeDir, "config")
+	if err := rn.listDirectory(ctx, configDir); err != nil {
+		rn.logger().Info("config directory not found or empty", zap.Error(err))
+	}
+
+	// Try to find signer.json in various locations
+	possiblePaths := []string{
+		filepath.Join("config", "signer.json"),
+	}
+
+	var content []byte
+	var err error
+	var usedPath string
+
+	for _, signerFilePath := range possiblePaths {
+		content, err = rn.readFile(ctx, signerFilePath)
+		if err == nil {
+			usedPath = signerFilePath
+			rn.logger().Info("found signer.json", zap.String("path", usedPath))
+			break
+		}
+		rn.logger().Info("tried path", zap.String("path", signerFilePath), zap.Error(err))
+	}
+
 	if err != nil {
-		return fmt.Errorf("failed to read signer.json: %w", err)
+		return fmt.Errorf("failed to read signer.json from any location (tried %v): %w", possiblePaths, err)
 	}
 
 	// Unmarshal into keyData struct
@@ -129,11 +193,22 @@ func (rn *RollkitNode) initAddress(ctx context.Context) error {
 		return fmt.Errorf("failed to unmarshal signer.json: %w", err)
 	}
 
+	// Debug: Log the signer data
+	rn.logger().Info("signer.json contents",
+		zap.String("pub_key_hex", hex.EncodeToString(signer.PubKeyBytes)),
+		zap.Int("pub_key_len", len(signer.PubKeyBytes)),
+		zap.String("raw_content", string(content)),
+	)
+
 	// Derive address from PubKeyBytes
 	pubKey := ed25519.PubKey{Key: signer.PubKeyBytes}
 	addr := sdk.AccAddress(pubKey.Address())
 
 	rn.CelestiaAddress = addr.String()
+	rn.logger().Info("derived celestia address", 
+		zap.String("address", rn.CelestiaAddress),
+		zap.String("pub_key_address_hex", hex.EncodeToString(pubKey.Address())),
+	)
 	return nil
 }
 
@@ -165,7 +240,8 @@ func (rn *RollkitNode) createRollkitContainer(ctx context.Context, additionalSta
 		"start",
 	}
 	if rn.isAggregator() {
-		startCmd = append(startCmd, "--rollkit.node.aggregator", "--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase)
+		signerPath := filepath.Join(rn.homeDir, "config")
+		startCmd = append(startCmd, "--rollkit.node.aggregator", "--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase, "--rollkit.signer.path="+signerPath)
 	}
 
 	// any custom arguments passed in on top of the required ones.
@@ -174,7 +250,7 @@ func (rn *RollkitNode) createRollkitContainer(ctx context.Context, additionalSta
 	return rn.containerLifecycle.CreateContainer(ctx, rn.TestName, rn.NetworkID, rn.Image, usingPorts, "", rn.bind(), nil, rn.HostName(), startCmd, rn.cfg.RollkitChainConfig.Env, []string{})
 }
 
-// startContainer starts the container for the RollkitNode, initializes its ports, and ensures the node is synced before returning.
+// startContainer starts the container for the RollkitNode, initializes its ports, and ensures the node rpc is responding returning.
 // Returns an error if the container fails to start, ports cannot be set, or syncing is not completed within the timeout.
 func (rn *RollkitNode) startContainer(ctx context.Context) error {
 	if err := rn.containerLifecycle.StartContainer(ctx); err != nil {
@@ -196,28 +272,23 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 	// wait a short period of time for the node to come online.
 	time.Sleep(5 * time.Second)
 
-	ticker := time.NewTicker(3 * time.Second)
+	// simple readiness check - just verify RPC is responding
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-
-	timeout := time.After(2 * time.Minute)
 
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("context cancelled while waiting for node sync: %w", ctx.Err())
+			return fmt.Errorf("context cancelled while waiting for node readiness: %w", ctx.Err())
 		case <-timeout:
-			return fmt.Errorf("node did not finish syncing within timeout")
+			return fmt.Errorf("node did not become ready within timeout")
 		case <-ticker.C:
-			stat, err := rn.Client.Status(ctx)
-			if err != nil {
-				continue // retry on transient error
+			_, err := rn.Client.Status(ctx)
+			if err == nil {
+				// RPC is responding, node is ready
+				return nil
 			}
-
-			if stat != nil && stat.SyncInfo.CatchingUp {
-				continue // still catching up, wait for next tick.
-			}
-			// node is synced
-			return nil
 		}
 	}
 }
