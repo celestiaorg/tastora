@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/types"
-	//"github.com/cosmos/cosmos-sdk/codec"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"go.uber.org/zap"
-	"sync"
 )
 
 var _ types.RollkitChain = &RollkitChain{}
@@ -31,10 +29,8 @@ func newRollkitChain(ctx context.Context, name string, cfg Config) (types.Rollki
 }
 
 type RollkitChain struct {
-	cfg Config
-	//cdc          *codec.ProtoCodec
+	cfg          Config
 	log          *zap.Logger
-	findTxMu     sync.Mutex
 	rollkitNodes []*RollkitNode
 }
 

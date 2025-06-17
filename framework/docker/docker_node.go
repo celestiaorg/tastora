@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/file"
 	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
@@ -78,4 +79,22 @@ func (n *node) stopContainer(ctx context.Context) error {
 // startContainer starts the container associated with the node using the provided context.
 func (n *node) startContainer(ctx context.Context) error {
 	return n.containerLifecycle.StartContainer(ctx)
+}
+
+// readFile reads a file from the node's container volume at the given relative path.
+func (n *node) readFile(ctx context.Context, logger *zap.Logger, relPath string) ([]byte, error) {
+	fr := file.NewRetriever(logger, n.DockerClient, n.TestName)
+	content, err := fr.SingleFileContent(ctx, n.VolumeName, relPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file at %s: %w", relPath, err)
+	}
+	return content, nil
+}
+
+// writeFile accepts file contents in a byte slice and writes the contents to
+// the docker filesystem. relPath describes the location of the file in the
+// docker volume relative to the home directory.
+func (n *node) writeFile(ctx context.Context, logger *zap.Logger, content []byte, relPath string) error {
+	fw := file.NewWriter(logger, n.DockerClient, n.TestName)
+	return fw.WriteFile(ctx, n.VolumeName, relPath, content)
 }

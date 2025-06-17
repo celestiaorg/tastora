@@ -383,7 +383,7 @@ func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 }
 
 func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) error {
-	err := tn.writeFile(ctx, content, "config/genesis.json")
+	err := tn.writeFile(ctx, tn.logger(), content, "config/genesis.json")
 	if err != nil {
 		return fmt.Errorf("overwriting genesis.json: %w", err)
 	}
@@ -413,13 +413,6 @@ func (tn *ChainNode) readFile(ctx context.Context, relPath string) ([]byte, erro
 	return gen, nil
 }
 
-// writeFile accepts file contents in a byte slice and writes the contents to
-// the docker filesystem. relPath describes the location of the file in the
-// docker volume relative to the home directory.
-func (tn *ChainNode) writeFile(ctx context.Context, content []byte, relPath string) error {
-	fw := file.NewWriter(tn.logger(), tn.DockerClient, tn.TestName)
-	return fw.WriteFile(ctx, tn.VolumeName, relPath, content)
-}
 
 func (tn *ChainNode) genesisFileContent(ctx context.Context) ([]byte, error) {
 	gen, err := tn.readFile(ctx, "config/genesis.json")
@@ -443,7 +436,7 @@ func (tn *ChainNode) copyGentx(ctx context.Context, destVal *ChainNode) error {
 		return fmt.Errorf("getting gentx content: %w", err)
 	}
 
-	err = destVal.writeFile(ctx, gentx, relPath)
+	err = destVal.writeFile(ctx, destVal.logger(), gentx, relPath)
 	if err != nil {
 		return fmt.Errorf("overwriting gentx: %w", err)
 	}

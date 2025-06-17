@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/file"
 	"github.com/celestiaorg/tastora/framework/types"
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
@@ -123,19 +122,10 @@ type keyData struct {
 	Salt             []byte `json:"salt,omitempty"`
 }
 
-func (rn *RollkitNode) readFile(ctx context.Context, relPath string) ([]byte, error) {
-	fr := file.NewRetriever(rn.logger(), rn.DockerClient, rn.TestName)
-	content, err := fr.SingleFileContent(ctx, rn.VolumeName, relPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file at %s: %w", relPath, err)
-	}
-	return content, nil
-}
-
 // initAddress extracts the celestia address from signer.json
 func (rn *RollkitNode) initAddress(ctx context.Context) error {
 	signerPath := filepath.Join("config", "signer.json")
-	content, err := rn.readFile(ctx, signerPath)
+	content, err := rn.readFile(ctx, rn.logger(), signerPath)
 	if err != nil {
 		return fmt.Errorf("failed to read signer.json from %s: %w", signerPath, err)
 	}
@@ -243,13 +233,13 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 			reqBody := bytes.NewBufferString("{}")
 			req, err := http.NewRequest("POST", healthURL, reqBody)
 			if err != nil {
-				rn.logger().Debug("rollkit node not ready yet", 
+				rn.logger().Debug("rollkit node not ready yet",
 					zap.String("url", healthURL),
 					zap.Error(err))
 				continue
 			}
 			req.Header.Set("Content-Type", "application/json")
-			
+
 			resp, err := client.Do(req)
 			if err == nil {
 				resp.Body.Close()
@@ -257,11 +247,11 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 					rn.logger().Info("rollkit node is ready")
 					return nil
 				}
-				rn.logger().Debug("rollkit node not ready yet", 
+				rn.logger().Debug("rollkit node not ready yet",
 					zap.String("url", healthURL),
 					zap.Int("status", resp.StatusCode))
 			} else {
-				rn.logger().Debug("rollkit node not ready yet", 
+				rn.logger().Debug("rollkit node not ready yet",
 					zap.String("url", healthURL),
 					zap.Error(err))
 			}
