@@ -3,13 +3,9 @@ package docker
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/types"
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -42,8 +38,6 @@ type RollkitNode struct {
 	mu  sync.Mutex
 
 	GrpcConn *grpc.ClientConn
-
-	CelestiaAddress string
 
 	// Ports set during startContainer.
 	hostRPCPort  string
@@ -83,7 +77,7 @@ func (rn *RollkitNode) isAggregator() bool {
 	return rn.Index == 0
 }
 
-// Init initializes the RollkitNode
+// Init initializes the RollkitNode.
 func (rn *RollkitNode) Init(ctx context.Context, initArguments ...string) error {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
@@ -96,65 +90,15 @@ func (rn *RollkitNode) Init(ctx context.Context, initArguments ...string) error 
 
 	cmd = append(cmd, initArguments...)
 
-	stdout, stderr, err := rn.exec(ctx, rn.logger(), cmd, rn.cfg.RollkitChainConfig.Env)
-	rn.logger().Info("rollkit init command output",
-		zap.String("command", fmt.Sprintf("%v", cmd)),
-		zap.String("stdout", string(stdout)),
-		zap.String("stderr", string(stderr)),
-		zap.Bool("is_aggregator", rn.isAggregator()),
-	)
+	_, _, err := rn.exec(ctx, rn.logger(), cmd, rn.cfg.RollkitChainConfig.Env)
 	if err != nil {
 		return fmt.Errorf("failed to initialize rollkit node: %w", err)
 	}
 
-	if err := rn.initAddress(ctx); err != nil {
-		return fmt.Errorf("failed to initialize address: %w", err)
-	}
-
 	return nil
 }
 
-// keyData matches Rollkit signer.json exactly
-type keyData struct {
-	PrivKeyEncrypted []byte `json:"priv_key_encrypted"`
-	Nonce            []byte `json:"nonce"`
-	PubKeyBytes      []byte `json:"pub_key"`
-	Salt             []byte `json:"salt,omitempty"`
-}
-
-// initAddress extracts the celestia address from signer.json
-func (rn *RollkitNode) initAddress(ctx context.Context) error {
-	signerPath := filepath.Join("config", "signer.json")
-	content, err := rn.readFile(ctx, rn.logger(), signerPath)
-	if err != nil {
-		return fmt.Errorf("failed to read signer.json from %s: %w", signerPath, err)
-	}
-
-	var signer keyData
-	if err := json.Unmarshal(content, &signer); err != nil {
-		return fmt.Errorf("failed to unmarshal signer.json: %w", err)
-	}
-
-	// Debug: Log the signer data
-	rn.logger().Info("signer.json contents",
-		zap.String("pub_key_hex", hex.EncodeToString(signer.PubKeyBytes)),
-		zap.Int("pub_key_len", len(signer.PubKeyBytes)),
-		zap.String("raw_content", string(content)),
-	)
-
-	// Derive address from PubKeyBytes
-	pubKey := ed25519.PubKey{Key: signer.PubKeyBytes}
-	addr := sdk.AccAddress(pubKey.Address())
-
-	rn.CelestiaAddress = addr.String()
-	rn.logger().Info("derived celestia address",
-		zap.String("address", rn.CelestiaAddress),
-		zap.String("pub_key_address_hex", hex.EncodeToString(pubKey.Address())),
-	)
-	return nil
-}
-
-// Start starts an individual rollkit node.
+// Start starts an individual RollkitNode.
 func (rn *RollkitNode) Start(ctx context.Context, startArguments ...string) error {
 	if err := rn.createRollkitContainer(ctx, startArguments...); err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
@@ -206,7 +150,7 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 	}
 	rn.hostRPCPort, rn.hostGRPCPort, rn.hostAPIPort, rn.hostP2PPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3]
 
-	err = rn.initClient("tcp://" + rn.hostRPCPort)
+	err = rn.initGRPCConnection("tcp://" + rn.hostRPCPort)
 	if err != nil {
 		return err
 	}
@@ -259,8 +203,8 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 	}
 }
 
-// initClient creates and assigns a new Tendermint RPC client to the ChainNode.
-func (rn *RollkitNode) initClient(addr string) error {
+// initGRPCConnection creates and assigns a new GRPC connection to the RollkitNode.
+func (rn *RollkitNode) initGRPCConnection(addr string) error {
 	httpClient, err := libclient.DefaultHTTPClient(addr)
 	if err != nil {
 		return err

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/file"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
 	tmjson "github.com/cometbft/cometbft/libs/json"
@@ -402,20 +401,8 @@ func (tn *ChainNode) collectGentxs(ctx context.Context) error {
 	return err
 }
 
-// readFile reads the contents of a single file at the specified path in the docker filesystem.
-// relPath describes the location of the file in the docker volume relative to the home directory.
-func (tn *ChainNode) readFile(ctx context.Context, relPath string) ([]byte, error) {
-	fr := file.NewRetriever(tn.logger(), tn.DockerClient, tn.TestName)
-	gen, err := fr.SingleFileContent(ctx, tn.VolumeName, relPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file at %s: %w", relPath, err)
-	}
-	return gen, nil
-}
-
-
 func (tn *ChainNode) genesisFileContent(ctx context.Context) ([]byte, error) {
-	gen, err := tn.readFile(ctx, "config/genesis.json")
+	gen, err := tn.readFile(ctx, tn.logger(), "config/genesis.json")
 	if err != nil {
 		return nil, fmt.Errorf("getting genesis.json content: %w", err)
 	}
@@ -431,7 +418,7 @@ func (tn *ChainNode) copyGentx(ctx context.Context, destVal *ChainNode) error {
 
 	relPath := fmt.Sprintf("config/gentx/gentx-%s.json", nid)
 
-	gentx, err := tn.readFile(ctx, relPath)
+	gentx, err := tn.readFile(ctx, tn.logger(), relPath)
 	if err != nil {
 		return fmt.Errorf("getting gentx content: %w", err)
 	}
@@ -449,7 +436,7 @@ func (tn *ChainNode) nodeID(ctx context.Context) (string, error) {
 	// This used to call p2p.LoadNodeKey against the file on the host,
 	// but because we are transitioning to operating on Docker volumes,
 	// we only have to tmjson.Unmarshal the raw content.
-	j, err := tn.readFile(ctx, "config/node_key.json")
+	j, err := tn.readFile(ctx, tn.logger(), "config/node_key.json")
 	if err != nil {
 		return "", fmt.Errorf("getting node_key.json content: %w", err)
 	}

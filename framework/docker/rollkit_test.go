@@ -5,11 +5,11 @@ import (
 	"cosmossdk.io/math"
 	"encoding/hex"
 	"fmt"
+	"github.com/celestiaorg/go-square/v2/share"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	"math/rand"
 	"testing"
 )
 
@@ -56,27 +56,14 @@ func (s *DockerTestSuite) TestRollkit() {
 	_, err = s.chain.BroadcastMessages(ctx, s.chain.GetFaucetWallet(), bankSend)
 	s.Require().NoError(err)
 
-	rollkit, err := s.provider.GetRollkitChain(context.Background())
+	rollkit, err := s.provider.GetRollkitChain(ctx)
 	s.Require().NoError(err)
 
 	nodes := rollkit.GetNodes()
 	s.Require().Len(nodes, 1)
 	aggregatorNode := nodes[0]
 
-	err = aggregatorNode.Init(context.Background())
-	s.Require().NoError(err)
-
-	// Get the Celestia address from the rollkit node
-	rollkitAddress := aggregatorNode.(*RollkitNode).CelestiaAddress
-	s.T().Logf("rollkit node celestia address: %s", rollkitAddress)
-
-	// Fund the rollkit node address
-	toAddress, err = sdk.AccAddressFromBech32(rollkitAddress)
-	s.Require().NoError(err)
-
-	// Fund the rollkit node wallet with coins
-	bankSend = banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
-	_, err = s.chain.BroadcastMessages(ctx, s.chain.GetFaucetWallet(), bankSend)
+	err = aggregatorNode.Init(ctx)
 	s.Require().NoError(err)
 
 	bridgeNodeHostName, err := bridgeNode.GetInternalHostName()
@@ -84,27 +71,18 @@ func (s *DockerTestSuite) TestRollkit() {
 
 	authToken, err := bridgeNode.GetAuthToken()
 	s.Require().NoError(err)
-	s.T().Logf("auth token: %s", authToken)
 
 	daAddress := fmt.Sprintf("http://%s:26658", bridgeNodeHostName)
-	err = aggregatorNode.Start(context.Background(),
+	err = aggregatorNode.Start(ctx,
 		"--rollkit.da.address", daAddress,
 		"--rollkit.da.gas_price", "0.025",
 		"--rollkit.da.auth_token", authToken,
 		"--rollkit.rpc.address", "0.0.0.0:7331", // bind to 0.0.0.0 so rpc is reachable from test host.
-		"--rollkit.da.namespace", GenerateValidNamespaceHex(),
+		"--rollkit.da.namespace", generateValidNamespaceHex(),
 	)
 	s.Require().NoError(err)
 }
 
-func GenerateValidNamespaceHex() string {
-	ns := make([]byte, 29)
-	ns[0] = 0x00 // version 0
-	// First 18 bytes of namespace ID must be zero → bytes 1-18
-	for i := 1; i < 19; i++ {
-		ns[i] = 0x00
-	}
-	// Last 10 bytes of namespace ID → random
-	_, _ = rand.Read(ns[19:])
-	return hex.EncodeToString(ns)
+func generateValidNamespaceHex() string {
+	return hex.EncodeToString(share.RandomBlobNamespaceID())
 }

@@ -81,10 +81,11 @@ type DANode interface {
 	GetAllBlobs(ctx context.Context, height uint64, namespaces []share.Namespace) ([]Blob, error)
 	// GetHostRPCAddress returns the externally resolvable RPC address of the node.
 	GetHostRPCAddress() string
+	// GetInternalHostName returns the hostname resolvable within the network.
 	GetInternalHostName() (string, error)
-	// GetInternalRPCAddress returns the internal RPC address of the node resolvable within the network.
-	//GetInternalRPCAddress() string
+	// GetWallet returns the wallet associated with the node.
 	GetWallet() (Wallet, error)
+	// GetAuthToken returns the auth token for the node.
 	GetAuthToken() (string, error)
 	// GetP2PInfo retrieves peer-to-peer network information including the PeerID and network addresses for the node.
 	GetP2PInfo(ctx context.Context) (P2PInfo, error)
