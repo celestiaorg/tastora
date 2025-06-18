@@ -158,49 +158,7 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 	// wait a short period of time for the node to come online.
 	time.Sleep(5 * time.Second)
 
-	// simple readiness check - verify Connect RPC health endpoint is responding
-	timeout := time.After(60 * time.Second)
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	healthURL := fmt.Sprintf("http://%s/rollkit.v1.HealthService/Livez", rn.hostRPCPort)
-	client := &http.Client{Timeout: 5 * time.Second}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled while waiting for node readiness: %w", ctx.Err())
-		case <-timeout:
-			return fmt.Errorf("node did not become ready within timeout")
-		case <-ticker.C:
-			// Create Connect RPC request with empty JSON body
-			reqBody := bytes.NewBufferString("{}")
-			req, err := http.NewRequest("POST", healthURL, reqBody)
-			if err != nil {
-				rn.logger().Debug("rollkit node not ready yet",
-					zap.String("url", healthURL),
-					zap.Error(err))
-				continue
-			}
-			req.Header.Set("Content-Type", "application/json")
-
-			resp, err := client.Do(req)
-			if err == nil {
-				resp.Body.Close()
-				if resp.StatusCode == 200 {
-					rn.logger().Info("rollkit node is ready")
-					return nil
-				}
-				rn.logger().Debug("rollkit node not ready yet",
-					zap.String("url", healthURL),
-					zap.Int("status", resp.StatusCode))
-			} else {
-				rn.logger().Debug("rollkit node not ready yet",
-					zap.String("url", healthURL),
-					zap.Error(err))
-			}
-		}
-	}
+	return rn.waitForNodeReady(ctx, 60*time.Second)
 }
 
 // initGRPCConnection creates and assigns a new GRPC connection to the RollkitNode.
@@ -220,4 +178,52 @@ func (rn *RollkitNode) initGRPCConnection(addr string) error {
 	rn.GrpcConn = grpcConn
 
 	return nil
+}
+
+// waitForNodeReady polls the health endpoint until the node is ready or timeout is reached
+func (rn *RollkitNode) waitForNodeReady(ctx context.Context, timeout time.Duration) error {
+	healthURL := fmt.Sprintf("http://%s/rollkit.v1.HealthService/Livez", rn.hostRPCPort)
+	client := &http.Client{Timeout: 5 * time.Second}
+	
+	timeoutCh := time.After(timeout)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for node readiness: %w", ctx.Err())
+		case <-timeoutCh:
+			return fmt.Errorf("node did not become ready within timeout")
+		case <-ticker.C:
+			if rn.isNodeHealthy(client, healthURL) {
+				rn.logger().Info("rollkit node is ready")
+				return nil
+			}
+		}
+	}
+}
+
+// isNodeHealthy checks if the node health endpoint returns 200
+func (rn *RollkitNode) isNodeHealthy(client *http.Client, healthURL string) bool {
+	req, err := http.NewRequest("POST", healthURL, bytes.NewBufferString("{}"))
+	if err != nil {
+		rn.logger().Debug("failed to create health check request", zap.Error(err))
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		rn.logger().Debug("rollkit node not ready yet", zap.String("url", healthURL), zap.Error(err))
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 200 {
+		return true
+	}
+	
+	rn.logger().Debug("rollkit node not ready yet", zap.String("url", healthURL), zap.Int("status", resp.StatusCode))
+	return false
 }
