@@ -15,6 +15,10 @@ import (
 
 func (s *DockerTestSuite) TestRollkit() {
 	ctx := context.Background()
+
+	s.SetupDockerResources()
+	s.StartChain()
+
 	daNetwork, err := s.provider.GetDataAvailabilityNetwork(ctx)
 	s.Require().NoError(err)
 

@@ -8,6 +8,9 @@ import (
 
 // TestCreateAndFundWallet tests wallet creation and funding.
 func (s *DockerTestSuite) TestCreateAndFundWallet() {
+	s.SetupDockerResources()
+	s.StartChain()
+
 	amount := math.NewInt(1000000)
 	sendAmount := sdk.NewCoins(sdk.NewCoin("utia", amount))
 	testWallet, err := wallet.CreateAndFund(s.ctx, "test", sendAmount, s.chain)
