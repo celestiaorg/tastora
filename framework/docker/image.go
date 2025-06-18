@@ -215,7 +215,7 @@ func (image *Image) Start(ctx context.Context, cmd []string, opts ContainerOptio
 		containerName = SanitizeContainerName(image.testName + "-" + random.LowerCaseLetterString(6))
 		hostName      = CondenseHostName(containerName)
 		logger        = image.log.With(
-			zap.String("command", strings.Join(cmd, " ")),
+			zap.String("command", strings.Join(cmd, " ")), //nolint:gosec // testing only so safe to expose credentials in cli
 			zap.Strings("env,", opts.Env),
 			zap.String("hostname", hostName),
 			zap.String("container", containerName),

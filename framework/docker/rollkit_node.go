@@ -114,7 +114,7 @@ func (rn *RollkitNode) Start(ctx context.Context, startArguments ...string) erro
 	return nil
 }
 
-// createRollkitContainer initializes but does not start a container for the ChainNode with the specified configuration and context.
+// createRollkitContainer initializes but does not start a container for the RollkitNode with the specified configuration and context.
 func (rn *RollkitNode) createRollkitContainer(ctx context.Context, additionalStartArgs ...string) error {
 
 	usingPorts := nat.PortMap{}

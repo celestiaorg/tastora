@@ -57,7 +57,7 @@ func (c *ContainerLifecycle) CreateContainer(
 		"Will run command",
 		zap.String("image", imageRef),
 		zap.String("container", c.containerName),
-		zap.String("command", strings.Join(cmd, " ")),
+		zap.String("command", strings.Join(cmd, " ")), //nolint:gosec // testing only so safe to expose credentials in cli
 	)
 
 	if err := image.PullImage(ctx, c.client); err != nil {
