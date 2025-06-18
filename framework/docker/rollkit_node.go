@@ -85,7 +85,10 @@ func (rn *RollkitNode) Init(ctx context.Context, initArguments ...string) error 
 	cmd := []string{rn.cfg.RollkitChainConfig.Bin, "--home", rn.homeDir, "--chain_id", rn.cfg.RollkitChainConfig.ChainID, "init"}
 	if rn.isAggregator() {
 		signerPath := filepath.Join(rn.homeDir, "config")
-		cmd = append(cmd, "--rollkit.node.aggregator", "--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase, "--rollkit.signer.path="+signerPath)
+		cmd = append(cmd,
+			"--rollkit.node.aggregator",
+			"--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase, //nolint:gosec // used for testing only
+			"--rollkit.signer.path="+signerPath)
 	}
 
 	cmd = append(cmd, initArguments...)
@@ -127,7 +130,10 @@ func (rn *RollkitNode) createRollkitContainer(ctx context.Context, additionalSta
 	}
 	if rn.isAggregator() {
 		signerPath := filepath.Join(rn.homeDir, "config")
-		startCmd = append(startCmd, "--rollkit.node.aggregator", "--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase, "--rollkit.signer.path="+signerPath)
+		startCmd = append(startCmd,
+			"--rollkit.node.aggregator",
+			"--rollkit.signer.passphrase="+rn.cfg.RollkitChainConfig.AggregatorPassphrase, //nolint:gosec // used for testing only
+			"--rollkit.signer.path="+signerPath)
 	}
 
 	// any custom arguments passed in on top of the required ones.
@@ -189,7 +195,7 @@ func (rn *RollkitNode) GetHostName() string {
 func (rn *RollkitNode) waitForNodeReady(ctx context.Context, timeout time.Duration) error {
 	healthURL := fmt.Sprintf("http://%s/rollkit.v1.HealthService/Livez", rn.hostRPCPort)
 	client := &http.Client{Timeout: 5 * time.Second}
-	
+
 	timeoutCh := time.After(timeout)
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -228,7 +234,7 @@ func (rn *RollkitNode) isNodeHealthy(client *http.Client, healthURL string) bool
 	if resp.StatusCode == 200 {
 		return true
 	}
-	
+
 	rn.logger().Debug("rollkit node not ready yet", zap.String("url", healthURL), zap.Int("status", resp.StatusCode))
 	return false
 }
