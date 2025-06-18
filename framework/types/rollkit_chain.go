@@ -14,4 +14,6 @@ type RollkitNode interface {
 	Init(ctx context.Context, initArguments ...string) error
 	// Start starts the RollkitNode with optional start arguments.
 	Start(ctx context.Context, startArguments ...string) error
+	// GetHostName returns the hostname of the RollkitNode.
+	GetHostName() string
 }
