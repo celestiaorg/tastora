@@ -65,19 +65,8 @@ type ChainConfig struct {
 	ExposeAdditionalPorts []string
 	// Additional start command arguments
 	AdditionalStartArgs []string
-	// Additional init command arguments
-	AdditionalInitArgs []string
-	// ChainNodeConfig specify individual overrides.
-	ChainNodeConfig []ChainNodeConfig
 	// Environment variables for chain nodes
 	Env []string
-}
-
-type ChainNodeConfig struct {
-	// Additional start command arguments
-	AdditionalStartArgs []string
-	// Additional init command arguments
-	AdditionalInitArgs []string
 }
 
 // DataAvailabilityNetworkConfig defines the configuration for the data availability network, including node counts and image settings.
