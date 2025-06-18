@@ -22,9 +22,9 @@ type Config struct {
 
 type ChainConfig struct {
 	// Chain type, e.g. cosmos.
-	Type string `yaml:"type"`
+	Type string
 	// Chain name, e.g. cosmoshub.
-	Name string `yaml:"name"`
+	Name string
 	// Version of the docker image to use.
 	// Must be set.
 	Version string
@@ -50,8 +50,6 @@ type ChainConfig struct {
 	Gas string
 	// Trusting period of the chain.
 	TrustingPeriod string
-	// Do not use docker host mount.
-	NoHostMount bool
 	// When provided, genesis file contents will be altered before sharing for genesis.
 	ModifyGenesis func(Config, []byte) ([]byte, error)
 	// Override config parameters for files at filepath.
@@ -60,12 +58,21 @@ type ChainConfig struct {
 	EncodingConfig *testutil.TestEncodingConfig
 	// To avoid port binding conflicts, ports are only exposed on the 0th validator.
 	HostPortOverride map[int]int
-	// ExposeAdditionalPorts exposes each port id to the host on a random port. ex: "8080/tcp"
-	// Access the address with ChainNode.GetHostAddress
-	ExposeAdditionalPorts []string
 	// Additional start command arguments
 	AdditionalStartArgs []string
 	// Environment variables for chain nodes
+	Env []string
+	// NodeConfigs allows per-node configuration overrides, keyed by node index
+	NodeConfigs map[int]*ChainNodeConfig
+}
+
+// ChainNodeConfig provides per-node configuration that can override ChainConfig defaults
+type ChainNodeConfig struct {
+	// AdditionalStartArgs overrides the chain-level AdditionalStartArgs for this specific node
+	AdditionalStartArgs []string
+	// Image overrides the chain-level Images[0] for this specific node
+	Image *DockerImage
+	// Env overrides the chain-level Env for this specific node
 	Env []string
 }
 
@@ -81,6 +88,8 @@ type DataAvailabilityNetworkConfig struct {
 	Image DockerImage
 }
 
+// RollkitChainConfig defines the configuration for a Rollkit-based chain
+// including node counts, image settings, and chainID.
 type RollkitChainConfig struct {
 	// ChainID, e.g. test-rollkit
 	ChainID string

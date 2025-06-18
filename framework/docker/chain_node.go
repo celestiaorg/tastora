@@ -353,40 +353,48 @@ func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 	chainCfg := tn.cfg.ChainConfig
 
 	cmd := []string{chainCfg.Bin, "start", "--home", tn.homeDir}
-	if len(chainCfg.AdditionalStartArgs) > 0 {
-		cmd = append(cmd, chainCfg.AdditionalStartArgs...)
+	if startArgs := tn.getStartArgs(); len(startArgs) > 0 {
+		cmd = append(cmd, startArgs...)
 	}
 
 	usingPorts := nat.PortMap{}
 	for k, v := range sentryPorts {
 		usingPorts[k] = v
 	}
-	for _, port := range chainCfg.ExposeAdditionalPorts {
-		usingPorts[nat.Port(port)] = []nat.PortBinding{}
+
+	return tn.containerLifecycle.CreateContainer(ctx, tn.TestName, tn.NetworkID, tn.getImage(), usingPorts, "", tn.bind(), nil, tn.HostName(), cmd, tn.getEnv(), []string{})
+}
+
+// getNodeConfig returns the per-node configuration if it exists
+func (tn *ChainNode) getNodeConfig() *ChainNodeConfig {
+	if tn.cfg.ChainConfig.NodeConfigs == nil {
+		return nil
 	}
+	return tn.cfg.ChainConfig.NodeConfigs[tn.Index]
+}
 
-	// to prevent port binding conflicts, host port overrides are only exposed on the first validator node.
-	if tn.Validator && tn.Index == 0 && chainCfg.HostPortOverride != nil {
-		var fields []zap.Field
-
-		i := 0
-		for intP, extP := range chainCfg.HostPortOverride {
-			port := nat.Port(fmt.Sprintf("%d/tcp", intP))
-
-			usingPorts[port] = []nat.PortBinding{
-				{
-					HostPort: fmt.Sprintf("%d", extP),
-				},
-			}
-
-			fields = append(fields, zap.String(fmt.Sprintf("port_overrides_%d", i), fmt.Sprintf("%s:%d", port, extP)))
-			i++
-		}
-
-		tn.log.Info("Port overrides", fields...)
+// getStartArgs returns the start arguments for this node, preferring per-node config over chain config
+func (tn *ChainNode) getStartArgs() []string {
+	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && len(nodeConfig.AdditionalStartArgs) > 0 {
+		return nodeConfig.AdditionalStartArgs
 	}
+	return tn.cfg.ChainConfig.AdditionalStartArgs
+}
 
-	return tn.containerLifecycle.CreateContainer(ctx, tn.TestName, tn.NetworkID, tn.Image, usingPorts, "", tn.bind(), nil, tn.HostName(), cmd, chainCfg.Env, []string{})
+// getImage returns the Docker image for this node, preferring per-node config over the default image
+func (tn *ChainNode) getImage() DockerImage {
+	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && nodeConfig.Image != nil {
+		return *nodeConfig.Image
+	}
+	return tn.Image
+}
+
+// getEnv returns the environment variables for this node, preferring per-node config over chain config
+func (tn *ChainNode) getEnv() []string {
+	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && len(nodeConfig.Env) > 0 {
+		return nodeConfig.Env
+	}
+	return tn.cfg.ChainConfig.Env
 }
 
 func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) error {
