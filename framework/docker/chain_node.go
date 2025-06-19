@@ -353,7 +353,7 @@ func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 	chainCfg := tn.cfg.ChainConfig
 
 	cmd := []string{chainCfg.Bin, "start", "--home", tn.homeDir}
-	if startArgs := tn.getStartArgs(); len(startArgs) > 0 {
+	if startArgs := tn.getAdditionalStartArgs(); len(startArgs) > 0 {
 		cmd = append(cmd, startArgs...)
 	}
 
@@ -363,38 +363,6 @@ func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 	}
 
 	return tn.containerLifecycle.CreateContainer(ctx, tn.TestName, tn.NetworkID, tn.getImage(), usingPorts, "", tn.bind(), nil, tn.HostName(), cmd, tn.getEnv(), []string{})
-}
-
-// getNodeConfig returns the per-node configuration if it exists
-func (tn *ChainNode) getNodeConfig() *ChainNodeConfig {
-	if tn.cfg.ChainConfig.NodeConfigs == nil {
-		return nil
-	}
-	return tn.cfg.ChainConfig.NodeConfigs[tn.Index]
-}
-
-// getStartArgs returns the start arguments for this node, preferring per-node config over chain config
-func (tn *ChainNode) getStartArgs() []string {
-	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && len(nodeConfig.AdditionalStartArgs) > 0 {
-		return nodeConfig.AdditionalStartArgs
-	}
-	return tn.cfg.ChainConfig.AdditionalStartArgs
-}
-
-// getImage returns the Docker image for this node, preferring per-node config over the default image
-func (tn *ChainNode) getImage() DockerImage {
-	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && nodeConfig.Image != nil {
-		return *nodeConfig.Image
-	}
-	return tn.Image
-}
-
-// getEnv returns the environment variables for this node, preferring per-node config over chain config
-func (tn *ChainNode) getEnv() []string {
-	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && len(nodeConfig.Env) > 0 {
-		return nodeConfig.Env
-	}
-	return tn.cfg.ChainConfig.Env
 }
 
 func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) error {
@@ -577,6 +545,44 @@ func (tn *ChainNode) keyBech32(ctx context.Context, name string, bech string) (s
 	}
 
 	return string(bytes.TrimSuffix(stdout, []byte("\n"))), nil
+}
+
+// getNodeConfig returns the per-node configuration if it exists
+func (tn *ChainNode) getNodeConfig() *ChainNodeConfig {
+	if tn.cfg.ChainConfig.ChainNodeConfigs == nil {
+		return nil
+	}
+
+	cfg, ok := tn.cfg.ChainConfig.ChainNodeConfigs[tn.Index]
+	if !ok {
+		tn.logger().Warn("no node config found for node", zap.Int("index", tn.Index))
+	}
+
+	return cfg
+}
+
+// getAdditionalStartArgs returns the start arguments for this node, preferring per-node config over chain config
+func (tn *ChainNode) getAdditionalStartArgs() []string {
+	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && nodeConfig.AdditionalStartArgs != nil {
+		return nodeConfig.AdditionalStartArgs
+	}
+	return tn.cfg.ChainConfig.AdditionalStartArgs
+}
+
+// getImage returns the Docker image for this node, preferring per-node config over the default image
+func (tn *ChainNode) getImage() DockerImage {
+	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && nodeConfig.Image != nil {
+		return *nodeConfig.Image
+	}
+	return tn.Image
+}
+
+// getEnv returns the environment variables for this node, preferring per-node config over chain config
+func (tn *ChainNode) getEnv() []string {
+	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && nodeConfig.Env != nil {
+		return nodeConfig.Env
+	}
+	return tn.cfg.ChainConfig.Env
 }
 
 // CondenseMoniker fits a moniker into the cosmos character limit for monikers.

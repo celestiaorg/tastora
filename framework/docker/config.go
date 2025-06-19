@@ -62,8 +62,8 @@ type ChainConfig struct {
 	AdditionalStartArgs []string
 	// Environment variables for chain nodes
 	Env []string
-	// NodeConfigs allows per-node configuration overrides, keyed by node index
-	NodeConfigs map[int]*ChainNodeConfig
+	// ChainNodeConfigs allows per-node configuration overrides, keyed by node index
+	ChainNodeConfigs map[int]*ChainNodeConfig
 }
 
 // ChainNodeConfig provides per-node configuration that can override ChainConfig defaults

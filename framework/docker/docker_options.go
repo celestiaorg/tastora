@@ -9,7 +9,7 @@ func WithPerNodeConfig(nodeConfigs map[int]*ChainNodeConfig) ConfigOption {
 		if cfg.ChainConfig == nil {
 			cfg.ChainConfig = &ChainConfig{}
 		}
-		cfg.ChainConfig.NodeConfigs = nodeConfigs
+		cfg.ChainConfig.ChainNodeConfigs = nodeConfigs
 	}
 }
 
