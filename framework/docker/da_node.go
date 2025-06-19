@@ -34,32 +34,35 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 		return nil, fmt.Errorf("data availability network config is nil")
 	}
 
-	image := cfg.DataAvailabilityNetworkConfig.Image
+	defaultImage := cfg.DataAvailabilityNetworkConfig.Image
 
-	bn := &DANode{
+	daNode := &DANode{
 		cfg:      cfg,
 		nodeType: nodeType,
 		log: cfg.Logger.With(
 			zap.String("node_type", nodeType.String()),
 		),
-		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", idx, nodeType.String()),
+		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String()),
 	}
 
-	bn.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, bn.Name())
+	daNode.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name())
+
+	// image may be overridden by each node.
+	image := daNode.getImage()
 
 	v, err := cfg.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 		Labels: map[string]string{
 			consts.CleanupLabel:   testName,
-			consts.NodeOwnerLabel: bn.Name(),
+			consts.NodeOwnerLabel: daNode.Name(),
 		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating volume for chain node: %w", err)
 	}
-	bn.VolumeName = v.Name
+	daNode.VolumeName = v.Name
 
 	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
-		Log:        bn.log,
+		Log:        daNode.log,
 		Client:     cfg.DockerClient,
 		VolumeName: v.Name,
 		ImageRef:   image.Ref(),
@@ -69,7 +72,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 		return nil, fmt.Errorf("set volume owner: %w", err)
 	}
 
-	return bn, nil
+	return daNode, nil
 }
 
 // DANode is a docker implementation of a celestia bridge node.
@@ -271,7 +274,7 @@ func (n *DANode) createNodeContainer(ctx context.Context, additionalStartArgs []
 	for k, v := range daNodePorts {
 		usingPorts[k] = v
 	}
-	return n.containerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.bind(), nil, n.HostName(), cmd, env, []string{})
+	return n.containerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.getImage(), usingPorts, "", n.bind(), nil, n.HostName(), cmd, env, []string{})
 }
 
 // initAuthToken initialises an admin auth token.
@@ -287,6 +290,45 @@ func (n *DANode) initAuthToken(ctx context.Context) error {
 
 	n.adminAuthToken = string(bytes.TrimSpace(stdout))
 	return nil
+}
+
+// getNodeConfig returns the per-node configuration if it exists
+func (n *DANode) getNodeConfig() *DANodeConfig {
+	cfg := n.cfg.DataAvailabilityNetworkConfig
+	if cfg == nil {
+		return nil
+	}
+
+	var configMap map[int]*DANodeConfig
+	switch n.nodeType {
+	case types.BridgeNode:
+		configMap = cfg.BridgeNodeConfigs
+	case types.FullNode:
+		configMap = cfg.FullNodeConfigs
+	case types.LightNode:
+		configMap = cfg.LightNodeConfigs
+	default:
+		return nil
+	}
+
+	if configMap == nil {
+		return nil
+	}
+
+	nodeConfig, ok := configMap[n.Index]
+	if !ok {
+		n.log.Debug("no node config found for node", zap.Int("index", n.Index), zap.String("type", n.nodeType.String()))
+	}
+
+	return nodeConfig
+}
+
+// getImage returns the Docker image for this node, preferring per-node config over the default image
+func (n *DANode) getImage() DockerImage {
+	if nodeConfig := n.getNodeConfig(); nodeConfig != nil && nodeConfig.Image != nil {
+		return *nodeConfig.Image
+	}
+	return n.Image
 }
 
 // disableRPCAuthModification provides a modification which disables RPC authentication so that the tests can use the endpoints without configuring auth.

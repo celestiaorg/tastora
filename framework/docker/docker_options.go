@@ -42,3 +42,33 @@ func WithAdditionalStartArgs(args ...string) ConfigOption {
 		cfg.ChainConfig.AdditionalStartArgs = args
 	}
 }
+
+// WithPerBridgeNodeConfig adds per-bridge-node configuration to the DA network config
+func WithPerBridgeNodeConfig(nodeConfigs map[int]*DANodeConfig) ConfigOption {
+	return func(cfg *Config) {
+		if cfg.DataAvailabilityNetworkConfig == nil {
+			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		}
+		cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs = nodeConfigs
+	}
+}
+
+// WithPerFullNodeConfig adds per-full-node configuration to the DA network config
+func WithPerFullNodeConfig(nodeConfigs map[int]*DANodeConfig) ConfigOption {
+	return func(cfg *Config) {
+		if cfg.DataAvailabilityNetworkConfig == nil {
+			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		}
+		cfg.DataAvailabilityNetworkConfig.FullNodeConfigs = nodeConfigs
+	}
+}
+
+// WithPerLightNodeConfig adds per-light-node configuration to the DA network config
+func WithPerLightNodeConfig(nodeConfigs map[int]*DANodeConfig) ConfigOption {
+	return func(cfg *Config) {
+		if cfg.DataAvailabilityNetworkConfig == nil {
+			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		}
+		cfg.DataAvailabilityNetworkConfig.LightNodeConfigs = nodeConfigs
+	}
+}

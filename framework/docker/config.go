@@ -86,6 +86,18 @@ type DataAvailabilityNetworkConfig struct {
 	LightNodeCount int
 	// Image specifies the Docker image used for nodes in the data availability network.
 	Image DockerImage
+	// BridgeNodeConfigs allows per-bridge-node configuration overrides, keyed by bridge node index
+	BridgeNodeConfigs map[int]*DANodeConfig
+	// FullNodeConfigs allows per-full-node configuration overrides, keyed by full node index
+	FullNodeConfigs map[int]*DANodeConfig
+	// LightNodeConfigs allows per-light-node configuration overrides, keyed by light node index
+	LightNodeConfigs map[int]*DANodeConfig
+}
+
+// DANodeConfig provides per-node configuration that can override DataAvailabilityNetworkConfig defaults
+type DANodeConfig struct {
+	// Image overrides the network-level Image for this specific node
+	Image *DockerImage
 }
 
 // RollkitChainConfig defines the configuration for a Rollkit-based chain

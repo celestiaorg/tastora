@@ -15,8 +15,32 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 
 	ctx := context.Background()
 
+	// configure different images for different DA node types
+	bridgeNodeConfigs := map[int]*DANodeConfig{
+		0: {
+			Image: &DockerImage{
+				Repository: "ghcr.io/celestiaorg/celestia-node",
+				Version:    "pr-4283",
+				UIDGID:     "10001:10001",
+			},
+		},
+	}
+
+	fullNodeConfigs := map[int]*DANodeConfig{
+		0: {
+			Image: &DockerImage{
+				Repository: "ghcr.io/celestiaorg/celestia-node",
+				Version:    "pr-4283",
+				UIDGID:     "10001:10001",
+			},
+		},
+	}
+
 	var err error
-	s.provider = s.CreateDockerProvider()
+	s.provider = s.CreateDockerProvider(
+		WithPerBridgeNodeConfig(bridgeNodeConfigs),
+		WithPerFullNodeConfig(fullNodeConfigs),
+	)
 	s.chain, err = s.provider.GetChain(ctx)
 	s.Require().NoError(err)
 
