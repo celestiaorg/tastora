@@ -105,6 +105,11 @@ func (c *Chain) GetFaucetWallet() types.Wallet {
 	return c.faucetWallet
 }
 
+// GetChainID returns the chain ID.
+func (c *Chain) GetChainID() string {
+	return c.cfg.ChainConfig.ChainID
+}
+
 // getBroadcaster returns a broadcaster that can broadcast messages to this chain.
 func (c *Chain) getBroadcaster() types.Broadcaster {
 	if c.broadcaster != nil {

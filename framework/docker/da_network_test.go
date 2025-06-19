@@ -53,7 +53,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 	fullNode := fullNodes[0]
 	lightNode := lightNodes[0]
 
-	chainID := "test"
+	chainID := s.chain.GetChainID()
 
 	s.T().Run("bridge node can be started", func(t *testing.T) {
 		err = bridgeNode.Start(ctx,
@@ -145,7 +145,7 @@ func (s *DockerTestSuite) TestModifyConfigFileDANetwork() {
 
 	bridgeNode := bridgeNodes[0]
 
-	chainID := "test"
+	chainID := s.chain.GetChainID()
 
 	s.T().Run("bridge node can be started", func(t *testing.T) {
 		err = bridgeNode.Start(ctx,

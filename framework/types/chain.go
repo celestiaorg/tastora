@@ -34,6 +34,8 @@ type Chain interface {
 	UpgradeVersion(ctx context.Context, version string)
 	// GetFaucetWallet returns the faucet wallet.
 	GetFaucetWallet() Wallet
+	// GetChainID returns the chain ID.
+	GetChainID() string
 }
 
 type ChainNode interface {
