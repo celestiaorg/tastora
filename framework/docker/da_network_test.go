@@ -121,6 +121,14 @@ func (s *DockerTestSuite) TestModifyConfigFileDANetwork() {
 	ctx := context.Background()
 	var bridgeNodes []types.DANode
 
+	var err error
+	s.provider = s.CreateDockerProvider()
+	s.chain, err = s.provider.GetChain(ctx)
+	s.Require().NoError(err)
+
+	err = s.chain.Start(ctx)
+	s.Require().NoError(err)
+
 	// default configuration uses 1/1/1 for Bridge/Light/Full da nodes.
 	daNetwork, err := s.provider.GetDataAvailabilityNetwork(ctx)
 	s.Require().NoError(err)
