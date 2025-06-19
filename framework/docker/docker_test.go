@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/moby/moby/client"
 	"testing"
 
@@ -24,7 +25,7 @@ type DockerTestSuite struct {
 	logger       *zap.Logger
 	encConfig    testutil.TestEncodingConfig
 	provider     *Provider
-	chain        *Chain
+	chain        types.Chain
 }
 
 // SetupSuite runs once before all tests in the suite.
@@ -47,21 +48,6 @@ func (s *DockerTestSuite) SetupTest() {
 // TearDownTest removes docker resources.
 func (s *DockerTestSuite) TearDownTest() {
 	DockerCleanup(s.T(), s.dockerClient)()
-}
-
-// SetupDockerResources creates a new provider and chain using the given configuration options.
-// None of the resources are started.
-func (s *DockerTestSuite) SetupDockerResources(opts ...ConfigOption) {
-	s.provider = s.CreateDockerProvider(opts...)
-	chain, err := s.provider.GetChain(s.ctx)
-	s.Require().NoError(err)
-	s.chain = chain.(*Chain)
-}
-
-// StartChain starts the chain that was created in SetupDockerResources
-func (s *DockerTestSuite) StartChain() {
-	err := s.chain.Start(s.ctx)
-	s.Require().NoError(err)
 }
 
 // CreateDockerProvider returns a provider with configuration options applied to the default Celestia config.
@@ -185,7 +171,9 @@ func (s *DockerTestSuite) TestPerNodeDifferentImages() {
 
 	// set up chain with 2 validators using different images
 	numValidators := 2
-	s.SetupDockerResources(
+
+	var err error
+	s.provider = s.CreateDockerProvider(
 		WithNumValidators(numValidators),
 		WithPerNodeConfig(map[int]*ChainNodeConfig{
 			0: {
@@ -199,7 +187,11 @@ func (s *DockerTestSuite) TestPerNodeDifferentImages() {
 		}),
 	)
 
-	s.StartChain()
+	s.chain, err = s.provider.GetChain(s.ctx)
+	s.Require().NoError(err)
+
+	err = s.chain.Start(s.ctx)
+	s.Require().NoError(err)
 
 	validatorNodes := s.chain.GetNodes()
 	s.Require().Len(validatorNodes, numValidators, "expected 2 validators")

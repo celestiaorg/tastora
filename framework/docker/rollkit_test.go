@@ -16,8 +16,13 @@ import (
 func (s *DockerTestSuite) TestRollkit() {
 	ctx := context.Background()
 
-	s.SetupDockerResources()
-	s.StartChain()
+	var err error
+	s.provider = s.CreateDockerProvider()
+	s.chain, err = s.provider.GetChain(s.ctx)
+	s.Require().NoError(err)
+
+	err = s.chain.Start(s.ctx)
+	s.Require().NoError(err)
 
 	daNetwork, err := s.provider.GetDataAvailabilityNetwork(ctx)
 	s.Require().NoError(err)
@@ -28,7 +33,7 @@ func (s *DockerTestSuite) TestRollkit() {
 	s.Require().NoError(err, "failed to get internal hostname")
 
 	bridgeNode := daNetwork.GetBridgeNodes()[0]
-	chainID := s.chain.cfg.ChainConfig.ChainID
+	chainID := "test"
 
 	s.T().Run("bridge node can be started", func(t *testing.T) {
 		err = bridgeNode.Start(ctx,

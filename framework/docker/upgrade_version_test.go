@@ -6,7 +6,17 @@ import (
 
 // TestUpgradeVersion verifies that you can upgrade from one tag to another.
 func (s *DockerTestSuite) TestUpgradeVersion() {
-	err := s.chain.Stop(s.ctx)
+	var err error
+	s.provider = s.CreateDockerProvider()
+	s.chain, err = s.provider.GetChain(s.ctx)
+	s.Require().NoError(err)
+
+	err = s.chain.Start(s.ctx)
+	s.Require().NoError(err)
+
+	s.Require().NoError(wait.ForBlocks(s.ctx, 5, s.chain))
+
+	err = s.chain.Stop(s.ctx)
 	s.Require().NoError(err)
 
 	s.chain.UpgradeVersion(s.ctx, "v4.0.2-mocha")

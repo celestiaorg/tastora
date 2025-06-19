@@ -8,8 +8,13 @@ import (
 
 // TestCreateAndFundWallet tests wallet creation and funding.
 func (s *DockerTestSuite) TestCreateAndFundWallet() {
-	s.SetupDockerResources()
-	s.StartChain()
+	var err error
+	s.provider = s.CreateDockerProvider()
+	s.chain, err = s.provider.GetChain(s.ctx)
+	s.Require().NoError(err)
+
+	err = s.chain.Start(s.ctx)
+	s.Require().NoError(err)
 
 	amount := math.NewInt(1000000)
 	sendAmount := sdk.NewCoins(sdk.NewCoin("utia", amount))
