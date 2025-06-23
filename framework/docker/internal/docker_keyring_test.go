@@ -32,17 +32,16 @@ func TestDockerKeyringTestSuite(t *testing.T) {
 }
 
 func (s *DockerKeyringTestSuite) SetupSuite() {
-	// Initialize Docker client
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	s.Require().NoError(err)
+
 	s.dockerClient = dockerClient
 
-	// Create codec
 	registry := codectypes.NewInterfaceRegistry()
 	cryptocodec.RegisterInterfaces(registry)
 	s.cdc = codec.NewProtoCodec(registry)
 
-	// Pull a minimal image for testing
+	// pull a minimal image for testing
 	ctx := context.Background()
 	pullReader, err := s.dockerClient.ImagePull(ctx, "alpine:latest", image.PullOptions{})
 	s.Require().NoError(err)
@@ -54,29 +53,29 @@ func (s *DockerKeyringTestSuite) SetupSuite() {
 	// create a test container
 	containerConfig := &container.Config{
 		Image: "alpine:latest",
-		Cmd:   []string{"sleep", "3600"}, // Keep container running
+		Cmd:   []string{"sleep", "3600"}, // keep container running
 	}
 
 	resp, err := s.dockerClient.ContainerCreate(ctx, containerConfig, nil, nil, nil, "")
 	s.Require().NoError(err)
 	s.containerID = resp.ID
 
-	// Start the container
 	err = s.dockerClient.ContainerStart(ctx, s.containerID, container.StartOptions{})
 	s.Require().NoError(err)
 
-	// Wait for container to be ready
+	// wait for container to be ready
 	time.Sleep(time.Second)
 
-	// Set up keyring directory in container
+	// wet up keyring directory in container
 	s.keyringDir = "/tmp/keyring-test"
 
-	// Create keyring directory in container
+	// create keyring directory in container
 	execConfig := container.ExecOptions{
 		Cmd: []string{"mkdir", "-p", s.keyringDir},
 	}
 	exec, err := s.dockerClient.ContainerExecCreate(ctx, s.containerID, execConfig)
 	s.Require().NoError(err)
+
 	err = s.dockerClient.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{})
 	s.Require().NoError(err)
 

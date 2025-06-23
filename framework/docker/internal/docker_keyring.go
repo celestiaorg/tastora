@@ -43,6 +43,276 @@ func NewDockerKeyring(dockerClient *client.Client, containerID, containerKeyring
 	}
 }
 
+func (d *dockerKeyring) Backend() string {
+	if err := d.ensureInitialized(); err != nil {
+		return ""
+	}
+	return d.localKeyring.Backend()
+}
+
+func (d *dockerKeyring) List() ([]*keyring.Record, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, err
+	}
+	return d.localKeyring.List()
+}
+
+func (d *dockerKeyring) SupportedAlgorithms() (keyring.SigningAlgoList, keyring.SigningAlgoList) {
+	if err := d.ensureInitialized(); err != nil {
+		return keyring.SigningAlgoList{}, keyring.SigningAlgoList{}
+	}
+	return d.localKeyring.SupportedAlgorithms()
+}
+
+func (d *dockerKeyring) Key(uid string) (*keyring.Record, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, err
+	}
+	return d.localKeyring.Key(uid)
+}
+
+func (d *dockerKeyring) KeyByAddress(address sdk.Address) (*keyring.Record, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, err
+	}
+	return d.localKeyring.KeyByAddress(address)
+}
+
+func (d *dockerKeyring) Delete(uid string) error {
+	if err := d.ensureInitialized(); err != nil {
+		return err
+	}
+
+	if err := d.localKeyring.Delete(uid); err != nil {
+		return fmt.Errorf("failed to delete key from local keyring: %w", err)
+	}
+
+	if err := d.deleteKeyFromContainer(uid); err != nil {
+		return fmt.Errorf("failed to delete key from container: %w", err)
+	}
+
+	return nil
+}
+
+func (d *dockerKeyring) DeleteByAddress(address sdk.Address) error {
+	if err := d.ensureInitialized(); err != nil {
+		return err
+	}
+
+	record, err := d.localKeyring.KeyByAddress(address)
+	if err != nil {
+		return fmt.Errorf("failed to find key by address: %w", err)
+	}
+
+	if err := d.localKeyring.DeleteByAddress(address); err != nil {
+		return fmt.Errorf("failed to delete key from local keyring: %w", err)
+	}
+
+	if err := d.deleteKeyFromContainer(record.Name); err != nil {
+		return fmt.Errorf("failed to delete key from container: %w", err)
+	}
+
+	return nil
+}
+
+func (d *dockerKeyring) Rename(from, to string) error {
+	if err := d.ensureInitialized(); err != nil {
+		return err
+	}
+
+	if err := d.localKeyring.Rename(from, to); err != nil {
+		return fmt.Errorf("failed to rename key in local keyring: %w", err)
+	}
+
+	if err := d.renameKeyInContainer(context.Background(), from, to); err != nil {
+		return fmt.Errorf("failed to rename key in container: %w", err)
+	}
+
+	return nil
+}
+
+func (d *dockerKeyring) NewMnemonic(uid string, language keyring.Language, hdPath, bip39Passphrase string, algo keyring.SignatureAlgo) (*keyring.Record, string, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, "", err
+	}
+
+	// create new mnemonic in the local keyring
+	record, mnemonic, err := d.localKeyring.NewMnemonic(uid, language, hdPath, bip39Passphrase, algo)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create new mnemonic: %w", err)
+	}
+
+	if err := d.persistKeyringToContainer(); err != nil {
+		return nil, "", fmt.Errorf("failed to persist key to container: %w", err)
+	}
+
+	return record, mnemonic, nil
+}
+
+func (d *dockerKeyring) NewAccount(uid, mnemonic, bip39Passphrase, hdPath string, algo keyring.SignatureAlgo) (*keyring.Record, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, err
+	}
+
+	// Create new account in the in-memory keyring
+	record, err := d.localKeyring.NewAccount(uid, mnemonic, bip39Passphrase, hdPath, algo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new account: %w", err)
+	}
+
+	// Persist the new key to the Docker container
+	if err := d.persistKeyringToContainer(); err != nil {
+		return nil, fmt.Errorf("failed to persist key to container: %w", err)
+	}
+
+	return record, nil
+}
+
+func (d *dockerKeyring) SaveLedgerKey(uid string, algo keyring.SignatureAlgo, hrp string, coinType, account, index uint32) (*keyring.Record, error) {
+	return nil, fmt.Errorf("ledger key saving not supported on docker keyring")
+}
+
+func (d *dockerKeyring) SaveOfflineKey(uid string, pubkey types.PubKey) (*keyring.Record, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, err
+	}
+
+	record, err := d.localKeyring.SaveOfflineKey(uid, pubkey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save offline key: %w", err)
+	}
+
+	if err := d.persistKeyringToContainer(); err != nil {
+		return nil, fmt.Errorf("failed to persist key to container: %w", err)
+	}
+
+	return record, nil
+}
+
+func (d *dockerKeyring) SaveMultisig(uid string, pubkey types.PubKey) (*keyring.Record, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, err
+	}
+
+	// Save multisig key in the in-memory keyring
+	record, err := d.localKeyring.SaveMultisig(uid, pubkey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save multisig key: %w", err)
+	}
+
+	if err := d.persistKeyringToContainer(); err != nil {
+		return nil, fmt.Errorf("failed to persist key to container: %w", err)
+	}
+
+	return record, nil
+}
+
+func (d *dockerKeyring) Sign(uid string, msg []byte, signMode signing.SignMode) ([]byte, types.PubKey, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, nil, err
+	}
+	return d.localKeyring.Sign(uid, msg, signMode)
+}
+
+func (d *dockerKeyring) SignByAddress(address sdk.Address, msg []byte, signMode signing.SignMode) ([]byte, types.PubKey, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, nil, err
+	}
+	return d.localKeyring.SignByAddress(address, msg, signMode)
+}
+
+func (d *dockerKeyring) ImportPrivKey(uid, armor, passphrase string) error {
+	if err := d.ensureInitialized(); err != nil {
+		return err
+	}
+
+	if err := d.localKeyring.ImportPrivKey(uid, armor, passphrase); err != nil {
+		return fmt.Errorf("failed to import private key: %w", err)
+	}
+
+	if err := d.persistKeyringToContainer(); err != nil {
+		return fmt.Errorf("failed to persist key to container: %w", err)
+	}
+
+	return nil
+}
+
+func (d *dockerKeyring) ImportPrivKeyHex(uid, privKey, algoStr string) error {
+	if err := d.ensureInitialized(); err != nil {
+		return err
+	}
+
+	if err := d.localKeyring.ImportPrivKeyHex(uid, privKey, algoStr); err != nil {
+		return fmt.Errorf("failed to import private key hex: %w", err)
+	}
+
+	if err := d.persistKeyringToContainer(); err != nil {
+		return fmt.Errorf("failed to persist key to container: %w", err)
+	}
+
+	return nil
+}
+
+func (d *dockerKeyring) ImportPubKey(uid, armor string) error {
+	if err := d.ensureInitialized(); err != nil {
+		return err
+	}
+	return d.localKeyring.ImportPubKey(uid, armor)
+}
+
+func (d *dockerKeyring) ExportPubKeyArmor(uid string) (string, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return "", err
+	}
+	return d.localKeyring.ExportPubKeyArmor(uid)
+}
+
+func (d *dockerKeyring) ExportPubKeyArmorByAddress(address sdk.Address) (string, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return "", err
+	}
+	return d.localKeyring.ExportPubKeyArmorByAddress(address)
+}
+
+func (d *dockerKeyring) ExportPrivKeyArmor(uid, encryptPassphrase string) (armor string, err error) {
+	if err := d.ensureInitialized(); err != nil {
+		return "", err
+	}
+	return d.localKeyring.ExportPrivKeyArmor(uid, encryptPassphrase)
+}
+
+func (d *dockerKeyring) ExportPrivKeyArmorByAddress(address sdk.Address, encryptPassphrase string) (armor string, err error) {
+	if err := d.ensureInitialized(); err != nil {
+		return "", err
+	}
+	return d.localKeyring.ExportPrivKeyArmorByAddress(address, encryptPassphrase)
+}
+
+func (d *dockerKeyring) MigrateAll() ([]*keyring.Record, error) {
+	if err := d.ensureInitialized(); err != nil {
+		return nil, err
+	}
+	return d.localKeyring.MigrateAll()
+}
+
+// execCommand executes a command in the Docker container.
+func (d *dockerKeyring) execCommand(ctx context.Context, cmd []string) error {
+	execConfig := container.ExecOptions{
+		Cmd: cmd,
+	}
+
+	exec, err := d.dockerClient.ContainerExecCreate(ctx, d.containerID, execConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	if err := d.dockerClient.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{}); err != nil {
+		return fmt.Errorf("failed to execute command: %w", err)
+	}
+
+	return nil
+}
+
 // ensureInitialized lazily loads the keyring from the Docker container a temp directory for testing.
 func (d *dockerKeyring) ensureInitialized() error {
 	d.mu.Lock()
@@ -141,22 +411,13 @@ func (d *dockerKeyring) persistKeyringToContainer() error {
 }
 
 // deleteKeyFromContainer removes all key-related files from the Docker container
-func (d *dockerKeyring) deleteKeyFromContainer(ctx context.Context, uid string) error {
-	// Delete main key file, .info file, and any .address files related to this key
-	// Use a glob pattern to match all files that might be related to this key
+func (d *dockerKeyring) deleteKeyFromContainer(uid string) error {
+	// delete main key file, .info file, and any .address files related to this key
+	// use a glob pattern to match all files that might be related to this key
 	keyPattern := filepath.Join(d.containerKeyringDir, uid+"*")
 
-	execConfig := container.ExecOptions{
-		Cmd: []string{"sh", "-c", fmt.Sprintf("rm -f %s", keyPattern)},
-	}
-
-	exec, err := d.dockerClient.ContainerExecCreate(ctx, d.containerID, execConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create exec for key deletion: %w", err)
-	}
-
-	if err := d.dockerClient.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{}); err != nil {
-		return fmt.Errorf("failed to execute key deletion: %w", err)
+	if err := d.execCommand(context.TODO(), []string{"sh", "-c", fmt.Sprintf("rm -f %s", keyPattern)}); err != nil {
+		return fmt.Errorf("failed to delete key files: %w", err)
 	}
 
 	// Also need to find and delete the .address file which is named by the address, not the uid
@@ -167,14 +428,7 @@ func (d *dockerKeyring) deleteKeyFromContainer(ctx context.Context, uid string) 
 		addr, err := record.GetAddress()
 		if err == nil {
 			addrFilePath := filepath.Join(d.containerKeyringDir, addr.String()+".address")
-			execConfig := container.ExecOptions{
-				Cmd: []string{"rm", "-f", addrFilePath},
-			}
-
-			exec, err := d.dockerClient.ContainerExecCreate(ctx, d.containerID, execConfig)
-			if err == nil {
-				_ = d.dockerClient.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{})
-			}
+			_ = d.execCommand(context.TODO(), []string{"rm", "-f", addrFilePath})
 		}
 	}
 
@@ -183,283 +437,8 @@ func (d *dockerKeyring) deleteKeyFromContainer(ctx context.Context, uid string) 
 
 // renameKeyInContainer renames a key file in the Docker container
 func (d *dockerKeyring) renameKeyInContainer(ctx context.Context, from, to string) error {
-	// Execute mv command in the container to rename the key file
 	fromPath := filepath.Join(d.containerKeyringDir, from)
 	toPath := filepath.Join(d.containerKeyringDir, to)
 
-	execConfig := container.ExecOptions{
-		Cmd: []string{"mv", fromPath, toPath},
-	}
-
-	exec, err := d.dockerClient.ContainerExecCreate(ctx, d.containerID, execConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create exec for key rename: %w", err)
-	}
-
-	if err := d.dockerClient.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{}); err != nil {
-		return fmt.Errorf("failed to execute key rename: %w", err)
-	}
-
-	return nil
-}
-
-func (d *dockerKeyring) Backend() string {
-	if err := d.ensureInitialized(); err != nil {
-		return ""
-	}
-	return d.localKeyring.Backend()
-}
-
-func (d *dockerKeyring) List() ([]*keyring.Record, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, err
-	}
-	return d.localKeyring.List()
-}
-
-func (d *dockerKeyring) SupportedAlgorithms() (keyring.SigningAlgoList, keyring.SigningAlgoList) {
-	if err := d.ensureInitialized(); err != nil {
-		// Return default algorithms if initialization fails
-		return keyring.SigningAlgoList{}, keyring.SigningAlgoList{}
-	}
-	return d.localKeyring.SupportedAlgorithms()
-}
-
-func (d *dockerKeyring) Key(uid string) (*keyring.Record, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, err
-	}
-	return d.localKeyring.Key(uid)
-}
-
-func (d *dockerKeyring) KeyByAddress(address sdk.Address) (*keyring.Record, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, err
-	}
-	return d.localKeyring.KeyByAddress(address)
-}
-
-func (d *dockerKeyring) Delete(uid string) error {
-	if err := d.ensureInitialized(); err != nil {
-		return err
-	}
-
-	if err := d.localKeyring.Delete(uid); err != nil {
-		return fmt.Errorf("failed to delete key from local keyring: %w", err)
-	}
-
-	if err := d.deleteKeyFromContainer(context.Background(), uid); err != nil {
-		return fmt.Errorf("failed to delete key from container: %w", err)
-	}
-
-	return nil
-}
-
-func (d *dockerKeyring) DeleteByAddress(address sdk.Address) error {
-	if err := d.ensureInitialized(); err != nil {
-		return err
-	}
-
-	record, err := d.localKeyring.KeyByAddress(address)
-	if err != nil {
-		return fmt.Errorf("failed to find key by address: %w", err)
-	}
-
-	if err := d.localKeyring.DeleteByAddress(address); err != nil {
-		return fmt.Errorf("failed to delete key from local keyring: %w", err)
-	}
-
-	if err := d.deleteKeyFromContainer(context.Background(), record.Name); err != nil {
-		return fmt.Errorf("failed to delete key from container: %w", err)
-	}
-
-	return nil
-}
-
-func (d *dockerKeyring) Rename(from, to string) error {
-	if err := d.ensureInitialized(); err != nil {
-		return err
-	}
-
-	if err := d.localKeyring.Rename(from, to); err != nil {
-		return fmt.Errorf("failed to rename key in local keyring: %w", err)
-	}
-
-	if err := d.renameKeyInContainer(context.Background(), from, to); err != nil {
-		return fmt.Errorf("failed to rename key in container: %w", err)
-	}
-
-	return nil
-}
-
-func (d *dockerKeyring) NewMnemonic(uid string, language keyring.Language, hdPath, bip39Passphrase string, algo keyring.SignatureAlgo) (*keyring.Record, string, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, "", err
-	}
-
-	// create new mnemonic in the local keyring
-	record, mnemonic, err := d.localKeyring.NewMnemonic(uid, language, hdPath, bip39Passphrase, algo)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create new mnemonic: %w", err)
-	}
-
-	// persist the new key to the Docker container
-	if err := d.persistKeyringToContainer(); err != nil {
-		return nil, "", fmt.Errorf("failed to persist key to container: %w", err)
-	}
-
-	return record, mnemonic, nil
-}
-
-func (d *dockerKeyring) NewAccount(uid, mnemonic, bip39Passphrase, hdPath string, algo keyring.SignatureAlgo) (*keyring.Record, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, err
-	}
-
-	// Create new account in the in-memory keyring
-	record, err := d.localKeyring.NewAccount(uid, mnemonic, bip39Passphrase, hdPath, algo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new account: %w", err)
-	}
-
-	// Persist the new key to the Docker container
-	if err := d.persistKeyringToContainer(); err != nil {
-		return nil, fmt.Errorf("failed to persist key to container: %w", err)
-	}
-
-	return record, nil
-}
-
-func (d *dockerKeyring) SaveLedgerKey(uid string, algo keyring.SignatureAlgo, hrp string, coinType, account, index uint32) (*keyring.Record, error) {
-	return nil, fmt.Errorf("ledger key saving not supported on docker keyring")
-}
-
-func (d *dockerKeyring) SaveOfflineKey(uid string, pubkey types.PubKey) (*keyring.Record, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, err
-	}
-
-	// Save offline key in the in-memory keyring
-	record, err := d.localKeyring.SaveOfflineKey(uid, pubkey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save offline key: %w", err)
-	}
-
-	// Persist the key to the Docker container
-	if err := d.persistKeyringToContainer(); err != nil {
-		return nil, fmt.Errorf("failed to persist key to container: %w", err)
-	}
-
-	return record, nil
-}
-
-func (d *dockerKeyring) SaveMultisig(uid string, pubkey types.PubKey) (*keyring.Record, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, err
-	}
-
-	// Save multisig key in the in-memory keyring
-	record, err := d.localKeyring.SaveMultisig(uid, pubkey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save multisig key: %w", err)
-	}
-
-	// Persist the key to the Docker container
-	if err := d.persistKeyringToContainer(); err != nil {
-		return nil, fmt.Errorf("failed to persist key to container: %w", err)
-	}
-
-	return record, nil
-}
-
-func (d *dockerKeyring) Sign(uid string, msg []byte, signMode signing.SignMode) ([]byte, types.PubKey, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, nil, err
-	}
-	return d.localKeyring.Sign(uid, msg, signMode)
-}
-
-func (d *dockerKeyring) SignByAddress(address sdk.Address, msg []byte, signMode signing.SignMode) ([]byte, types.PubKey, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, nil, err
-	}
-	return d.localKeyring.SignByAddress(address, msg, signMode)
-}
-
-func (d *dockerKeyring) ImportPrivKey(uid, armor, passphrase string) error {
-	if err := d.ensureInitialized(); err != nil {
-		return err
-	}
-
-	// Import private key into the in-memory keyring
-	if err := d.localKeyring.ImportPrivKey(uid, armor, passphrase); err != nil {
-		return fmt.Errorf("failed to import private key: %w", err)
-	}
-
-	// Persist the key to the Docker container
-	if err := d.persistKeyringToContainer(); err != nil {
-		return fmt.Errorf("failed to persist key to container: %w", err)
-	}
-
-	return nil
-}
-
-func (d *dockerKeyring) ImportPrivKeyHex(uid, privKey, algoStr string) error {
-	if err := d.ensureInitialized(); err != nil {
-		return err
-	}
-
-	// Import private key hex into the in-memory keyring
-	if err := d.localKeyring.ImportPrivKeyHex(uid, privKey, algoStr); err != nil {
-		return fmt.Errorf("failed to import private key hex: %w", err)
-	}
-
-	// persist the key to the Docker container
-	if err := d.persistKeyringToContainer(); err != nil {
-		return fmt.Errorf("failed to persist key to container: %w", err)
-	}
-
-	return nil
-}
-
-func (d *dockerKeyring) ImportPubKey(uid, armor string) error {
-	if err := d.ensureInitialized(); err != nil {
-		return err
-	}
-	return d.localKeyring.ImportPubKey(uid, armor)
-}
-
-func (d *dockerKeyring) ExportPubKeyArmor(uid string) (string, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return "", err
-	}
-	return d.localKeyring.ExportPubKeyArmor(uid)
-}
-
-func (d *dockerKeyring) ExportPubKeyArmorByAddress(address sdk.Address) (string, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return "", err
-	}
-	return d.localKeyring.ExportPubKeyArmorByAddress(address)
-}
-
-func (d *dockerKeyring) ExportPrivKeyArmor(uid, encryptPassphrase string) (armor string, err error) {
-	if err := d.ensureInitialized(); err != nil {
-		return "", err
-	}
-	return d.localKeyring.ExportPrivKeyArmor(uid, encryptPassphrase)
-}
-
-func (d *dockerKeyring) ExportPrivKeyArmorByAddress(address sdk.Address, encryptPassphrase string) (armor string, err error) {
-	if err := d.ensureInitialized(); err != nil {
-		return "", err
-	}
-	return d.localKeyring.ExportPrivKeyArmorByAddress(address, encryptPassphrase)
-}
-
-func (d *dockerKeyring) MigrateAll() ([]*keyring.Record, error) {
-	if err := d.ensureInitialized(); err != nil {
-		return nil, err
-	}
-	return d.localKeyring.MigrateAll()
+	return d.execCommand(ctx, []string{"mv", fromPath, toPath})
 }
