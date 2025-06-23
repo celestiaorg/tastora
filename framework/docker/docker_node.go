@@ -19,6 +19,7 @@ type node struct {
 	homeDir            string
 	nodeType           string
 	Index              int
+	Logger             *zap.Logger
 }
 
 // newNode creates a new node instance with the required parameters.
@@ -30,6 +31,7 @@ func newNode(
 	homeDir string,
 	idx int,
 	nodeType string,
+	logger *zap.Logger,
 ) *node {
 	return &node{
 		NetworkID:    networkID,
@@ -38,6 +40,7 @@ func newNode(
 		Image:        image,
 		homeDir:      homeDir,
 		Index:        idx,
+		Logger:       logger,
 		nodeType:     nodeType,
 	}
 }
@@ -81,9 +84,9 @@ func (n *node) startContainer(ctx context.Context) error {
 	return n.containerLifecycle.StartContainer(ctx)
 }
 
-// readFile reads a file from the node's container volume at the given relative path.
-func (n *node) readFile(ctx context.Context, logger *zap.Logger, relPath string) ([]byte, error) {
-	fr := file.NewRetriever(logger, n.DockerClient, n.TestName)
+// ReadFile reads a file from the node's container volume at the given relative path.
+func (n *node) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
+	fr := file.NewRetriever(n.Logger, n.DockerClient, n.TestName)
 	content, err := fr.SingleFileContent(ctx, n.VolumeName, relPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file at %s: %w", relPath, err)
@@ -91,10 +94,10 @@ func (n *node) readFile(ctx context.Context, logger *zap.Logger, relPath string)
 	return content, nil
 }
 
-// writeFile accepts file contents in a byte slice and writes the contents to
+// WriteFile accepts file contents in a byte slice and writes the contents to
 // the docker filesystem. relPath describes the location of the file in the
 // docker volume relative to the home directory.
-func (n *node) writeFile(ctx context.Context, logger *zap.Logger, content []byte, relPath string) error {
-	fw := file.NewWriter(logger, n.DockerClient, n.TestName)
+func (n *node) WriteFile(ctx context.Context, relPath string, content []byte) error {
+	fw := file.NewWriter(n.Logger, n.DockerClient, n.TestName)
 	return fw.WriteFile(ctx, n.VolumeName, relPath, content)
 }

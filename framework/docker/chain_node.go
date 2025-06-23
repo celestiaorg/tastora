@@ -65,7 +65,6 @@ type ChainNode struct {
 	GrpcConn  *grpc.ClientConn
 
 	lock sync.Mutex
-	log  *zap.Logger
 
 	// Ports set during startContainer.
 	hostRPCPort  string
@@ -82,6 +81,10 @@ func (tn *ChainNode) HostName() string {
 	return CondenseHostName(tn.Name())
 }
 
+func (tn *ChainNode) GetType() string {
+	return tn.NodeType()
+}
+
 func (tn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
 	return tn.Client, nil
 }
@@ -92,14 +95,14 @@ func NewDockerChainNode(log *zap.Logger, validator bool, cfg Config, testName st
 		nodeType = "val"
 	}
 
+	log = log.With(
+		zap.Bool("validator", validator),
+		zap.Int("i", index),
+	)
 	tn := &ChainNode{
-		log: log.With(
-			zap.Bool("validator", validator),
-			zap.Int("i", index),
-		),
 		Validator: validator,
 		cfg:       cfg,
-		node:      newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var/cosmos-chain", cfg.ChainConfig.Name), index, nodeType),
+		node:      newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var/cosmos-chain", cfg.ChainConfig.Name), index, nodeType, log),
 	}
 
 	tn.containerLifecycle = NewContainerLifecycle(log, cfg.DockerClient, tn.Name())
@@ -366,7 +369,7 @@ func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 }
 
 func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) error {
-	err := tn.writeFile(ctx, tn.logger(), content, "config/genesis.json")
+	err := tn.WriteFile(ctx, "config/genesis.json", content)
 	if err != nil {
 		return fmt.Errorf("overwriting genesis.json: %w", err)
 	}
@@ -386,7 +389,7 @@ func (tn *ChainNode) collectGentxs(ctx context.Context) error {
 }
 
 func (tn *ChainNode) genesisFileContent(ctx context.Context) ([]byte, error) {
-	gen, err := tn.readFile(ctx, tn.logger(), "config/genesis.json")
+	gen, err := tn.ReadFile(ctx, "config/genesis.json")
 	if err != nil {
 		return nil, fmt.Errorf("getting genesis.json content: %w", err)
 	}
@@ -402,12 +405,12 @@ func (tn *ChainNode) copyGentx(ctx context.Context, destVal *ChainNode) error {
 
 	relPath := fmt.Sprintf("config/gentx/gentx-%s.json", nid)
 
-	gentx, err := tn.readFile(ctx, tn.logger(), relPath)
+	gentx, err := tn.ReadFile(ctx, relPath)
 	if err != nil {
 		return fmt.Errorf("getting gentx content: %w", err)
 	}
 
-	err = destVal.writeFile(ctx, destVal.logger(), gentx, relPath)
+	err = destVal.WriteFile(ctx, relPath, gentx)
 	if err != nil {
 		return fmt.Errorf("overwriting gentx: %w", err)
 	}
@@ -420,7 +423,7 @@ func (tn *ChainNode) nodeID(ctx context.Context) (string, error) {
 	// This used to call p2p.LoadNodeKey against the file on the host,
 	// but because we are transitioning to operating on Docker volumes,
 	// we only have to tmjson.Unmarshal the raw content.
-	j, err := tn.readFile(ctx, tn.logger(), "config/node_key.json")
+	j, err := tn.ReadFile(ctx, "config/node_key.json")
 	if err != nil {
 		return "", fmt.Errorf("getting node_key.json content: %w", err)
 	}
