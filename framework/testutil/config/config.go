@@ -21,7 +21,6 @@ func Modify[T any](
 	filePath string,
 	modification func(*T),
 ) error {
-
 	configFileBz, err := readWriter.ReadFile(ctx, filePath)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve %s: %w", filePath, err)
@@ -40,12 +39,13 @@ func Modify[T any](
 	}
 
 	if err := readWriter.WriteFile(ctx, filePath, bz); err != nil {
-		return fmt.Errorf("overwriting %s: %w", filePath, err)
+		return fmt.Errorf("failed to overwrite %s: %w", filePath, err)
 	}
 
 	return nil
 }
 
+// unmarshalByExtension unmarshals data into the given config based on the file extension of configPath.
 func unmarshalByExtension(data []byte, config interface{}, configPath string) error {
 	switch filepath.Ext(configPath) {
 	case ".toml":
