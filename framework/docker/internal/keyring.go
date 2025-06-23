@@ -25,7 +25,7 @@ func NewLocalKeyringFromDockerContainer(ctx context.Context, dc *client.Client, 
 		return nil, err
 	}
 
-	if err := os.Mkdir(filepath.Join(localDirectory, "keyring-test"), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Join(localDirectory, "keyring-test"), os.ModePerm); err != nil {
 		return nil, err
 	}
 	tr := tar.NewReader(reader)
