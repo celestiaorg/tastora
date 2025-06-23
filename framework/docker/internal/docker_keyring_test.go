@@ -87,9 +87,8 @@ func (s *DockerKeyringTestSuite) SetupSuite() {
 func (s *DockerKeyringTestSuite) TearDownSuite() {
 	if s.containerID != "" {
 		ctx := context.Background()
-		// Stop and remove the test container
-		s.dockerClient.ContainerStop(ctx, s.containerID, container.StopOptions{})
-		s.dockerClient.ContainerRemove(ctx, s.containerID, container.RemoveOptions{})
+		_ = s.dockerClient.ContainerStop(ctx, s.containerID, container.StopOptions{})
+		_ = s.dockerClient.ContainerRemove(ctx, s.containerID, container.RemoveOptions{})
 	}
 }
 
