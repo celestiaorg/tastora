@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/celestiaorg/go-square/v2/share"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -53,4 +54,6 @@ type ChainNode interface {
 	ReadFile(ctx context.Context, filePath string) ([]byte, error)
 	// WriteFile writes the provided byte data to the specified relative filePath. An error is returned if the write operation fails.
 	WriteFile(ctx context.Context, filePath string, data []byte) error
+	// GetKeyring returns the keyring for this chain node.
+	GetKeyring() (keyring.Keyring, error)
 }
