@@ -62,7 +62,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 	daNode.VolumeName = v.Name
 
 	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
-		Log:        daNode.Logger,
+		Log:        daNode.logger,
 		Client:     cfg.DockerClient,
 		VolumeName: v.Name,
 		ImageRef:   image.Ref(),
@@ -181,7 +181,7 @@ func (n *DANode) ModifyConfigFiles(ctx context.Context, configModifications map[
 	for filePath, modifications := range configModifications {
 		if err := ModifyConfigFile(
 			ctx,
-			n.Logger,
+			n.logger,
 			n.DockerClient,
 			n.TestName,
 			n.VolumeName,
@@ -227,7 +227,7 @@ func (n *DANode) initNode(ctx context.Context, chainID string, env []string) err
 
 	// note: my_celes_key is the default key name for the da node.
 	cmd := []string{"celestia", n.nodeType.String(), "init", "--p2p.network", chainID, "--keyring.keyname", "my-key", "--node.store", n.homeDir}
-	_, _, err := n.exec(ctx, n.Logger, cmd, env)
+	_, _, err := n.exec(ctx, n.logger, cmd, env)
 	return err
 }
 
@@ -235,7 +235,7 @@ func (n *DANode) initNode(ctx context.Context, chainID string, env []string) err
 // gives us access to the address for use in tests.
 func (n *DANode) createWallet(ctx context.Context) error {
 	cmd := []string{"cel-key", "add", "my-key", "--node.type", n.nodeType.String(), "--keyring-dir", path.Join(n.homeDir, "keys"), "--output", "json"}
-	_, stderr, err := n.exec(ctx, n.Logger, cmd, nil)
+	_, stderr, err := n.exec(ctx, n.logger, cmd, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create wallet: %w", err)
 	}
@@ -282,7 +282,7 @@ func (n *DANode) initAuthToken(ctx context.Context) error {
 	cmd := []string{"celestia", n.nodeType.String(), "auth", "admin"}
 
 	// Run the command inside the container
-	stdout, stderr, err := n.exec(ctx, n.Logger, cmd, nil)
+	stdout, stderr, err := n.exec(ctx, n.logger, cmd, nil)
 	if err != nil {
 		return fmt.Errorf("failed to generate auth token (stderr=%q): %w", stderr, err)
 	}
@@ -316,7 +316,7 @@ func (n *DANode) getNodeConfig() *DANodeConfig {
 
 	nodeConfig, ok := configMap[n.Index]
 	if !ok {
-		n.Logger.Debug("no node config found for node", zap.Int("index", n.Index), zap.String("type", n.nodeType.String()))
+		n.logger.Debug("no node config found for node", zap.Int("index", n.Index), zap.String("type", n.nodeType.String()))
 	}
 
 	return nodeConfig

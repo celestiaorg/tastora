@@ -19,7 +19,7 @@ type node struct {
 	homeDir            string
 	nodeType           string
 	Index              int
-	Logger             *zap.Logger
+	logger             *zap.Logger
 }
 
 // newNode creates a new node instance with the required parameters.
@@ -40,7 +40,7 @@ func newNode(
 		Image:        image,
 		homeDir:      homeDir,
 		Index:        idx,
-		Logger:       logger,
+		logger:       logger,
 		nodeType:     nodeType,
 	}
 }
@@ -86,7 +86,7 @@ func (n *node) startContainer(ctx context.Context) error {
 
 // ReadFile reads a file from the node's container volume at the given relative path.
 func (n *node) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
-	fr := file.NewRetriever(n.Logger, n.DockerClient, n.TestName)
+	fr := file.NewRetriever(n.logger, n.DockerClient, n.TestName)
 	content, err := fr.SingleFileContent(ctx, n.VolumeName, relPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file at %s: %w", relPath, err)
@@ -98,6 +98,6 @@ func (n *node) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
 // the docker filesystem. relPath describes the location of the file in the
 // docker volume relative to the home directory.
 func (n *node) WriteFile(ctx context.Context, relPath string, content []byte) error {
-	fw := file.NewWriter(n.Logger, n.DockerClient, n.TestName)
+	fw := file.NewWriter(n.logger, n.DockerClient, n.TestName)
 	return fw.WriteFile(ctx, n.VolumeName, relPath, content)
 }
