@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
 	tmjson "github.com/cometbft/cometbft/libs/json"
@@ -82,8 +83,19 @@ func (tn *ChainNode) HostName() string {
 	return CondenseHostName(tn.Name())
 }
 
+func (tn *ChainNode) GetType() string {
+	return tn.NodeType()
+}
+
 func (tn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
 	return tn.Client, nil
+}
+
+// GetKeyring retrieves the keyring instance for the ChainNode. The keyring will be usable
+// by the host running the test.
+func (tn *ChainNode) GetKeyring() (keyring.Keyring, error) {
+	containerKeyringDir := path.Join(tn.homeDir, "keyring-test")
+	return dockerinternal.NewDockerKeyring(tn.DockerClient, tn.containerLifecycle.ContainerID(), containerKeyringDir, tn.cfg.ChainConfig.EncodingConfig.Codec), nil
 }
 
 func NewDockerChainNode(log *zap.Logger, validator bool, cfg Config, testName string, image DockerImage, index int) *ChainNode {

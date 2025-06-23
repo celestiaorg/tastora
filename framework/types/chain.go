@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/celestiaorg/go-square/v2/share"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -49,4 +50,6 @@ type ChainNode interface {
 	GetInternalRPCAddress(ctx context.Context) (string, error)
 	// GetInternalHostName returns the hostname resolvable within the network.
 	GetInternalHostName(ctx context.Context) (string, error)
+	// GetKeyring returns the keyring for this chain node.
+	GetKeyring() (keyring.Keyring, error)
 }
