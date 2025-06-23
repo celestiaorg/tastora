@@ -19,6 +19,10 @@ type ReadWriter interface {
 }
 
 // Modify reads, modifies, then overwrites a config file, useful for config.toml, app.toml, etc.
+//
+// NOTE: when using this function, however the type is serialized will be what is written to disk.
+// if the struct is not specified in its entirety, some fields may be lost. In order to manipulate raw bytes
+// use *[]byte as the generic type.
 func Modify[T any](
 	ctx context.Context,
 	readWriter ReadWriter,
@@ -51,6 +55,12 @@ func Modify[T any](
 
 // unmarshalByExtension unmarshals data into the given config based on the file extension of configPath.
 func unmarshalByExtension(data []byte, config interface{}, configPath string) error {
+	// if we are dealing with raw bytes, we just return them as is.
+	// this use case is for if arbitrary modifications are required.
+	if _, ok := config.(*[]byte); ok {
+		return nil
+	}
+
 	switch filepath.Ext(configPath) {
 	case ".toml":
 		return toml.Unmarshal(data, config)
@@ -64,19 +74,19 @@ func unmarshalByExtension(data []byte, config interface{}, configPath string) er
 // marshalByExtension serializes the given data `v` into a byte slice based on the file extension of `filePath`.
 // It supports `.toml` and `.json` formats. If raw bytes are passed, it returns them directly.
 // returns an error if the file extension is unsupported or the serialization fails.
-func marshalByExtension(v interface{}, filePath string) ([]byte, error) {
+func marshalByExtension(config interface{}, filePath string) ([]byte, error) {
 	// if we are dealing with raw bytes, we just return them as is.
 	// this use case is for if arbitrary modifications are required.
-	if byteSlice, ok := v.(*[]byte); ok {
+	if byteSlice, ok := config.(*[]byte); ok {
 		return *byteSlice, nil
 	}
 
 	ext := strings.ToLower(filepath.Ext(filePath))
 	switch ext {
 	case ".toml":
-		return toml.Marshal(v)
+		return toml.Marshal(config)
 	case ".json":
-		return json.MarshalIndent(v, "", "  ")
+		return json.MarshalIndent(config, "", "  ")
 	default:
 		return nil, fmt.Errorf("unsupported config file format: %s", ext)
 	}

@@ -271,3 +271,20 @@ func TestModifyFileNotFound(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to retrieve")
 }
+
+func TestModifyRawBytes(t *testing.T) {
+	ctx := context.Background()
+	mockRW := newMockReadWriter()
+
+	initialContent := []byte("original content that needs modification")
+	mockRW.setFile("raw.toml", initialContent)
+
+	err := Modify(ctx, mockRW, "raw.toml", func(data *[]byte) {
+		*data = []byte("modified raw content")
+	})
+
+	require.NoError(t, err)
+
+	result := mockRW.getFile("raw.toml")
+	require.Equal(t, []byte("modified raw content"), result)
+}
