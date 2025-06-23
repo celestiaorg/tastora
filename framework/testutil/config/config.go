@@ -9,8 +9,12 @@ import (
 	"strings"
 )
 
+// ReadWriter is an interface which ensures a type can both read and write configuration files.
 type ReadWriter interface {
+	// ReadFile reads the contents of the specified file from the given file path and returns it as a byte slice.
+	// An error is returned if the file cannot be accessed or read.
 	ReadFile(ctx context.Context, filePath string) ([]byte, error)
+	// WriteFile writes the given data to the specified file path. It returns an error if the write operation fails.
 	WriteFile(ctx context.Context, filePath string, data []byte) error
 }
 
