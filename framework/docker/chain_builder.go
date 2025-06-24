@@ -72,6 +72,7 @@ type ChainBuilder struct {
 	coinType       string
 	gasPrices      string
 	name           string
+	chainID        string
 	logger         *zap.Logger
 }
 
@@ -82,11 +83,18 @@ func NewChainBuilder(t *testing.T) *ChainBuilder {
 		WithT(t).
 		WithBinaryName("celestia-appd").
 		WithCoinType("118").
-		WithGasPrices("0.025utia")
+		WithGasPrices("0.025utia").
+		WithChainID("test")
 }
 
 func (b *ChainBuilder) WithName(name string) *ChainBuilder {
 	b.name = name
+	return b
+}
+
+// WithChainID sets the chain ID
+func (b *ChainBuilder) WithChainID(chainID string) *ChainBuilder {
+	b.chainID = chainID
 	return b
 }
 
@@ -271,22 +279,25 @@ func (b *ChainBuilder) newChainNode(
 }
 
 func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, validator bool, image DockerImage, index int) *ChainNode {
-	nodeType := "fn"
-	if validator {
-		nodeType = "val"
+	params := ChainNodeParams{
+		Logger:            log,
+		Validator:         validator,
+		DockerClient:      b.dockerClient,
+		DockerNetworkID:   b.dockerNetworkID,
+		TestName:          b.t.Name(),
+		Image:             image,
+		Index:             index,
+		ChainID:           b.chainID,
+		BinaryName:        b.binaryName,
+		CoinType:          b.coinType,
+		GasPrices:         b.gasPrices,
+		GasAdjustment:     1.0, // Default gas adjustment
+		Env:               []string{}, // Default empty env
+		AdditionalStartArgs: []string{}, // Default empty args
+		EncodingConfig:    b.encodingConfig,
+		ChainNodeConfig:   nil, // No per-node config by default
+		HomeDir:           path.Join("/var/cosmos-chain", b.name),
 	}
 
-	tn := &ChainNode{
-		log: log.With(
-			zap.Bool("validator", validator),
-			zap.Int("i", index),
-		),
-		Validator: validator,
-		cfg:       cfg,
-		node:      newNode(b.dockerNetworkID, b.dockerClient, b.name, image, path.Join("/var/cosmos-chain", b.name), index, nodeType),
-	}
-
-	tn.containerLifecycle = NewContainerLifecycle(log, b.dockerClient, tn.Name())
-
-	return tn
+	return NewChainNode(params)
 }

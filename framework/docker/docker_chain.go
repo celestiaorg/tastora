@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"io"
+	"path"
 	"sync"
 	"testing"
 )
@@ -518,7 +519,34 @@ func (c *Chain) newChainNode(
 ) (*ChainNode, error) {
 	// Construct the ChainNode first so we can access its name.
 	// The ChainNode's VolumeName cannot be set until after we create the volume.
-	tn := NewDockerChainNode(c.log, validator, c.cfg, testName, image, index)
+	params := ChainNodeParams{
+		Logger:            c.log,
+		Validator:         validator,
+		DockerClient:      c.cfg.DockerClient,
+		DockerNetworkID:   c.cfg.DockerNetworkID,
+		TestName:          testName,
+		Image:             image,
+		Index:             index,
+		ChainID:           c.cfg.ChainConfig.ChainID,
+		BinaryName:        c.cfg.ChainConfig.Bin,
+		CoinType:          c.cfg.ChainConfig.CoinType,
+		GasPrices:         c.cfg.ChainConfig.GasPrices,
+		GasAdjustment:     c.cfg.ChainConfig.GasAdjustment,
+		Env:               c.cfg.ChainConfig.Env,
+		AdditionalStartArgs: c.cfg.ChainConfig.AdditionalStartArgs,
+		EncodingConfig:    c.cfg.ChainConfig.EncodingConfig,
+		ChainNodeConfig:   nil, // Will be set if per-node config exists
+		HomeDir:           path.Join("/var/cosmos-chain", c.cfg.ChainConfig.Name),
+	}
+
+	// Set per-node config if it exists
+	if c.cfg.ChainConfig.ChainNodeConfigs != nil {
+		if nodeConfig, ok := c.cfg.ChainConfig.ChainNodeConfigs[index]; ok {
+			params.ChainNodeConfig = nodeConfig
+		}
+	}
+
+	tn := NewChainNode(params)
 
 	v, err := c.cfg.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 		Labels: map[string]string{
