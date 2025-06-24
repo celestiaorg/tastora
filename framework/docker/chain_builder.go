@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/moby/moby/client"
@@ -179,67 +183,57 @@ func (b *ChainBuilder) AddFullNode(fullNode NodeConfig) *ChainBuilder {
 }
 
 func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
+	registry := codectypes.NewInterfaceRegistry()
+	cryptocodec.RegisterInterfaces(registry)
+	cdc := codec.NewProtoCodec(registry)
+	kr := keyring.NewInMemory(cdc)
 
-	//registry := codectypes.NewInterfaceRegistry()
-	//cryptocodec.RegisterInterfaces(registry)
-	//cdc := codec.NewProtoCodec(registry)
-	//kr := keyring.NewInMemory(cdc)
+	nodes, err := b.initializeChainNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize chain nodes: %w", err)
+	}
 
-	//cfg := Config{
-	//	Logger:          b.logger,
-	//	DockerClient:    b.dockerClient,
-	//	DockerNetworkID: b.dockerNetworkID,
-	//	ChainConfig: &ChainConfig{
-	//		Type:                "cosmos",
-	//		Name:                "celestia",
-	//		Version:             "",
-	//		NumValidators:       nil,
-	//		NumFullNodes:        nil,
-	//		ChainID:             "test",
-	//		Images:              nil,
-	//		Bin:                 "",
-	//		Bech32Prefix:        "",
-	//		Denom:               "",
-	//		CoinType:            "",
-	//		GasPrices:           "",
-	//		GasAdjustment:       0,
-	//		Gas:                 "",
-	//		TrustingPeriod:      "",
-	//		ModifyGenesis:       nil,
-	//		ConfigFileOverrides: nil,
-	//		EncodingConfig:      nil,
-	//		HostPortOverride:    nil,
-	//		AdditionalStartArgs: nil,
-	//		Env:                 nil,
-	//		ChainNodeConfigs:    nil,
-	//	},
-	//}
+	chain := &Chain{
+		cfg: Config{
+			Logger:          b.logger,
+			DockerClient:    b.dockerClient,
+			DockerNetworkID: b.dockerNetworkID,
+			ChainConfig: &ChainConfig{
+				Type:                "cosmos",
+				Name:                "celestia",
+				Version:             "v4.0.0-rc6",
+				ChainID:             b.chainID,
+				Images:              []DockerImage{b.validators[0].image},
+				Bin:                 b.binaryName,
+				Bech32Prefix:        "celestia",
+				Denom:               "utia",
+				CoinType:            b.coinType,
+				GasPrices:           b.gasPrices,
+				GasAdjustment:       1.3,
+				EncodingConfig:      b.encodingConfig,
+				AdditionalStartArgs: []string{"--force-no-bbr", "--grpc.enable", "--grpc.address", "0.0.0.0:9090", "--rpc.grpc_laddr=tcp://0.0.0.0:9099"},
+			},
+		},
+		t:          b.t,
+		Validators: nodes,
+		cdc:        cdc,
+		log:        b.logger,
+		keyring:    kr,
+	}
 
-	//c, err := newChain(ctx, b.t, cfg)
-	//if err != nil {
-	//	return nil, fmt.Errorf("failed to create chain: %w", err)
-	//}
-	//
-	//dockerChain, ok := c.(*Chain)
-	//if !ok {
-	//	return nil, fmt.Errorf("failed to cast chain to *Chain")
-	//}
-	//
-	//if err := dockerChain.initializeChainNodes(ctx, b.t.Name()); err != nil {
-	//	return nil, fmt.Errorf("failed to initialize chain nodes: %w", err)
-	//}
-
-	return nil, nil
+	return chain, nil
 }
 
-func (b *ChainBuilder) initializeChainNodes(ctx context.Context) error {
+func (b *ChainBuilder) initializeChainNodes(ctx context.Context) ([]*ChainNode, error) {
+	var nodes []*ChainNode
 	for i, val := range b.validators {
-		_, err := b.newChainNode(ctx, val.image, true, i)
+		n, err := b.newChainNode(ctx, val.image, true, i)
 		if err != nil {
-			return err
+			return nil, err
 		}
+		nodes = append(nodes, n)
 	}
-	return nil
+	return nodes, nil
 }
 
 // newChainNode constructs a new cosmos chain node with a docker volume.
@@ -280,23 +274,23 @@ func (b *ChainBuilder) newChainNode(
 
 func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, validator bool, image DockerImage, index int) *ChainNode {
 	params := ChainNodeParams{
-		Logger:            log,
-		Validator:         validator,
-		DockerClient:      b.dockerClient,
-		DockerNetworkID:   b.dockerNetworkID,
-		TestName:          b.t.Name(),
-		Image:             image,
-		Index:             index,
-		ChainID:           b.chainID,
-		BinaryName:        b.binaryName,
-		CoinType:          b.coinType,
-		GasPrices:         b.gasPrices,
-		GasAdjustment:     1.0, // Default gas adjustment
-		Env:               []string{}, // Default empty env
+		Logger:              log,
+		Validator:           validator,
+		DockerClient:        b.dockerClient,
+		DockerNetworkID:     b.dockerNetworkID,
+		TestName:            b.t.Name(),
+		Image:               image,
+		Index:               index,
+		ChainID:             b.chainID,
+		BinaryName:          b.binaryName,
+		CoinType:            b.coinType,
+		GasPrices:           b.gasPrices,
+		GasAdjustment:       1.0,        // Default gas adjustment
+		Env:                 []string{}, // Default empty env
 		AdditionalStartArgs: []string{}, // Default empty args
-		EncodingConfig:    b.encodingConfig,
-		ChainNodeConfig:   nil, // No per-node config by default
-		HomeDir:           path.Join("/var/cosmos-chain", b.name),
+		EncodingConfig:      b.encodingConfig,
+		ChainNodeConfig:     nil, // No per-node config by default
+		HomeDir:             path.Join("/var/cosmos-chain", b.name),
 	}
 
 	return NewChainNode(params)
