@@ -76,37 +76,37 @@ type ChainNode struct {
 	hostP2PPort  string
 
 	// Injected dependencies (previously from Config)
-	chainID           string
-	binaryName        string
-	coinType          string
-	gasPrices         string
-	gasAdjustment     float64
-	env               []string
+	chainID             string
+	binaryName          string
+	coinType            string
+	gasPrices           string
+	gasAdjustment       float64
+	env                 []string
 	additionalStartArgs []string
-	encodingConfig    *testutil.TestEncodingConfig
-	chainNodeConfig   *ChainNodeConfig
-	zapLogger         *zap.Logger
+	encodingConfig      *testutil.TestEncodingConfig
+	chainNodeConfig     *ChainNodeConfig
+	zapLogger           *zap.Logger
 }
 
 // ChainNodeParams contains all the parameters needed to create a ChainNode
 type ChainNodeParams struct {
-	Logger            *zap.Logger
-	Validator         bool
-	DockerClient      *dockerclient.Client
-	DockerNetworkID   string
-	TestName          string
-	Image             DockerImage
-	Index             int
-	ChainID           string
-	BinaryName        string
-	CoinType          string
-	GasPrices         string
-	GasAdjustment     float64
-	Env               []string
+	Logger              *zap.Logger
+	Validator           bool
+	DockerClient        *dockerclient.Client
+	DockerNetworkID     string
+	TestName            string
+	Image               DockerImage
+	Index               int
+	ChainID             string
+	BinaryName          string
+	CoinType            string
+	GasPrices           string
+	GasAdjustment       float64
+	Env                 []string
 	AdditionalStartArgs []string
-	EncodingConfig    *testutil.TestEncodingConfig
-	ChainNodeConfig   *ChainNodeConfig
-	HomeDir           string
+	EncodingConfig      *testutil.TestEncodingConfig
+	ChainNodeConfig     *ChainNodeConfig
+	HomeDir             string
 }
 
 // NewChainNode creates a new ChainNode with injected dependencies
@@ -121,18 +121,18 @@ func NewChainNode(params ChainNodeParams) *ChainNode {
 			zap.Bool("validator", params.Validator),
 			zap.Int("i", params.Index),
 		),
-		Validator:         params.Validator,
-		chainID:           params.ChainID,
-		binaryName:        params.BinaryName,
-		coinType:          params.CoinType,
-		gasPrices:         params.GasPrices,
-		gasAdjustment:     params.GasAdjustment,
-		env:               params.Env,
+		Validator:           params.Validator,
+		chainID:             params.ChainID,
+		binaryName:          params.BinaryName,
+		coinType:            params.CoinType,
+		gasPrices:           params.GasPrices,
+		gasAdjustment:       params.GasAdjustment,
+		env:                 params.Env,
 		additionalStartArgs: params.AdditionalStartArgs,
-		encodingConfig:    params.EncodingConfig,
-		chainNodeConfig:   params.ChainNodeConfig,
-		zapLogger:         params.Logger,
-		node:              newNode(params.DockerNetworkID, params.DockerClient, params.TestName, params.Image, params.HomeDir, params.Index, nodeType),
+		encodingConfig:      params.EncodingConfig,
+		chainNodeConfig:     params.ChainNodeConfig,
+		zapLogger:           params.Logger,
+		node:                newNode(params.DockerNetworkID, params.DockerClient, params.TestName, params.Image, params.HomeDir, params.Index, nodeType),
 	}
 
 	tn.containerLifecycle = NewContainerLifecycle(params.Logger, params.DockerClient, tn.Name())
@@ -162,7 +162,6 @@ func (tn *ChainNode) GetKeyring() (keyring.Keyring, error) {
 	containerKeyringDir := path.Join(tn.homeDir, "keyring-test")
 	return dockerinternal.NewDockerKeyring(tn.DockerClient, tn.containerLifecycle.ContainerID(), containerKeyringDir, tn.encodingConfig.Codec), nil
 }
-
 
 // Name of the test node container.
 func (tn *ChainNode) Name() string {
@@ -408,10 +407,9 @@ func (tn *ChainNode) setPeers(ctx context.Context, peers string) error {
 // createNodeContainer initializes but does not start a container for the ChainNode with the specified configuration and context.
 func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 	cmd := []string{tn.binaryName, "start", "--home", tn.homeDir}
-	if startArgs := tn.getAdditionalStartArgs(); len(startArgs) > 0 {
-		cmd = append(cmd, startArgs...)
+	if len(tn.additionalStartArgs) > 0 {
+		cmd = append(cmd, tn.additionalStartArgs...)
 	}
-
 	usingPorts := nat.PortMap{}
 	for k, v := range sentryPorts {
 		usingPorts[k] = v

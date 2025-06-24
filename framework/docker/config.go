@@ -64,6 +64,7 @@ type ChainConfig struct {
 	Env []string
 	// ChainNodeConfigs allows per-node configuration overrides, keyed by node index
 	ChainNodeConfigs map[int]*ChainNodeConfig
+	GenesisFileBz    []byte
 }
 
 // ChainNodeConfig provides per-node configuration that can override ChainConfig defaults

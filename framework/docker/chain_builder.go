@@ -199,19 +199,19 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 			DockerClient:    b.dockerClient,
 			DockerNetworkID: b.dockerNetworkID,
 			ChainConfig: &ChainConfig{
-				Type:                "cosmos",
-				Name:                "celestia",
-				Version:             "v4.0.0-rc6",
-				ChainID:             b.chainID,
-				Images:              []DockerImage{b.validators[0].image},
-				Bin:                 b.binaryName,
-				Bech32Prefix:        "celestia",
-				Denom:               "utia",
-				CoinType:            b.coinType,
-				GasPrices:           b.gasPrices,
-				GasAdjustment:       1.3,
-				EncodingConfig:      b.encodingConfig,
-				AdditionalStartArgs: []string{"--force-no-bbr", "--grpc.enable", "--grpc.address", "0.0.0.0:9090", "--rpc.grpc_laddr=tcp://0.0.0.0:9099"},
+				Type:           "cosmos",
+				Name:           "celestia",
+				Version:        "v4.0.0-rc6",
+				ChainID:        b.chainID,
+				Images:         []DockerImage{b.validators[0].image},
+				Bin:            b.binaryName,
+				Bech32Prefix:   "celestia",
+				Denom:          "utia",
+				CoinType:       b.coinType,
+				GasPrices:      b.gasPrices,
+				GasAdjustment:  1.3,
+				EncodingConfig: b.encodingConfig,
+				GenesisFileBz:  b.genesisBz,
 			},
 		},
 		t:          b.t,
@@ -227,7 +227,7 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 func (b *ChainBuilder) initializeChainNodes(ctx context.Context) ([]*ChainNode, error) {
 	var nodes []*ChainNode
 	for i, val := range b.validators {
-		n, err := b.newChainNode(ctx, val.image, true, i)
+		n, err := b.newChainNode(ctx, val.image, true, i, val.additionalStartArgs...)
 		if err != nil {
 			return nil, err
 		}
@@ -242,10 +242,11 @@ func (b *ChainBuilder) newChainNode(
 	image DockerImage,
 	validator bool,
 	index int,
+	additionalStartArgs ...string,
 ) (*ChainNode, error) {
 	// Construct the ChainNode first so we can access its name.
 	// The ChainNode's VolumeName cannot be set until after we create the volume.
-	tn := b.newDockerChainNode(b.logger, validator, image, index)
+	tn := b.newDockerChainNode(b.logger, validator, image, index, additionalStartArgs)
 
 	v, err := b.dockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 		Labels: map[string]string{
@@ -272,7 +273,7 @@ func (b *ChainBuilder) newChainNode(
 	return tn, nil
 }
 
-func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, validator bool, image DockerImage, index int) *ChainNode {
+func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, validator bool, image DockerImage, index int, additionalStartArgs []string) *ChainNode {
 	params := ChainNodeParams{
 		Logger:              log,
 		Validator:           validator,
@@ -287,7 +288,7 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, validator bool, image
 		GasPrices:           b.gasPrices,
 		GasAdjustment:       1.0,        // Default gas adjustment
 		Env:                 []string{}, // Default empty env
-		AdditionalStartArgs: []string{}, // Default empty args
+		AdditionalStartArgs: additionalStartArgs,
 		EncodingConfig:      b.encodingConfig,
 		ChainNodeConfig:     nil, // No per-node config by default
 		HomeDir:             path.Join("/var/cosmos-chain", b.name),

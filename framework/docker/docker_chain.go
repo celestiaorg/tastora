@@ -1,9 +1,7 @@
 package docker
 
 import (
-	"bytes"
 	"context"
-	sdkmath "cosmossdk.io/math"
 	"fmt"
 	"github.com/celestiaorg/go-square/v2/share"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
@@ -242,19 +240,11 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	cfg := c.cfg
 	c.started = true
 
-	genesisAmounts := make([][]sdk.Coin, len(c.Validators))
-	genesisSelfDelegation := make([]sdk.Coin, len(c.Validators))
-
-	for i := range c.Validators {
-		genesisAmounts[i] = []sdk.Coin{{Amount: sdkmath.NewInt(10_000_000_000_000), Denom: cfg.ChainConfig.Denom}}
-		genesisSelfDelegation[i] = sdk.Coin{Amount: sdkmath.NewInt(5_000_000), Denom: cfg.ChainConfig.Denom}
-	}
-
 	configFileOverrides := cfg.ChainConfig.ConfigFileOverrides
 
 	eg := new(errgroup.Group)
 	// Initialize config and sign gentx for each validator.
-	for i, v := range c.Validators {
+	for _, v := range c.Validators {
 		v.Validator = true
 		eg.Go(func() error {
 			if err := v.initFullNodeFiles(ctx); err != nil {
@@ -277,35 +267,8 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 					return fmt.Errorf("failed to modify toml config file: %w", err)
 				}
 			}
-			return v.initValidatorGenTx(ctx, genesisAmounts[i], genesisSelfDelegation[i])
-		})
-	}
-
-	// Initialize config for each full node.
-	for _, n := range c.FullNodes {
-		n.Validator = false
-		eg.Go(func() error {
-			if err := n.initFullNodeFiles(ctx); err != nil {
-				return err
-			}
-			for configFile, modifiedConfig := range configFileOverrides {
-				modifiedToml, ok := modifiedConfig.(toml.Toml)
-				if !ok {
-					return fmt.Errorf("provided toml override for file %s is of type (%T). Expected (DecodedToml)", configFile, modifiedConfig)
-				}
-				if err := ModifyConfigFile(
-					ctx,
-					n.logger(),
-					n.DockerClient,
-					n.TestName,
-					n.VolumeName,
-					configFile,
-					modifiedToml,
-				); err != nil {
-					return err
-				}
-			}
 			return nil
+			//return v.initValidatorGenTx(ctx, genesisAmounts[i], genesisSelfDelegation[i])
 		})
 	}
 
@@ -314,59 +277,10 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	// for the validators we need to collect the gentxs and the accounts
-	// to the first node's genesis file
-	validator0 := c.Validators[0]
-	for i := 1; i < len(c.Validators); i++ {
-		validatorN := c.Validators[i]
-
-		bech32, err := validatorN.accountKeyBech32(ctx, valKey)
-		if err != nil {
-			return err
-		}
-
-		if err := validator0.addGenesisAccount(ctx, bech32, genesisAmounts[0]); err != nil {
-			return err
-		}
-
-		if err := validatorN.copyGentx(ctx, validator0); err != nil {
-			return err
-		}
-	}
-
-	// create the faucet wallet, this can be used to fund new wallets in the tests.
-	wallet, err := c.CreateWallet(ctx, consts.FaucetAccountKeyName)
-	if err != nil {
-		return fmt.Errorf("failed to create faucet wallet: %w", err)
-	}
-	c.faucetWallet = wallet
-
-	if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
-		return err
-	}
-
-	if err := validator0.collectGentxs(ctx); err != nil {
-		return err
-	}
-
-	genbz, err := validator0.genesisFileContent(ctx)
-	if err != nil {
-		return err
-	}
-
-	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, cfg.ChainConfig.Denom)))
-
-	if c.cfg.ChainConfig.ModifyGenesis != nil {
-		genbz, err = c.cfg.ChainConfig.ModifyGenesis(cfg, genbz)
-		if err != nil {
-			return err
-		}
-	}
-
 	chainNodes := c.Nodes()
 
 	for _, cn := range chainNodes {
-		if err := cn.overwriteGenesisFile(ctx, genbz); err != nil {
+		if err := cn.overwriteGenesisFile(ctx, c.cfg.ChainConfig.GenesisFileBz); err != nil {
 			return err
 		}
 	}
@@ -520,23 +434,23 @@ func (c *Chain) newChainNode(
 	// Construct the ChainNode first so we can access its name.
 	// The ChainNode's VolumeName cannot be set until after we create the volume.
 	params := ChainNodeParams{
-		Logger:            c.log,
-		Validator:         validator,
-		DockerClient:      c.cfg.DockerClient,
-		DockerNetworkID:   c.cfg.DockerNetworkID,
-		TestName:          testName,
-		Image:             image,
-		Index:             index,
-		ChainID:           c.cfg.ChainConfig.ChainID,
-		BinaryName:        c.cfg.ChainConfig.Bin,
-		CoinType:          c.cfg.ChainConfig.CoinType,
-		GasPrices:         c.cfg.ChainConfig.GasPrices,
-		GasAdjustment:     c.cfg.ChainConfig.GasAdjustment,
-		Env:               c.cfg.ChainConfig.Env,
+		Logger:              c.log,
+		Validator:           validator,
+		DockerClient:        c.cfg.DockerClient,
+		DockerNetworkID:     c.cfg.DockerNetworkID,
+		TestName:            testName,
+		Image:               image,
+		Index:               index,
+		ChainID:             c.cfg.ChainConfig.ChainID,
+		BinaryName:          c.cfg.ChainConfig.Bin,
+		CoinType:            c.cfg.ChainConfig.CoinType,
+		GasPrices:           c.cfg.ChainConfig.GasPrices,
+		GasAdjustment:       c.cfg.ChainConfig.GasAdjustment,
+		Env:                 c.cfg.ChainConfig.Env,
 		AdditionalStartArgs: c.cfg.ChainConfig.AdditionalStartArgs,
-		EncodingConfig:    c.cfg.ChainConfig.EncodingConfig,
-		ChainNodeConfig:   nil, // Will be set if per-node config exists
-		HomeDir:           path.Join("/var/cosmos-chain", c.cfg.ChainConfig.Name),
+		EncodingConfig:      c.cfg.ChainConfig.EncodingConfig,
+		ChainNodeConfig:     nil, // Will be set if per-node config exists
+		HomeDir:             path.Join("/var/cosmos-chain", c.cfg.ChainConfig.Name),
 	}
 
 	// Set per-node config if it exists
