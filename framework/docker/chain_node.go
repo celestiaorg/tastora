@@ -177,6 +177,7 @@ func (tn *ChainNode) initHomeFolder(ctx context.Context) error {
 	_, _, err := tn.execBin(ctx,
 		"init", CondenseMoniker(tn.Name()),
 		"--chain-id", tn.cfg.ChainConfig.ChainID,
+		"--yes", // bypass interactive prompt
 	)
 	return err
 }
