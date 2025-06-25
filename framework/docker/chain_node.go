@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/testutil/config"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
+	cometcfg "github.com/cometbft/cometbft/config"
 	tmjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/p2p"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
@@ -14,6 +16,7 @@ import (
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	servercfg "github.com/cosmos/cosmos-sdk/server/config"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
@@ -240,74 +243,37 @@ func (tn *ChainNode) initHomeFolder(ctx context.Context) error {
 
 // setTestConfig modifies the config to reasonable values for use within celestia-test.
 func (tn *ChainNode) setTestConfig(ctx context.Context) error {
-	c := make(toml.Toml)
+	err := config.Modify(ctx, tn, "config/config.toml", func(cfg *cometcfg.Config) {
+		cfg.LogLevel = "info"
+		cfg.P2P.AllowDuplicateIP = true
+		cfg.P2P.AddrBookStrict = false
 
-	// Set Log Level to info
-	c["log_level"] = "info"
+		blockTime := time.Duration(blockTime) * time.Second
 
-	p2p := make(toml.Toml)
+		cfg.Consensus.TimeoutCommit = blockTime
+		cfg.Consensus.TimeoutPropose = blockTime
 
-	// Allow p2p strangeness
-	p2p["allow_duplicate_ip"] = true
-	p2p["addr_book_strict"] = false
+		cfg.RPC.ListenAddress = "tcp://0.0.0.0:26657"
+		cfg.RPC.CORSAllowedOrigins = []string{"*"}
+	})
 
-	c["p2p"] = p2p
-
-	consensus := make(toml.Toml)
-
-	blockT := (time.Duration(blockTime) * time.Second).String()
-	consensus["timeout_commit"] = blockT
-	consensus["timeout_propose"] = blockT
-
-	c["consensus"] = consensus
-
-	rpc := make(toml.Toml)
-
-	// Enable public RPC
-	rpc["laddr"] = "tcp://0.0.0.0:26657"
-	rpc["allowed_origins"] = []string{"*"}
-	c["rpc"] = rpc
-
-	if err := ModifyConfigFile(
-		ctx,
-		tn.logger(),
-		tn.DockerClient,
-		tn.TestName,
-		tn.VolumeName,
-		"config/config.toml",
-		c,
-	); err != nil {
-		return err
+	if err != nil {
+		return fmt.Errorf("modifying config/config.toml: %w", err)
 	}
 
-	a := make(toml.Toml)
-	a["minimum-gas-prices"] = tn.gasPrices
+	err = config.Modify(ctx, tn, "config/app.toml", func(cfg *servercfg.Config) {
+		cfg.MinGasPrices = tn.gasPrices
+		cfg.GRPC.Address = "0.0.0.0:9090"
+		cfg.API.Enable = true
+		cfg.API.Swagger = true
+		cfg.API.Address = "tcp://0.0.0.0:1317"
+	})
 
-	grpc := make(toml.Toml)
+	if err != nil {
+		return fmt.Errorf("modifying config/app.toml: %w", err)
+	}
 
-	// Enable public GRPC
-	grpc["address"] = "0.0.0.0:9090"
-
-	a["grpc"] = grpc
-
-	api := make(toml.Toml)
-
-	// Enable public REST API
-	api["enable"] = true
-	api["swagger"] = true
-	api["address"] = "tcp://0.0.0.0:1317"
-
-	a["api"] = api
-
-	return ModifyConfigFile(
-		ctx,
-		tn.logger(),
-		tn.DockerClient,
-		tn.TestName,
-		tn.VolumeName,
-		"config/app.toml",
-		a,
-	)
+	return nil
 }
 
 func (tn *ChainNode) logger() *zap.Logger {
