@@ -105,11 +105,8 @@ type DANodeConfig struct {
 	// Image overrides the network-level Image for this specific node
 	Image *DockerImage
 
-	// NEW: Port configuration for this specific node
-	RPCPort string // Internal RPC port (overrides default)
-	P2PPort string // Internal P2P port (overrides default)
-
-	// NEW: Core connection configuration for this specific node
+	RPCPort      string // Internal RPC port (overrides default)
+	P2PPort      string // Internal P2P port (overrides default)
 	CoreRPCPort  string // Port to connect to celestia-app RPC (overrides default)
 	CoreGRPCPort string // Port to connect to celestia-app GRPC (overrides default)
 }
