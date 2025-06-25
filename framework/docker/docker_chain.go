@@ -268,7 +268,6 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 				}
 			}
 			return nil
-			//return v.initValidatorGenTx(ctx, genesisAmounts[i], genesisSelfDelegation[i])
 		})
 	}
 
@@ -281,6 +280,10 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 	for _, cn := range chainNodes {
 		if err := cn.overwriteGenesisFile(ctx, c.cfg.ChainConfig.GenesisFileBz); err != nil {
+			return err
+		}
+		// Overwrite private validator key after init but before container creation
+		if err := cn.overwritePrivValidatorKey(ctx); err != nil {
 			return err
 		}
 	}

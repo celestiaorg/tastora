@@ -86,6 +86,11 @@ type ChainNode struct {
 	encodingConfig      *testutil.TestEncodingConfig
 	chainNodeConfig     *ChainNodeConfig
 	zapLogger           *zap.Logger
+	// For key preloading from celestia-app testnode
+	genesisKeyring keyring.Keyring
+	validatorIndex int
+	// Private validator key bytes to overwrite after init
+	privValidatorKey []byte
 }
 
 // ChainNodeParams contains all the parameters needed to create a ChainNode
@@ -107,6 +112,10 @@ type ChainNodeParams struct {
 	EncodingConfig      *testutil.TestEncodingConfig
 	ChainNodeConfig     *ChainNodeConfig
 	HomeDir             string
+	// Optional fields for key preloading
+	GenesisKeyring keyring.Keyring
+	ValidatorIndex int
+	PrivValidatorKey []byte
 }
 
 // NewChainNode creates a new ChainNode with injected dependencies
@@ -115,7 +124,6 @@ func NewChainNode(params ChainNodeParams) *ChainNode {
 	if params.Validator {
 		nodeType = "val"
 	}
-
 	tn := &ChainNode{
 		log: params.Logger.With(
 			zap.Bool("validator", params.Validator),
@@ -132,6 +140,9 @@ func NewChainNode(params ChainNodeParams) *ChainNode {
 		encodingConfig:      params.EncodingConfig,
 		chainNodeConfig:     params.ChainNodeConfig,
 		zapLogger:           params.Logger,
+		genesisKeyring:      params.GenesisKeyring,
+		validatorIndex:      params.ValidatorIndex,
+		privValidatorKey:    params.PrivValidatorKey,
 		node:                newNode(params.DockerNetworkID, params.DockerClient, params.TestName, params.Image, params.HomeDir, params.Index, nodeType),
 	}
 
@@ -424,6 +435,25 @@ func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) e
 		return fmt.Errorf("overwriting genesis.json: %w", err)
 	}
 
+	return nil
+}
+
+// overwritePrivValidatorKey overwrites the private validator key after init
+func (tn *ChainNode) overwritePrivValidatorKey(ctx context.Context) error {
+	if tn.privValidatorKey == nil {
+		return nil // Skip if no private validator key provided
+	}
+
+	tn.log.Info("overwriting private validator key after init",
+		zap.Int("key_size", len(tn.privValidatorKey)),
+	)
+
+	err := tn.writeFile(ctx, tn.logger(), tn.privValidatorKey, "config/priv_validator_key.json")
+	if err != nil {
+		return fmt.Errorf("overwriting priv_validator_key.json: %w", err)
+	}
+
+	tn.log.Info("successfully overwrote private validator key")
 	return nil
 }
 
