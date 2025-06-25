@@ -38,13 +38,13 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 
 	defaultImage := cfg.DataAvailabilityNetworkConfig.Image
 
+	logger := cfg.Logger.With(
+		zap.String("node_type", nodeType.String()),
+	)
 	daNode := &DANode{
 		cfg:      cfg,
 		nodeType: nodeType,
-		log: cfg.Logger.With(
-			zap.String("node_type", nodeType.String()),
-		),
-		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String()),
+		node:     newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String(), logger),
 	}
 
 	daNode.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name())
@@ -64,7 +64,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 	daNode.VolumeName = v.Name
 
 	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
-		Log:        daNode.log,
+		Log:        daNode.logger,
 		Client:     cfg.DockerClient,
 		VolumeName: v.Name,
 		ImageRef:   image.Ref(),
@@ -84,7 +84,6 @@ type DANode struct {
 	mu             sync.Mutex
 	hasBeenStarted bool
 	nodeType       types.DANodeType
-	log            *zap.Logger
 	wallet         types.Wallet
 	// adminAuthToken is a token that has admin access, it should be generated after init.
 	adminAuthToken string
@@ -196,7 +195,7 @@ func (n *DANode) ModifyConfigFiles(ctx context.Context, configModifications map[
 	for filePath, modifications := range configModifications {
 		if err := ModifyConfigFile(
 			ctx,
-			n.log,
+			n.logger,
 			n.DockerClient,
 			n.TestName,
 			n.VolumeName,
@@ -242,7 +241,7 @@ func (n *DANode) initNode(ctx context.Context, chainID string, env []string) err
 
 	// note: my_celes_key is the default key name for the da node.
 	cmd := []string{"celestia", n.nodeType.String(), "init", "--p2p.network", chainID, "--keyring.keyname", "my-key", "--node.store", n.homeDir}
-	_, _, err := n.exec(ctx, n.log, cmd, env)
+	_, _, err := n.exec(ctx, n.logger, cmd, env)
 	return err
 }
 
@@ -250,7 +249,7 @@ func (n *DANode) initNode(ctx context.Context, chainID string, env []string) err
 // gives us access to the address for use in tests.
 func (n *DANode) createWallet(ctx context.Context) error {
 	cmd := []string{"cel-key", "add", "my-key", "--node.type", n.nodeType.String(), "--keyring-dir", path.Join(n.homeDir, "keys"), "--output", "json"}
-	_, stderr, err := n.exec(ctx, n.log, cmd, nil)
+	_, stderr, err := n.exec(ctx, n.logger, cmd, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create wallet: %w", err)
 	}
@@ -294,7 +293,7 @@ func (n *DANode) initAuthToken(ctx context.Context) error {
 	cmd := []string{"celestia", n.nodeType.String(), "auth", "admin"}
 
 	// Run the command inside the container
-	stdout, stderr, err := n.exec(ctx, n.log, cmd, nil)
+	stdout, stderr, err := n.exec(ctx, n.logger, cmd, nil)
 	if err != nil {
 		return fmt.Errorf("failed to generate auth token (stderr=%q): %w", stderr, err)
 	}
@@ -328,7 +327,7 @@ func (n *DANode) getNodeConfig() *DANodeConfig {
 
 	nodeConfig, ok := configMap[n.Index]
 	if !ok {
-		n.log.Debug("no node config found for node", zap.Int("index", n.Index), zap.String("type", n.nodeType.String()))
+		n.logger.Debug("no node config found for node", zap.Int("index", n.Index), zap.String("type", n.nodeType.String()))
 	}
 
 	return nodeConfig

@@ -34,7 +34,6 @@ var rollkitSentryPorts = nat.PortMap{
 type RollkitNode struct {
 	*node
 	cfg Config
-	log *zap.Logger
 	mu  sync.Mutex
 
 	GrpcConn *grpc.ClientConn
@@ -47,13 +46,13 @@ type RollkitNode struct {
 }
 
 func NewRollkitNode(cfg Config, testName string, image DockerImage, index int) *RollkitNode {
+	logger := cfg.Logger.With(
+		zap.Int("i", index),
+		zap.Bool("aggregator", index == 0),
+	)
 	rn := &RollkitNode{
-		log: cfg.Logger.With(
-			zap.Int("i", index),
-			zap.Bool("aggregator", index == 0),
-		),
 		cfg:  cfg,
-		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "rollkit"), index, "rollkit"),
+		node: newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "rollkit"), index, "rollkit", logger),
 	}
 
 	rn.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, rn.Name())
