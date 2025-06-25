@@ -54,6 +54,8 @@ type ChainConfig struct {
 	ModifyGenesis func(Config, []byte) ([]byte, error)
 	// Override config parameters for files at filepath.
 	ConfigFileOverrides map[string]any
+
+	PostInit []func(chainNode *ChainNode) error
 	// Non-nil will override the encoding config, used for cosmos chains only.
 	EncodingConfig *testutil.TestEncodingConfig
 	// To avoid port binding conflicts, ports are only exposed on the 0th validator.

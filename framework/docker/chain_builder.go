@@ -26,6 +26,8 @@ type NodeConfig struct {
 	envVars             []string
 	// privValidatorKey contains the private validator key bytes for this specific node
 	privValidatorKey []byte
+	// postInit functions are executed sequentially after the node is initialized.
+	postInit []func(node *ChainNode) error
 }
 
 // ChainNodeConfigBuilder provides a fluent interface for building NodeConfig
@@ -65,6 +67,12 @@ func (b *ChainNodeConfigBuilder) WithEnvVars(envVars ...string) *ChainNodeConfig
 // WithPrivValidatorKey sets the private validator key bytes for this node
 func (b *ChainNodeConfigBuilder) WithPrivValidatorKey(privValKey []byte) *ChainNodeConfigBuilder {
 	b.config.privValidatorKey = privValKey
+	return b
+}
+
+// WithPostInit sets the post init functions.
+func (b *ChainNodeConfigBuilder) WithPostInit(postInitFns ...func(node *ChainNode) error) *ChainNodeConfigBuilder {
+	b.config.postInit = postInitFns
 	return b
 }
 
@@ -332,6 +340,7 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig
 		GenesisKeyring:      nil, // Will be set below if validator
 		ValidatorIndex:      index,
 		PrivValidatorKey:    nodeConfig.privValidatorKey, // Set from node config
+		postInit:            nodeConfig.postInit,
 	}
 
 	// Set genesis keyring if this is a validator

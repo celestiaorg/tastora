@@ -64,6 +64,7 @@ func (n *ChainNode) GetInternalRPCAddress(ctx context.Context) (string, error) {
 type ChainNodes []*ChainNode
 
 type ChainNode struct {
+	ChainNodeParams
 	*node
 	Validator bool
 	Client    rpcclient.Client
@@ -118,6 +119,8 @@ type ChainNodeParams struct {
 	GenesisKeyring   keyring.Keyring
 	ValidatorIndex   int
 	PrivValidatorKey []byte
+	// postInit functions are executed sequentially after the node is initialized.
+	postInit []func(node *ChainNode) error
 }
 
 // NewChainNode creates a new ChainNode with injected dependencies
@@ -133,21 +136,8 @@ func NewChainNode(params ChainNodeParams) *ChainNode {
 	)
 
 	tn := &ChainNode{
-		Validator:           params.Validator,
-		chainID:             params.ChainID,
-		binaryName:          params.BinaryName,
-		coinType:            params.CoinType,
-		gasPrices:           params.GasPrices,
-		gasAdjustment:       params.GasAdjustment,
-		env:                 params.Env,
-		additionalStartArgs: params.AdditionalStartArgs,
-		encodingConfig:      params.EncodingConfig,
-		chainNodeConfig:     params.ChainNodeConfig,
-		zapLogger:           params.Logger,
-		genesisKeyring:      params.GenesisKeyring,
-		validatorIndex:      params.ValidatorIndex,
-		privValidatorKey:    params.PrivValidatorKey,
-		node:                newNode(params.DockerNetworkID, params.DockerClient, params.TestName, params.Image, params.HomeDir, params.Index, nodeType, log),
+		ChainNodeParams: params,
+		node:            newNode(params.DockerNetworkID, params.DockerClient, params.TestName, params.Image, params.HomeDir, params.Index, nodeType, log),
 	}
 
 	tn.containerLifecycle = NewContainerLifecycle(params.Logger, params.DockerClient, tn.Name())
@@ -175,12 +165,12 @@ func (tn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
 // by the host running the test.
 func (tn *ChainNode) GetKeyring() (keyring.Keyring, error) {
 	containerKeyringDir := path.Join(tn.homeDir, "keyring-test")
-	return dockerinternal.NewDockerKeyring(tn.DockerClient, tn.containerLifecycle.ContainerID(), containerKeyringDir, tn.encodingConfig.Codec), nil
+	return dockerinternal.NewDockerKeyring(tn.ChainNodeParams.DockerClient, tn.containerLifecycle.ContainerID(), containerKeyringDir, tn.encodingConfig.Codec), nil
 }
 
 // Name of the test node container.
 func (tn *ChainNode) Name() string {
-	return fmt.Sprintf("%s-%s-%d-%s", tn.chainID, tn.NodeType(), tn.Index, SanitizeContainerName(tn.TestName))
+	return fmt.Sprintf("%s-%s-%d-%s", tn.chainID, tn.NodeType(), tn.node.Index, SanitizeContainerName(tn.node.TestName))
 }
 
 // NodeType returns the type of the ChainNode as a string: "fn" for full nodes and "val" for validator nodes.
@@ -207,7 +197,13 @@ func (tn *ChainNode) initFullNodeFiles(ctx context.Context) error {
 		return err
 	}
 
-	return tn.setTestConfig(ctx)
+	for i, fn := range tn.postInit {
+		if err := fn(tn); err != nil {
+			return fmt.Errorf("post init function %d: %w", i, err)
+		}
+	}
+
+	return nil
 }
 
 // binCommand is a helper to retrieve a full command for a chain node binary.
@@ -279,7 +275,7 @@ func (tn *ChainNode) setTestConfig(ctx context.Context) error {
 func (tn *ChainNode) logger() *zap.Logger {
 	return tn.zapLogger.With(
 		zap.String("chain_id", tn.chainID),
-		zap.String("test", tn.TestName),
+		zap.String("test", tn.ChainNodeParams.TestName),
 	)
 }
 
@@ -374,8 +370,8 @@ func (tn *ChainNode) setPeers(ctx context.Context, peers string) error {
 	return ModifyConfigFile(
 		ctx,
 		tn.logger(),
-		tn.DockerClient,
-		tn.TestName,
+		tn.ChainNodeParams.DockerClient,
+		tn.ChainNodeParams.TestName,
 		tn.VolumeName,
 		"config/config.toml",
 		c,
@@ -393,7 +389,7 @@ func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 		usingPorts[k] = v
 	}
 
-	return tn.containerLifecycle.CreateContainer(ctx, tn.TestName, tn.NetworkID, tn.getImage(), usingPorts, "", tn.bind(), nil, tn.HostName(), cmd, tn.getEnv(), []string{})
+	return tn.containerLifecycle.CreateContainer(ctx, tn.ChainNodeParams.TestName, tn.NetworkID, tn.getImage(), usingPorts, "", tn.bind(), nil, tn.HostName(), cmd, tn.getEnv(), []string{})
 }
 
 func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) error {
@@ -614,7 +610,7 @@ func (tn *ChainNode) getImage() DockerImage {
 	if tn.chainNodeConfig != nil && tn.chainNodeConfig.Image != nil {
 		return *tn.chainNodeConfig.Image
 	}
-	return tn.Image
+	return tn.ChainNodeParams.Image
 }
 
 // getEnv returns the environment variables for this node, preferring per-node config over chain config
