@@ -24,16 +24,18 @@ type NodeConfig struct {
 	image               DockerImage
 	additionalStartArgs []string
 	envVars             []string
+	// privValidatorKey contains the private validator key bytes for this specific node
+	privValidatorKey []byte
 }
 
-// NodeConfigBuilder provides a fluent interface for building NodeConfig
-type NodeConfigBuilder struct {
+// ChainNodeConfigBuilder provides a fluent interface for building NodeConfig
+type ChainNodeConfigBuilder struct {
 	config NodeConfig
 }
 
-// NewNodeConfigBuilder creates a new NodeConfigBuilder
-func NewNodeConfigBuilder() *NodeConfigBuilder {
-	return &NodeConfigBuilder{
+// NewChainNodeConfigBuilder creates a new ChainNodeConfigBuilder
+func NewChainNodeConfigBuilder() *ChainNodeConfigBuilder {
+	return &ChainNodeConfigBuilder{
 		config: NodeConfig{
 			validator:           false,
 			additionalStartArgs: make([]string, 0),
@@ -43,25 +45,31 @@ func NewNodeConfigBuilder() *NodeConfigBuilder {
 }
 
 // WithImage sets the Docker image for the node
-func (b *NodeConfigBuilder) WithImage(image DockerImage) *NodeConfigBuilder {
+func (b *ChainNodeConfigBuilder) WithImage(image DockerImage) *ChainNodeConfigBuilder {
 	b.config.image = image
 	return b
 }
 
 // WithAdditionalStartArgs sets the additional start arguments
-func (b *NodeConfigBuilder) WithAdditionalStartArgs(args ...string) *NodeConfigBuilder {
+func (b *ChainNodeConfigBuilder) WithAdditionalStartArgs(args ...string) *ChainNodeConfigBuilder {
 	b.config.additionalStartArgs = args
 	return b
 }
 
 // WithEnvVars sets the environment variables
-func (b *NodeConfigBuilder) WithEnvVars(envVars ...string) *NodeConfigBuilder {
+func (b *ChainNodeConfigBuilder) WithEnvVars(envVars ...string) *ChainNodeConfigBuilder {
 	b.config.envVars = envVars
 	return b
 }
 
+// WithPrivValidatorKey sets the private validator key bytes for this node
+func (b *ChainNodeConfigBuilder) WithPrivValidatorKey(privValKey []byte) *ChainNodeConfigBuilder {
+	b.config.privValidatorKey = privValKey
+	return b
+}
+
 // Build returns the configured NodeConfig
-func (b *NodeConfigBuilder) Build() NodeConfig {
+func (b *ChainNodeConfigBuilder) Build() NodeConfig {
 	return b.config
 }
 
@@ -82,8 +90,6 @@ type ChainBuilder struct {
 	logger         *zap.Logger
 	// Optional keyring with pre-generated keys (e.g., from celestia-app testnode)
 	genesisKeyring keyring.Keyring
-	// Optional private validator key that matches the genesis
-	privValidatorKey []byte
 }
 
 func NewChainBuilder(t *testing.T) *ChainBuilder {
@@ -112,12 +118,6 @@ func (b *ChainBuilder) WithChainID(chainID string) *ChainBuilder {
 // This is useful when using celestia-app's testnode package which pre-generates keys
 func (b *ChainBuilder) WithGenesisKeyring(kr keyring.Keyring) *ChainBuilder {
 	b.genesisKeyring = kr
-	return b
-}
-
-// WithPrivValidatorKey sets the private validator key bytes that match the genesis
-func (b *ChainBuilder) WithPrivValidatorKey(privValKey []byte) *ChainBuilder {
-	b.privValidatorKey = privValKey
 	return b
 }
 
@@ -237,7 +237,6 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 		Validators: nodes,
 		cdc:        cdc,
 		log:        b.logger,
-		keyring:    b.genesisKeyring,
 	}
 
 	return chain, nil
@@ -246,7 +245,7 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 func (b *ChainBuilder) initializeChainNodes(ctx context.Context) ([]*ChainNode, error) {
 	var nodes []*ChainNode
 	for i, val := range b.validators {
-		n, err := b.newChainNode(ctx, val.image, true, i, val.additionalStartArgs...)
+		n, err := b.newChainNode(ctx, val, i)
 		if err != nil {
 			return nil, err
 		}
@@ -258,14 +257,12 @@ func (b *ChainBuilder) initializeChainNodes(ctx context.Context) ([]*ChainNode, 
 // newChainNode constructs a new cosmos chain node with a docker volume.
 func (b *ChainBuilder) newChainNode(
 	ctx context.Context,
-	image DockerImage,
-	validator bool,
+	nodeConfig NodeConfig,
 	index int,
-	additionalStartArgs ...string,
 ) (*ChainNode, error) {
 	// Construct the ChainNode first so we can access its name.
 	// The ChainNode's VolumeName cannot be set until after we create the volume.
-	tn := b.newDockerChainNode(b.logger, validator, image, index, additionalStartArgs)
+	tn := b.newDockerChainNode(b.logger, nodeConfig, index)
 
 	v, err := b.dockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 		Labels: map[string]string{
@@ -282,15 +279,15 @@ func (b *ChainBuilder) newChainNode(
 		Log:        b.logger,
 		Client:     b.dockerClient,
 		VolumeName: v.Name,
-		ImageRef:   image.Ref(),
+		ImageRef:   nodeConfig.image.Ref(),
 		TestName:   b.t.Name(),
-		UidGid:     image.UIDGID,
+		UidGid:     nodeConfig.image.UIDGID,
 	}); err != nil {
 		return nil, fmt.Errorf("set volume owner: %w", err)
 	}
 
 	// If this is a validator and we have a genesis keyring, preload the keys using a one-shot container
-	if validator && b.genesisKeyring != nil {
+	if nodeConfig.validator && b.genesisKeyring != nil {
 		if err := b.preloadKeyringToVolume(ctx, tn, index); err != nil {
 			return nil, fmt.Errorf("failed to preload keyring to volume: %w", err)
 		}
@@ -307,7 +304,7 @@ func (b *ChainBuilder) newChainNode(
 	return tn, nil
 }
 
-func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, validator bool, image DockerImage, index int, additionalStartArgs []string) *ChainNode {
+func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig, index int) *ChainNode {
 	// use a default home directory if name is not set
 	homeDir := "/var/cosmos-chain"
 	if b.name != "" {
@@ -316,30 +313,30 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, validator bool, image
 
 	params := ChainNodeParams{
 		Logger:              log,
-		Validator:           validator,
+		Validator:           nodeConfig.validator,
 		DockerClient:        b.dockerClient,
 		DockerNetworkID:     b.dockerNetworkID,
 		TestName:            b.t.Name(),
-		Image:               image,
+		Image:               nodeConfig.image,
 		Index:               index,
 		ChainID:             b.chainID,
 		BinaryName:          b.binaryName,
 		CoinType:            b.coinType,
 		GasPrices:           b.gasPrices,
-		GasAdjustment:       1.0,        // Default gas adjustment
-		Env:                 []string{}, // Default empty env
-		AdditionalStartArgs: additionalStartArgs,
+		GasAdjustment:       1.0, // Default gas adjustment
+		Env:                 nodeConfig.envVars,
+		AdditionalStartArgs: nodeConfig.additionalStartArgs,
 		EncodingConfig:      b.encodingConfig,
 		ChainNodeConfig:     nil, // No per-node config by default
 		HomeDir:             homeDir,
 		GenesisKeyring:      nil, // Will be set below if validator
 		ValidatorIndex:      index,
+		PrivValidatorKey:    nodeConfig.privValidatorKey, // Set from node config
 	}
 
-	// Set genesis keyring and private validator key if this is a validator
-	if validator && b.genesisKeyring != nil {
+	// Set genesis keyring if this is a validator
+	if nodeConfig.validator && b.genesisKeyring != nil {
 		params.GenesisKeyring = b.genesisKeyring
-		params.PrivValidatorKey = b.privValidatorKey
 	}
 
 	return NewChainNode(params)
@@ -556,28 +553,5 @@ func (b *ChainBuilder) validatePreloadedKeys(ctx context.Context, node *ChainNod
 		)
 	}
 
-	return nil
-}
-
-// preloadPrivValidatorKey writes the private validator key to the node's volume
-func (b *ChainBuilder) preloadPrivValidatorKey(ctx context.Context, node *ChainNode, validatorIndex int) error {
-	if b.privValidatorKey == nil {
-		b.logger.Info("no private validator key provided, skipping preload")
-		return nil
-	}
-
-	b.logger.Info("preloading private validator key",
-		zap.String("node", node.Name()),
-		zap.Int("validator_index", validatorIndex),
-		zap.Int("key_size", len(b.privValidatorKey)),
-	)
-
-	// Write the private validator key to config/priv_validator_key.json
-	err := node.writeFile(ctx, b.logger, b.privValidatorKey, "config/priv_validator_key.json")
-	if err != nil {
-		return fmt.Errorf("failed to write private validator key: %w", err)
-	}
-
-	b.logger.Info("successfully preloaded private validator key")
 	return nil
 }
