@@ -50,6 +50,10 @@ type ChainNode interface {
 	GetInternalRPCAddress(ctx context.Context) (string, error)
 	// GetInternalHostName returns the hostname resolvable within the network.
 	GetInternalHostName(ctx context.Context) (string, error)
+	// ReadFile reads the contents of a file specified by a relative filePath and returns its byte data or an error on failure.
+	ReadFile(ctx context.Context, filePath string) ([]byte, error)
+	// WriteFile writes the provided byte data to the specified relative filePath. An error is returned if the write operation fails.
+	WriteFile(ctx context.Context, filePath string, data []byte) error
 	// GetKeyring returns the keyring for this chain node.
 	GetKeyring() (keyring.Keyring, error)
 }

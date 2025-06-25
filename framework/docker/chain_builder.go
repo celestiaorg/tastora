@@ -460,7 +460,7 @@ func (b *ChainBuilder) copyKeyringFilesToVolume(ctx context.Context, node *Chain
 		// Write the file to the volume using the existing file utilities
 		// writeFile expects a relative path from the home directory
 		relativePath := path.Join("keyring-test", file.Name())
-		err = node.writeFile(ctx, b.logger, content, relativePath)
+		err = node.WriteFile(ctx, relativePath, content)
 		if err != nil {
 			return fmt.Errorf("failed to write keyring file %s to volume: %w", file.Name(), err)
 		}
