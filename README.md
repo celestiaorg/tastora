@@ -33,7 +33,79 @@ go mod download
 
 ## Usage
 
-Tastora provides a framework for testing and developing Celestia blockchain applications. Here's a basic example of how to use it:
+Tastora provides a framework for testing and developing Celestia blockchain applications. Here are some basic examples:
+
+### Basic DA Network Setup
+
+```go
+package main
+
+import (
+    "context"
+    "testing"
+
+    "github.com/celestiaorg/tastora/framework/docker"
+)
+
+func TestCelestiaNodes(t *testing.T) {
+    ctx := context.Background()
+
+    // Create a basic DA network with default ports
+    daNetwork, err := docker.NewDANetwork(ctx, "test-network")
+    if err != nil {
+        t.Fatal(err)
+    }
+    defer daNetwork.Cleanup(ctx)
+
+    // Start the network
+    err = daNetwork.Start(ctx)
+    if err != nil {
+        t.Fatal(err)
+    }
+}
+```
+
+### Configurable Ports Setup
+
+For complex setups or when running multiple networks, you can configure custom ports:
+
+```go
+// Use predefined non-conflicting ports
+daNetwork, err := docker.NewDANetwork(
+    ctx,
+    "test-network",
+    docker.WithNonConflictingPorts(), // Uses ports 26668, 2131, 26667, 9091
+)
+
+// Or configure specific ports
+daNetwork, err := docker.NewDANetwork(
+    ctx,
+    "test-network",
+    docker.WithDANodeCoreConnection("192.168.1.100", 26657, 9090),
+    docker.WithDANodePorts(26658, 2121),
+)
+
+// Configure different node types with specific ports
+daNetwork, err := docker.NewDANetwork(
+    ctx,
+    "test-network",
+    docker.WithBridgeNodePorts(26658, 2121, 26657, 9090),
+    docker.WithLightNodePorts(26659, 2122, 26657, 9090),
+)
+```
+
+## Port Configuration
+
+Tastora supports configurable internal ports for DA nodes, solving connectivity issues in complex deployments where celestia-app runs on different servers or uses non-default ports.
+
+### Available Configuration Options
+
+- `WithNonConflictingPorts()` - Quick setup with predefined ports (26668, 2131, 26667, 9091)
+- `WithDANodePorts(rpc, p2p)` - Configure DA node internal ports
+- `WithDANodeCoreConnection(host, rpc, grpc)` - Configure connection to celestia-app
+- `WithBridgeNodePorts()`, `WithLightNodePorts()`, `WithFullNodePorts()` - Per-node type configuration
+
+This addresses the issue where celestia bridge nodes fail to start when trying to connect to hardcoded `localhost:26657` in multi-server setups.
 
 ## Project Structure
 

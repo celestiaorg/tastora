@@ -72,3 +72,94 @@ func WithPerLightNodeConfig(nodeConfigs map[int]*DANodeConfig) ConfigOption {
 		cfg.DataAvailabilityNetworkConfig.LightNodeConfigs = nodeConfigs
 	}
 }
+
+// SIMPLE: One-liner to configure all DA node ports
+func WithDANodePorts(rpcPort, p2pPort string) ConfigOption {
+	return func(cfg *Config) {
+		if cfg.DataAvailabilityNetworkConfig == nil {
+			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		}
+		cfg.DataAvailabilityNetworkConfig.DefaultRPCPort = rpcPort
+		cfg.DataAvailabilityNetworkConfig.DefaultP2PPort = p2pPort
+	}
+}
+
+// SIMPLE: One-liner to configure core connection ports
+func WithDANodeCoreConnection(rpcPort, grpcPort string) ConfigOption {
+	return func(cfg *Config) {
+		if cfg.DataAvailabilityNetworkConfig == nil {
+			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		}
+		cfg.DataAvailabilityNetworkConfig.DefaultCoreRPCPort = rpcPort
+		cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort = grpcPort
+	}
+}
+
+// SIMPLE: Configure everything in one call
+func WithCustomPortsSetup(daRPC, daP2P, coreRPC, coreGRPC string) ConfigOption {
+	return func(cfg *Config) {
+		if cfg.DataAvailabilityNetworkConfig == nil {
+			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		}
+		cfg.DataAvailabilityNetworkConfig.DefaultRPCPort = daRPC
+		cfg.DataAvailabilityNetworkConfig.DefaultP2PPort = daP2P
+		cfg.DataAvailabilityNetworkConfig.DefaultCoreRPCPort = coreRPC
+		cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort = coreGRPC
+	}
+}
+
+// SIMPLE: Per-node-type configuration for bridge nodes
+func WithBridgeNodePorts(nodeIndex int, rpcPort, p2pPort string) ConfigOption {
+	return func(cfg *Config) {
+		if cfg.DataAvailabilityNetworkConfig == nil {
+			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		}
+		if cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs == nil {
+			cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs = make(map[int]*DANodeConfig)
+		}
+		if cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex] == nil {
+			cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex] = &DANodeConfig{}
+		}
+		cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex].RPCPort = rpcPort
+		cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex].P2PPort = p2pPort
+	}
+}
+
+// SIMPLE: Per-node-type configuration for full nodes
+func WithFullNodePorts(nodeIndex int, rpcPort, p2pPort string) ConfigOption {
+	return func(cfg *Config) {
+		if cfg.DataAvailabilityNetworkConfig == nil {
+			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		}
+		if cfg.DataAvailabilityNetworkConfig.FullNodeConfigs == nil {
+			cfg.DataAvailabilityNetworkConfig.FullNodeConfigs = make(map[int]*DANodeConfig)
+		}
+		if cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex] == nil {
+			cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex] = &DANodeConfig{}
+		}
+		cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex].RPCPort = rpcPort
+		cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex].P2PPort = p2pPort
+	}
+}
+
+// SIMPLE: Per-node-type configuration for light nodes
+func WithLightNodePorts(nodeIndex int, rpcPort, p2pPort string) ConfigOption {
+	return func(cfg *Config) {
+		if cfg.DataAvailabilityNetworkConfig == nil {
+			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		}
+		if cfg.DataAvailabilityNetworkConfig.LightNodeConfigs == nil {
+			cfg.DataAvailabilityNetworkConfig.LightNodeConfigs = make(map[int]*DANodeConfig)
+		}
+		if cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex] == nil {
+			cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex] = &DANodeConfig{}
+		}
+		cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex].RPCPort = rpcPort
+		cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex].P2PPort = p2pPort
+	}
+}
+
+// SIMPLE: Common scenarios helper - uses non-conflicting ports
+func WithNonConflictingPorts() ConfigOption {
+	return WithCustomPortsSetup("26668", "2131", "26667", "9091")
+}
