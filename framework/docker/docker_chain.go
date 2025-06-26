@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	sdkmath "cosmossdk.io/math"
 	"fmt"
@@ -238,30 +239,26 @@ func (c *Chain) Start(ctx context.Context) error {
 
 // startAndInitializeNodes initializes and starts all chain nodes, configures genesis files, and ensures proper setup for the chain.
 func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
-
-	genesisAmounts := make([][]sdk.Coin, len(c.Validators))
-	genesisSelfDelegation := make([]sdk.Coin, len(c.Validators))
-
-	for i := range c.Validators {
-		genesisAmounts[i] = []sdk.Coin{{Amount: sdkmath.NewInt(10_000_000_000_000), Denom: c.cfg.ChainConfig.Denom}}
-		genesisSelfDelegation[i] = sdk.Coin{Amount: sdkmath.NewInt(5_000_000), Denom: c.cfg.ChainConfig.Denom}
-	}
+	c.started = true
+	defaultGenesisAmount := sdk.NewCoins(sdk.NewCoin(c.cfg.ChainConfig.Denom, sdkmath.NewInt(10_000_000_000_000)))
+	defaultGenesisSelfDelegation := sdk.NewCoin(c.cfg.ChainConfig.Denom, sdkmath.NewInt(5_000_000))
 
 	eg := new(errgroup.Group)
-	// Initialize config and sign gentx for each validator.
-	for i, v := range c.Validators {
+	// initialize config and sign gentx for each validator.
+	for _, v := range c.Validators {
 		v.Validator = true
 		eg.Go(func() error {
 			if err := v.initFullNodeFiles(ctx); err != nil {
 				return err
 			}
-
-			// if no genesis bytes have been provided, we create a key and run gentx.
-			if c.cfg.ChainConfig.GenesisFileBz == nil {
-				return v.initValidatorGenTx(ctx, genesisAmounts[i], genesisSelfDelegation[i])
-			}
-
-			return nil
+			return v.initValidatorGenTx(ctx, defaultGenesisAmount, defaultGenesisSelfDelegation)
+		})
+	}
+	// initialize config for each full node.
+	for _, n := range c.FullNodes {
+		n.Validator = false
+		eg.Go(func() error {
+			return n.initFullNodeFiles(ctx)
 		})
 	}
 
@@ -270,23 +267,56 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	chainNodes := c.Nodes()
+	// for the validators we need to collect the gentxs and the accounts
+	// to the first node's genesis file
+	validator0 := c.Validators[0]
+	for i := 1; i < len(c.Validators); i++ {
+		validatorN := c.Validators[i]
 
-	for _, cn := range chainNodes {
-		// if a custom genesis file is provided, we use it directly, otherwise we just use whatever is generated
-		// during the init process.
-		if c.cfg.ChainConfig.GenesisFileBz != nil {
-			if err := cn.overwriteGenesisFile(ctx, c.cfg.ChainConfig.GenesisFileBz); err != nil {
-				return err
-			}
+		bech32, err := validatorN.accountKeyBech32(ctx, valKey)
+		if err != nil {
+			return err
 		}
 
-		// if a custom private validator key has been provided, we will write it to priv_validator_key.json
-		// otherwise, we will let one be generated.
-		if cn.PrivValidatorKey != nil {
-			// overwrite private validator key after init but before container creation.
-			// TODO: move this to default post init.
-			if err := cn.overwritePrivValidatorKey(ctx); err != nil {
+		if err := validator0.addGenesisAccount(ctx, bech32, defaultGenesisAmount); err != nil {
+			return err
+		}
+
+		if err := validatorN.copyGentx(ctx, validator0); err != nil {
+			return err
+		}
+	}
+
+	// create the faucet wallet, this can be used to fund new wallets in the tests.
+	wallet, err := c.CreateWallet(ctx, consts.FaucetAccountKeyName)
+	if err != nil {
+		return fmt.Errorf("failed to create faucet wallet: %w", err)
+	}
+	c.faucetWallet = wallet
+
+	if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
+		return err
+	}
+
+	if err := validator0.collectGentxs(ctx); err != nil {
+		return err
+	}
+
+	genbz, err := validator0.genesisFileContent(ctx)
+	if err != nil {
+		return err
+	}
+
+	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
+
+	chainNodes := c.Nodes()
+
+	// for all chain nodes, execute any functions provided.
+	// these can do things like override or modify the genesis file,
+	// override validator_private_key.json etc.
+	for _, cn := range chainNodes {
+		for _, fn := range cn.PostInit {
+			if err := fn(ctx, cn); err != nil {
 				return err
 			}
 		}
@@ -326,7 +356,6 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	c.started = true
 	// Wait for blocks before considering the chains "started"
 	return wait.ForBlocks(ctx, 2, c.GetNode())
 }

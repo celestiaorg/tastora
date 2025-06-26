@@ -181,12 +181,13 @@ func (tn *ChainNode) initFullNodeFiles(ctx context.Context) error {
 		return err
 	}
 
-	for i, fn := range tn.PostInit {
-		if err := fn(ctx, tn); err != nil {
-			return fmt.Errorf("post init function %d: %w", i, err)
-		}
-	}
+	//for i, fn := range tn.PostInit {
+	//	if err := fn(ctx, tn); err != nil {
+	//		return fmt.Errorf("post init function %d: %w", i, err)
+	//	}
+	//}
 
+	// return tn.setTestConfig(ctx)
 	return nil
 }
 
