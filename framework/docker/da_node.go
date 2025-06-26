@@ -20,15 +20,12 @@ import (
 var _ types.DANode = &DANode{}
 
 const (
-	daNodeRPCPort = "26658/tcp"
-	daNodeP2PPort = "2121/tcp"
+	// Default port numbers (without /tcp suffix)
+	defaultDANodeRPCPort = "26658" // Default RPC port for DANode
+	defaultDANodeP2PPort = "2121"  // Default P2P port for DANode
+	defaultCoreRPCPort   = "26657" // Default RPC port for Core
+	defaultCoreGRPCPort  = "9090"  // Default GRPC port for Core
 )
-
-// daNodePorts defines the default port mappings for the DANode's RPC and P2P communication.
-var daNodePorts = nat.PortMap{
-	nat.Port(daNodeRPCPort): {},
-	nat.Port(daNodeP2PPort): {},
-}
 
 // newDANode initializes and returns a new DANode instance using the provided context, test name, and configuration.
 func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeType types.DANodeType) (*DANode, error) {
@@ -349,7 +346,7 @@ func (n *DANode) getRPCPort() string {
 	if n.cfg.DataAvailabilityNetworkConfig.DefaultRPCPort != "" {
 		return n.cfg.DataAvailabilityNetworkConfig.DefaultRPCPort + "/tcp"
 	}
-	return "26658/tcp"
+	return defaultDANodeRPCPort + "/tcp"
 }
 
 // getP2PPort returns the P2P port for this node, with per-node config taking priority over network defaults
@@ -360,7 +357,7 @@ func (n *DANode) getP2PPort() string {
 	if n.cfg.DataAvailabilityNetworkConfig.DefaultP2PPort != "" {
 		return n.cfg.DataAvailabilityNetworkConfig.DefaultP2PPort + "/tcp"
 	}
-	return "2121/tcp"
+	return defaultDANodeP2PPort + "/tcp"
 }
 
 // getCoreRPCPort returns the core RPC port this node should connect to
@@ -371,7 +368,7 @@ func (n *DANode) getCoreRPCPort() string {
 	if n.cfg.DataAvailabilityNetworkConfig.DefaultCoreRPCPort != "" {
 		return n.cfg.DataAvailabilityNetworkConfig.DefaultCoreRPCPort
 	}
-	return "26657"
+	return defaultCoreRPCPort
 }
 
 // getCoreGRPCPort returns the core GRPC port this node should connect to
@@ -382,7 +379,7 @@ func (n *DANode) getCoreGRPCPort() string {
 	if n.cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort != "" {
 		return n.cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort
 	}
-	return "9090"
+	return defaultCoreGRPCPort
 }
 
 // getPortMap returns the port mapping for this node using configurable ports

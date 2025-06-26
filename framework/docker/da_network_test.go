@@ -244,7 +244,7 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 
 		err = chain.Start(ctx)
 		s.Require().NoError(err)
-		defer chain.Stop(ctx)
+		defer func() { _ = chain.Stop(ctx) }()
 
 		daNetwork, err := provider.GetDataAvailabilityNetwork(ctx)
 		s.Require().NoError(err)
@@ -275,7 +275,7 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 
 		err = chain.Start(ctx)
 		s.Require().NoError(err)
-		defer chain.Stop(ctx)
+		defer func() { _ = chain.Stop(ctx) }()
 
 		daNetwork, err := provider.GetDataAvailabilityNetwork(ctx)
 		s.Require().NoError(err)
@@ -306,7 +306,7 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 
 		err = chain.Start(ctx)
 		s.Require().NoError(err)
-		defer chain.Stop(ctx)
+		defer func() { _ = chain.Stop(ctx) }()
 
 		daNetwork, err := provider.GetDataAvailabilityNetwork(ctx)
 		s.Require().NoError(err)
@@ -335,7 +335,7 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 
 		err = chain.Start(ctx)
 		s.Require().NoError(err)
-		defer chain.Stop(ctx)
+		defer func() { _ = chain.Stop(ctx) }()
 
 		daNetwork, err := provider.GetDataAvailabilityNetwork(ctx)
 		s.Require().NoError(err)
