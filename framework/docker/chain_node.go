@@ -6,7 +6,6 @@ import (
 	"fmt"
 	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/config"
-	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
 	cometcfg "github.com/cometbft/cometbft/config"
 	tmjson "github.com/cometbft/cometbft/libs/json"
@@ -181,14 +180,7 @@ func (tn *ChainNode) initFullNodeFiles(ctx context.Context) error {
 		return err
 	}
 
-	//for i, fn := range tn.PostInit {
-	//	if err := fn(ctx, tn); err != nil {
-	//		return fmt.Errorf("post init function %d: %w", i, err)
-	//	}
-	//}
-
-	// return tn.setTestConfig(ctx)
-	return nil
+	return tn.setTestConfig(ctx)
 }
 
 // binCommand is a helper to retrieve a full command for a chain node binary.
@@ -226,6 +218,7 @@ func (tn *ChainNode) initHomeFolder(ctx context.Context) error {
 func (tn *ChainNode) setTestConfig(ctx context.Context) error {
 	err := config.Modify(ctx, tn, "config/config.toml", func(cfg *cometcfg.Config) {
 		cfg.LogLevel = "info"
+		cfg.TxIndex.Indexer = "kv"
 		cfg.P2P.AllowDuplicateIP = true
 		cfg.P2P.AddrBookStrict = false
 
@@ -345,22 +338,9 @@ func (tn *ChainNode) stop(ctx context.Context) error {
 
 // setPeers modifies the config persistent_peers for a node.
 func (tn *ChainNode) setPeers(ctx context.Context, peers string) error {
-	c := make(toml.Toml)
-	p2p := make(toml.Toml)
-
-	// Set peers
-	p2p["persistent_peers"] = peers
-	c["p2p"] = p2p
-
-	return ModifyConfigFile(
-		ctx,
-		tn.logger(),
-		tn.ContainerNode.DockerClient,
-		tn.ContainerNode.TestName,
-		tn.VolumeName,
-		"config/config.toml",
-		c,
-	)
+	return config.Modify(ctx, tn, "config/config.toml", func(cfg *cometcfg.Config) {
+		cfg.P2P.PersistentPeers = peers
+	})
 }
 
 // createNodeContainer initializes but does not start a container for the ChainNode with the specified configuration and context.

@@ -6,7 +6,6 @@ import (
 	"github.com/moby/moby/client"
 	"testing"
 
-	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/cosmos/cosmos-sdk/x/auth"
@@ -60,10 +59,6 @@ func (s *DockerTestSuite) CreateDockerProvider(opts ...ConfigOption) *Provider {
 		DockerClient:    s.dockerClient,
 		DockerNetworkID: s.networkID,
 		ChainConfig: &ChainConfig{
-			ConfigFileOverrides: map[string]any{
-				"config/app.toml":    appOverrides(),
-				"config/config.toml": configOverrides(),
-			},
 			Type:          "celestia",
 			Name:          "celestia",
 			Version:       "v4.0.0-rc6",
@@ -136,23 +131,6 @@ func (s *DockerTestSuite) getGenesisHash(ctx context.Context) string {
 	genesisHash := block.Block.Header.Hash().String()
 	s.Require().NotEmpty(genesisHash, "genesis hash is empty")
 	return genesisHash
-}
-
-// enable indexing of transactions so Broadcasting of transactions works.
-func appOverrides() toml.Toml {
-	tomlCfg := make(toml.Toml)
-	txIndex := make(toml.Toml)
-	txIndex["indexer"] = "kv"
-	tomlCfg["tx-index"] = txIndex
-	return tomlCfg
-}
-
-func configOverrides() toml.Toml {
-	tomlCfg := make(toml.Toml)
-	txIndex := make(toml.Toml)
-	txIndex["indexer"] = "kv"
-	tomlCfg["tx_index"] = txIndex
-	return tomlCfg
 }
 
 // TestPerNodeDifferentImages tests that nodes can be deployed with different Docker images

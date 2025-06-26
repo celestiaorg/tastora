@@ -310,6 +310,11 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
 
 	chainNodes := c.Nodes()
+	for _, cn := range chainNodes {
+		if err := cn.overwriteGenesisFile(ctx, genbz); err != nil {
+			return err
+		}
+	}
 
 	// for all chain nodes, execute any functions provided.
 	// these can do things like override or modify the genesis file,
