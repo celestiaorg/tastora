@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -195,27 +196,27 @@ func (rn *RollkitNode) GetHostName() string {
 
 // GetHostRPCPort returns the host RPC port
 func (rn *RollkitNode) GetHostRPCPort() string {
-	return rn.hostRPCPort
+	return strings.Replace(rn.hostRPCPort, "0.0.0.0:", "", -1)
 }
 
 // GetHostAPIPort returns the host API port
 func (rn *RollkitNode) GetHostAPIPort() string {
-	return rn.hostAPIPort
+	return strings.Replace(rn.hostAPIPort, "0.0.0.0:", "", -1)
 }
 
 // GetHostGRPCPort returns the host GRPC port
 func (rn *RollkitNode) GetHostGRPCPort() string {
-	return rn.hostGRPCPort
+	return strings.Replace(rn.hostGRPCPort, "0.0.0.0:", "", -1)
 }
 
 // GetHostP2PPort returns the host P2P port
 func (rn *RollkitNode) GetHostP2PPort() string {
-	return rn.hostP2PPort
+	return strings.Replace(rn.hostP2PPort, "0.0.0.0:", "", -1)
 }
 
 // GetHostHTTPPort returns the host HTTP port
 func (rn *RollkitNode) GetHostHTTPPort() string {
-	return rn.hostHTTPPort
+	return strings.Replace(rn.hostHTTPPort, "0.0.0.0:", "", -1)
 }
 
 // waitForNodeReady polls the health endpoint until the node is ready or timeout is reached
