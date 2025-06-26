@@ -27,7 +27,7 @@ type NodeConfig struct {
 	// privValidatorKey contains the private validator key bytes for this specific node
 	privValidatorKey []byte
 	// postInit functions are executed sequentially after the node is initialized.
-	postInit []func(node *ChainNode) error
+	postInit []func(ctx context.Context, node *ChainNode) error
 }
 
 // ChainNodeConfigBuilder provides a fluent interface for building NodeConfig
@@ -71,7 +71,7 @@ func (b *ChainNodeConfigBuilder) WithPrivValidatorKey(privValKey []byte) *ChainN
 }
 
 // WithPostInit sets the post init functions.
-func (b *ChainNodeConfigBuilder) WithPostInit(postInitFns ...func(node *ChainNode) error) *ChainNodeConfigBuilder {
+func (b *ChainNodeConfigBuilder) WithPostInit(postInitFns ...func(ctx context.Context, node *ChainNode) error) *ChainNodeConfigBuilder {
 	b.config.postInit = postInitFns
 	return b
 }
@@ -312,6 +312,20 @@ func (b *ChainBuilder) newChainNode(
 	return tn, nil
 }
 
+//func (b *ChainBuilder) getPostInitFunctions(nodeConfig NodeConfig) []func(ctx context.Context, node *ChainNode) error {
+//
+//	// a custom genesis
+//	if b.genesisBz != nil {
+//
+//	}
+//
+//	// no custom priv validator key has been provided
+//	if nodeConfig.privValidatorKey == nil {
+//
+//	}
+//
+//}
+
 func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig, index int) *ChainNode {
 	// use a default home directory if name is not set
 	homeDir := "/var/cosmos-chain"
@@ -319,14 +333,8 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig
 		homeDir = path.Join("/var/cosmos-chain", b.name)
 	}
 
-	params := ChainNodeParams{
-		Logger:              log,
+	chainParams := ChainNodeParams{
 		Validator:           nodeConfig.validator,
-		DockerClient:        b.dockerClient,
-		DockerNetworkID:     b.dockerNetworkID,
-		TestName:            b.t.Name(),
-		Image:               nodeConfig.image,
-		Index:               index,
 		ChainID:             b.chainID,
 		BinaryName:          b.binaryName,
 		CoinType:            b.coinType,
@@ -336,19 +344,18 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig
 		AdditionalStartArgs: nodeConfig.additionalStartArgs,
 		EncodingConfig:      b.encodingConfig,
 		ChainNodeConfig:     nil, // No per-node config by default
-		HomeDir:             homeDir,
 		GenesisKeyring:      nil, // Will be set below if validator
 		ValidatorIndex:      index,
 		PrivValidatorKey:    nodeConfig.privValidatorKey, // Set from node config
-		postInit:            nodeConfig.postInit,
+		PostInit:            nodeConfig.postInit,
 	}
 
 	// Set genesis keyring if this is a validator
 	if nodeConfig.validator && b.genesisKeyring != nil {
-		params.GenesisKeyring = b.genesisKeyring
+		chainParams.GenesisKeyring = b.genesisKeyring
 	}
 
-	return NewChainNode(params)
+	return NewChainNode(log, b.dockerClient, b.dockerNetworkID, b.t.Name(), nodeConfig.image, homeDir, index, chainParams)
 }
 
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume
@@ -506,7 +513,7 @@ func (b *ChainBuilder) validatePreloadedKeys(ctx context.Context, node *ChainNod
 	}
 
 	// Create a temporary container to test key access
-	job := NewImage(b.logger, b.dockerClient, b.dockerNetworkID, b.t.Name(), node.Image.Repository, node.Image.Version)
+	job := NewImage(b.logger, b.dockerClient, b.dockerNetworkID, b.t.Name(), node.ContainerNode.Image.Repository, node.ContainerNode.Image.Version)
 	opts := ContainerOptions{
 		Env:   []string{},
 		Binds: []string{fmt.Sprintf("%s:%s", node.VolumeName, node.homeDir)},

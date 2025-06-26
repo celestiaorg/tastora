@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	sdkmath "cosmossdk.io/math"
 	"fmt"
 	"github.com/celestiaorg/go-square/v2/share"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
@@ -183,8 +184,8 @@ func (c *Chain) AddFullNodes(ctx context.Context, configFileOverrides map[string
 				if err := ModifyConfigFile(
 					ctx,
 					fn.logger(),
-					fn.DockerClient,
-					fn.TestName,
+					fn.ContainerNode.DockerClient,
+					fn.ContainerNode.TestName,
 					fn.VolumeName,
 					configFile,
 					modifiedToml,
@@ -237,36 +238,29 @@ func (c *Chain) Start(ctx context.Context) error {
 
 // startAndInitializeNodes initializes and starts all chain nodes, configures genesis files, and ensures proper setup for the chain.
 func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
-	cfg := c.cfg
-	c.started = true
 
-	configFileOverrides := cfg.ChainConfig.ConfigFileOverrides
+	genesisAmounts := make([][]sdk.Coin, len(c.Validators))
+	genesisSelfDelegation := make([]sdk.Coin, len(c.Validators))
+
+	for i := range c.Validators {
+		genesisAmounts[i] = []sdk.Coin{{Amount: sdkmath.NewInt(10_000_000_000_000), Denom: c.cfg.ChainConfig.Denom}}
+		genesisSelfDelegation[i] = sdk.Coin{Amount: sdkmath.NewInt(5_000_000), Denom: c.cfg.ChainConfig.Denom}
+	}
 
 	eg := new(errgroup.Group)
 	// Initialize config and sign gentx for each validator.
-	for _, v := range c.Validators {
+	for i, v := range c.Validators {
 		v.Validator = true
 		eg.Go(func() error {
 			if err := v.initFullNodeFiles(ctx); err != nil {
 				return err
 			}
-			for configFile, modifiedConfig := range configFileOverrides {
-				modifiedToml, ok := modifiedConfig.(toml.Toml)
-				if !ok {
-					return fmt.Errorf("provided toml override for file %s is of type (%T). Expected (DecodedToml)", configFile, modifiedConfig)
-				}
-				if err := ModifyConfigFile(
-					ctx,
-					c.cfg.Logger,
-					v.DockerClient,
-					v.TestName,
-					v.VolumeName,
-					configFile,
-					modifiedToml,
-				); err != nil {
-					return fmt.Errorf("failed to modify toml config file: %w", err)
-				}
+
+			// if no genesis bytes have been provided, we create a key and run gentx.
+			if c.cfg.ChainConfig.GenesisFileBz == nil {
+				return v.initValidatorGenTx(ctx, genesisAmounts[i], genesisSelfDelegation[i])
 			}
+
 			return nil
 		})
 	}
@@ -279,12 +273,22 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	chainNodes := c.Nodes()
 
 	for _, cn := range chainNodes {
-		if err := cn.overwriteGenesisFile(ctx, c.cfg.ChainConfig.GenesisFileBz); err != nil {
-			return err
+		// if a custom genesis file is provided, we use it directly, otherwise we just use whatever is generated
+		// during the init process.
+		if c.cfg.ChainConfig.GenesisFileBz != nil {
+			if err := cn.overwriteGenesisFile(ctx, c.cfg.ChainConfig.GenesisFileBz); err != nil {
+				return err
+			}
 		}
-		// Overwrite private validator key after init but before container creation
-		if err := cn.overwritePrivValidatorKey(ctx); err != nil {
-			return err
+
+		// if a custom private validator key has been provided, we will write it to priv_validator_key.json
+		// otherwise, we will let one be generated.
+		if cn.PrivValidatorKey != nil {
+			// overwrite private validator key after init but before container creation.
+			// TODO: move this to default post init.
+			if err := cn.overwritePrivValidatorKey(ctx); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -322,6 +326,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
+	c.started = true
 	// Wait for blocks before considering the chains "started"
 	return wait.ForBlocks(ctx, 2, c.GetNode())
 }
@@ -370,10 +375,10 @@ func (c *Chain) Stop(ctx context.Context) error {
 func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
 	c.cfg.ChainConfig.Images[0].Version = version
 	for _, n := range c.Validators {
-		n.Image.Version = version
+		n.ContainerNode.Image.Version = version
 	}
 	for _, n := range c.FullNodes {
-		n.Image.Version = version
+		n.ContainerNode.Image.Version = version
 	}
 	c.pullImages(ctx)
 }
@@ -436,14 +441,8 @@ func (c *Chain) newChainNode(
 ) (*ChainNode, error) {
 	// Construct the ChainNode first so we can access its name.
 	// The ChainNode's VolumeName cannot be set until after we create the volume.
-	params := ChainNodeParams{
-		Logger:              c.log,
+	chainParams := ChainNodeParams{
 		Validator:           validator,
-		DockerClient:        c.cfg.DockerClient,
-		DockerNetworkID:     c.cfg.DockerNetworkID,
-		TestName:            testName,
-		Image:               image,
-		Index:               index,
 		ChainID:             c.cfg.ChainConfig.ChainID,
 		BinaryName:          c.cfg.ChainConfig.Bin,
 		CoinType:            c.cfg.ChainConfig.CoinType,
@@ -453,17 +452,17 @@ func (c *Chain) newChainNode(
 		AdditionalStartArgs: c.cfg.ChainConfig.AdditionalStartArgs,
 		EncodingConfig:      c.cfg.ChainConfig.EncodingConfig,
 		ChainNodeConfig:     nil, // Will be set if per-node config exists
-		HomeDir:             path.Join("/var/cosmos-chain", c.cfg.ChainConfig.Name),
 	}
 
 	// Set per-node config if it exists
 	if c.cfg.ChainConfig.ChainNodeConfigs != nil {
 		if nodeConfig, ok := c.cfg.ChainConfig.ChainNodeConfigs[index]; ok {
-			params.ChainNodeConfig = nodeConfig
+			chainParams.ChainNodeConfig = nodeConfig
 		}
 	}
 
-	tn := NewChainNode(params)
+	homeDir := path.Join("/var/cosmos-chain", c.cfg.ChainConfig.Name)
+	tn := NewChainNode(c.log, c.cfg.DockerClient, c.cfg.DockerNetworkID, testName, image, homeDir, index, chainParams)
 
 	v, err := c.cfg.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 		Labels: map[string]string{

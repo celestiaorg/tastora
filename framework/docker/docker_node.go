@@ -8,8 +8,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// node contains the fields and shared methods for docker nodes. (app nodes & bridge nodes)
-type node struct {
+// ContainerNode contains the fields and shared methods for docker nodes. (app nodes & bridge nodes)
+type ContainerNode struct {
 	VolumeName         string
 	NetworkID          string
 	DockerClient       *dockerclient.Client
@@ -22,8 +22,8 @@ type node struct {
 	logger             *zap.Logger
 }
 
-// newNode creates a new node instance with the required parameters.
-func newNode(
+// newContainerNode creates a new ContainerNode instance with the required parameters.
+func newContainerNode(
 	networkID string,
 	dockerClient *dockerclient.Client,
 	testName string,
@@ -32,8 +32,8 @@ func newNode(
 	idx int,
 	nodeType string,
 	logger *zap.Logger,
-) *node {
-	return &node{
+) *ContainerNode {
+	return &ContainerNode{
 		NetworkID:    networkID,
 		DockerClient: dockerClient,
 		TestName:     testName,
@@ -46,7 +46,7 @@ func newNode(
 }
 
 // exec runs a command in the node's container.
-func (n *node) exec(ctx context.Context, logger *zap.Logger, cmd []string, env []string) ([]byte, []byte, error) {
+func (n *ContainerNode) exec(ctx context.Context, logger *zap.Logger, cmd []string, env []string) ([]byte, []byte, error) {
 	job := NewImage(logger, n.DockerClient, n.NetworkID, n.TestName, n.Image.Repository, n.Image.Version)
 	opts := ContainerOptions{
 		Env:   env,
@@ -60,32 +60,32 @@ func (n *node) exec(ctx context.Context, logger *zap.Logger, cmd []string, env [
 }
 
 // bind returns the home folder bind point for running the node.
-func (n *node) bind() []string {
+func (n *ContainerNode) bind() []string {
 	return []string{fmt.Sprintf("%s:%s", n.VolumeName, n.homeDir)}
 }
 
 // GetType returns the node type as a string.
-func (n *node) GetType() string {
+func (n *ContainerNode) GetType() string {
 	return n.nodeType
 }
 
 // removeContainer gracefully stops and removes the container associated with the node using the provided context.
-func (n *node) removeContainer(ctx context.Context) error {
+func (n *ContainerNode) removeContainer(ctx context.Context) error {
 	return n.containerLifecycle.RemoveContainer(ctx)
 }
 
 // stopContainer gracefully stops the container associated with the node using the provided context.
-func (n *node) stopContainer(ctx context.Context) error {
+func (n *ContainerNode) stopContainer(ctx context.Context) error {
 	return n.containerLifecycle.StopContainer(ctx)
 }
 
 // startContainer starts the container associated with the node using the provided context.
-func (n *node) startContainer(ctx context.Context) error {
+func (n *ContainerNode) startContainer(ctx context.Context) error {
 	return n.containerLifecycle.StartContainer(ctx)
 }
 
 // ReadFile reads a file from the node's container volume at the given relative path.
-func (n *node) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
+func (n *ContainerNode) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
 	fr := file.NewRetriever(n.logger, n.DockerClient, n.TestName)
 	content, err := fr.SingleFileContent(ctx, n.VolumeName, relPath)
 	if err != nil {
@@ -97,7 +97,17 @@ func (n *node) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
 // WriteFile accepts file contents in a byte slice and writes the contents to
 // the docker filesystem. relPath describes the location of the file in the
 // docker volume relative to the home directory.
-func (n *node) WriteFile(ctx context.Context, relPath string, content []byte) error {
+func (n *ContainerNode) WriteFile(ctx context.Context, relPath string, content []byte) error {
 	fw := file.NewWriter(n.logger, n.DockerClient, n.TestName)
 	return fw.WriteFile(ctx, n.VolumeName, relPath, content)
+}
+
+// Name of the test node container.
+func (n *ContainerNode) Name() string {
+	return fmt.Sprintf("%s-%d-%s", n.GetType(), n.Index, SanitizeContainerName(n.TestName))
+}
+
+// HostName of the test node container.
+func (n *ContainerNode) HostName() string {
+	return CondenseHostName(n.Name())
 }

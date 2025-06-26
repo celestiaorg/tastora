@@ -40,9 +40,9 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 		zap.String("node_type", nodeType.String()),
 	)
 	daNode := &DANode{
-		cfg:      cfg,
-		nodeType: nodeType,
-		node:     newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String(), logger),
+		cfg:           cfg,
+		nodeType:      nodeType,
+		ContainerNode: newContainerNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String(), logger),
 	}
 
 	daNode.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name())
@@ -77,7 +77,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 
 // DANode is a docker implementation of a celestia bridge node.
 type DANode struct {
-	*node
+	*ContainerNode
 	cfg            Config
 	mu             sync.Mutex
 	hasBeenStarted bool
@@ -164,16 +164,6 @@ func (n *DANode) startAndInitialize(ctx context.Context, opts ...types.DANodeSta
 
 	n.hasBeenStarted = true
 	return nil
-}
-
-// Name of the test node container.
-func (n *node) Name() string {
-	return fmt.Sprintf("%s-%d-%s", n.GetType(), n.Index, SanitizeContainerName(n.TestName))
-}
-
-// HostName of the test node container.
-func (n *node) HostName() string {
-	return CondenseHostName(n.Name())
 }
 
 // ModifyConfigFiles modifies the specified config files with the provided TOML modifications.

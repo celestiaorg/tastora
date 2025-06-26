@@ -16,14 +16,8 @@ func TestChainNodeHostName(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	// Create nodes with different indices
-	node1 := NewChainNode(ChainNodeParams{
-		Logger:          logger,
+	chainParams1 := ChainNodeParams{
 		Validator:       true,
-		DockerClient:    &dockerclient.Client{},
-		DockerNetworkID: "test-network",
-		TestName:        testName,
-		Image:           DockerImage{},
-		Index:           0,
 		ChainID:         chainID,
 		BinaryName:      "test-binary",
 		CoinType:        "118",
@@ -33,17 +27,11 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
 		ChainNodeConfig: nil,
-		HomeDir:         "/test/home",
-	})
+	}
+	node1 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 0, chainParams1)
 
-	node2 := NewChainNode(ChainNodeParams{
-		Logger:          logger,
+	chainParams2 := ChainNodeParams{
 		Validator:       true,
-		DockerClient:    &dockerclient.Client{},
-		DockerNetworkID: "test-network",
-		TestName:        testName,
-		Image:           DockerImage{},
-		Index:           1,
 		ChainID:         chainID,
 		BinaryName:      "test-binary",
 		CoinType:        "118",
@@ -53,17 +41,11 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
 		ChainNodeConfig: nil,
-		HomeDir:         "/test/home",
-	})
+	}
+	node2 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 1, chainParams2)
 
-	node3 := NewChainNode(ChainNodeParams{
-		Logger:          logger,
+	chainParams3 := ChainNodeParams{
 		Validator:       false,
-		DockerClient:    &dockerclient.Client{},
-		DockerNetworkID: "test-network",
-		TestName:        testName,
-		Image:           DockerImage{},
-		Index:           2,
 		ChainID:         chainID,
 		BinaryName:      "test-binary",
 		CoinType:        "118",
@@ -73,8 +55,8 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
 		ChainNodeConfig: nil,
-		HomeDir:         "/test/home",
-	})
+	}
+	node3 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 2, chainParams3)
 
 	// get hostnames
 	hostname1 := node1.HostName()

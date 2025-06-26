@@ -109,7 +109,7 @@ func (b *broadcaster) GetClientContext(ctx context.Context, wallet types.Wallet)
 	_, ok := b.keyrings[wallet]
 	if !ok {
 		containerKeyringDir := path.Join(cn.homeDir, "keyring-test")
-		kr := dockerinternal.NewDockerKeyring(cn.DockerClient, cn.containerLifecycle.ContainerID(), containerKeyringDir, cn.encodingConfig.Codec)
+		kr := dockerinternal.NewDockerKeyring(cn.ContainerNode.DockerClient, cn.containerLifecycle.ContainerID(), containerKeyringDir, cn.EncodingConfig.Codec)
 		b.keyrings[wallet] = kr
 	}
 
