@@ -13,6 +13,7 @@ import (
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/moby/moby/client"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 	"os"
 	"path"
 	"testing"
@@ -100,6 +101,7 @@ type ChainBuilder struct {
 	genesisKeyring keyring.Keyring
 }
 
+// NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
 func NewChainBuilder(t *testing.T) *ChainBuilder {
 	t.Helper()
 	cb := &ChainBuilder{}
@@ -108,7 +110,9 @@ func NewChainBuilder(t *testing.T) *ChainBuilder {
 		WithBinaryName("celestia-appd").
 		WithCoinType("118").
 		WithGasPrices("0.025utia").
-		WithChainID("test")
+		WithChainID("test").
+		WithLogger(zaptest.NewLogger(t)).
+		WithName("celestia")
 }
 
 func (b *ChainBuilder) WithName(name string) *ChainBuilder {
@@ -213,7 +217,6 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 	registry := codectypes.NewInterfaceRegistry()
 	cryptocodec.RegisterInterfaces(registry)
 	cdc := codec.NewProtoCodec(registry)
-	//kr := keyring.NewInMemory(cdc)
 
 	nodes, err := b.initializeChainNodes(ctx)
 	if err != nil {
@@ -312,20 +315,6 @@ func (b *ChainBuilder) newChainNode(
 	return tn, nil
 }
 
-//func (b *ChainBuilder) getPostInitFunctions(nodeConfig NodeConfig) []func(ctx context.Context, node *ChainNode) error {
-//
-//	// a custom genesis
-//	if b.genesisBz != nil {
-//
-//	}
-//
-//	// no custom priv validator key has been provided
-//	if nodeConfig.privValidatorKey == nil {
-//
-//	}
-//
-//}
-
 func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig, index int) *ChainNode {
 	// use a default home directory if name is not set
 	homeDir := "/var/cosmos-chain"
@@ -360,10 +349,6 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig
 
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume
 func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNode, validatorIndex int) error {
-	b.logger.Info("starting keyring preload",
-		zap.String("node", node.Name()),
-		zap.Int("validator_index", validatorIndex),
-	)
 
 	// list all keys in the genesis keyring for debugging
 	if b.logger != nil {
