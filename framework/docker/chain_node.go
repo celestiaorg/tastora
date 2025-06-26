@@ -367,20 +367,11 @@ func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) e
 }
 
 // overwritePrivValidatorKey overwrites the private validator key after init
-func (tn *ChainNode) overwritePrivValidatorKey(ctx context.Context) error {
-	if tn.PrivValidatorKey == nil {
-		return nil // skip if no private validator key provided
-	}
-
-	tn.logger().Info("overwriting private validator key after init",
-		zap.Int("key_size", len(tn.PrivValidatorKey)),
-	)
-
-	err := tn.WriteFile(ctx, "config/priv_validator_key.json", tn.PrivValidatorKey)
+func (tn *ChainNode) overwritePrivValidatorKey(ctx context.Context, contents []byte) error {
+	err := tn.WriteFile(ctx, "config/priv_validator_key.json", contents)
 	if err != nil {
 		return fmt.Errorf("overwriting priv_validator_key.json: %w", err)
 	}
-
 	tn.logger().Info("successfully overwrote private validator key")
 	return nil
 }

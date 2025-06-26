@@ -269,6 +269,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 	// for the validators we need to collect the gentxs and the accounts
 	// to the first node's genesis file
+
 	validator0 := c.Validators[0]
 	for i := 1; i < len(c.Validators); i++ {
 		validatorN := c.Validators[i]
@@ -307,18 +308,31 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
+	finalGenesisBz := bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
 
 	chainNodes := c.Nodes()
 	for _, cn := range chainNodes {
-		if err := cn.overwriteGenesisFile(ctx, genbz); err != nil {
+
+		// test case is explicitly setting genesis bytes.
+		if c.cfg.ChainConfig.GenesisFileBz != nil {
+			finalGenesisBz = c.cfg.ChainConfig.GenesisFileBz
+		}
+
+		if err := cn.overwriteGenesisFile(ctx, finalGenesisBz); err != nil {
 			return err
+		}
+
+		// test case has explicitly set a priv_validator_key.json contents.
+		if cn.PrivValidatorKey != nil {
+			if err := cn.overwritePrivValidatorKey(ctx, cn.PrivValidatorKey); err != nil {
+				return err
+			}
 		}
 	}
 
 	// for all chain nodes, execute any functions provided.
-	// these can do things like override or modify the genesis file,
-	// override validator_private_key.json etc.
+	// these can do things like override config files or make any other modifications
+	// before the chain node starts.
 	for _, cn := range chainNodes {
 		for _, fn := range cn.PostInit {
 			if err := fn(ctx, cn); err != nil {
