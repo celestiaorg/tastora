@@ -168,9 +168,9 @@ func TestConfigurationOptions(t *testing.T) {
 		require.Equal(t, "9095", cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort)
 	})
 
-	t.Run("WithNonConflictingPorts uses predefined non-conflicting ports", func(t *testing.T) {
+	t.Run("WithDefaultPorts uses predefined default ports", func(t *testing.T) {
 		cfg := Config{}
-		option := WithNonConflictingPorts()
+		option := WithDefaultPorts()
 		option(&cfg)
 
 		require.NotNil(t, cfg.DataAvailabilityNetworkConfig)

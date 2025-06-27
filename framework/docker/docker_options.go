@@ -138,8 +138,8 @@ func WithNodePorts(nodeType types.DANodeType, nodeIndex int, rpcPort, p2pPort st
 	}
 }
 
-// SIMPLE: Common scenarios helper - uses non-conflicting ports
-func WithNonConflictingPorts() ConfigOption {
+// WithDefaultPorts configures the default ports for DA nodes
+func WithDefaultPorts() ConfigOption {
 	return func(cfg *Config) {
 		// Apply DA node ports
 		WithDANodePorts("26668", "2131")(cfg)

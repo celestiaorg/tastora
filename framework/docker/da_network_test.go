@@ -233,10 +233,10 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 
 	ctx := context.Background()
 
-	s.T().Run("test simple configuration with WithNonConflictingPorts", func(t *testing.T) {
+	s.T().Run("test simple configuration with WithDefaultPorts", func(t *testing.T) {
 		// Test the simple one-liner configuration
 		provider := s.CreateDockerProvider(
-			WithNonConflictingPorts(), // This should use ports 26668, 2131, 26667, 9091
+			WithDefaultPorts(), // This should use ports 26668, 2131, 26667, 9091
 		)
 
 		chain, err := provider.GetChain(ctx)
