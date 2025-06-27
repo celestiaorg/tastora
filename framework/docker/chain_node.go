@@ -354,15 +354,28 @@ func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
 		usingPorts[k] = v
 	}
 
-	return tn.containerLifecycle.CreateContainer(ctx, tn.ContainerNode.TestName, tn.NetworkID, tn.getImage(), usingPorts, "", tn.bind(), nil, tn.HostName(), cmd, tn.getEnv(), []string{})
+	return tn.containerLifecycle.CreateContainer(
+		ctx,
+		tn.TestName,
+		tn.NetworkID,
+		tn.Image,
+		usingPorts,
+		"",
+		tn.bind(),
+		nil,
+		tn.HostName(),
+		cmd, tn.Env,
+		[]string{},
+	)
 }
 
+// overwriteGenesisFile writes the provided content to the genesis.json file in the container's configuration directory.
+// returns an error if writing the file fails.
 func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) error {
 	err := tn.WriteFile(ctx, "config/genesis.json", content)
 	if err != nil {
 		return fmt.Errorf("overwriting genesis.json: %w", err)
 	}
-
 	return nil
 }
 

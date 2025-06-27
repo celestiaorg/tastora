@@ -21,8 +21,9 @@ import (
 
 type NodeConfig struct {
 	// validator is a flag indicating whether the node is a validator or a full node.
-	validator           bool
-	image               DockerImage
+	validator bool
+	// image overrides the chain's default image for this specific node (optional)
+	image               *DockerImage
 	additionalStartArgs []string
 	envVars             []string
 	// privValidatorKey contains the private validator key bytes for this specific node
@@ -47,9 +48,9 @@ func NewChainNodeConfigBuilder() *ChainNodeConfigBuilder {
 	}
 }
 
-// WithImage sets the Docker image for the node
+// WithImage sets the Docker image for the node (overrides chain default)
 func (b *ChainNodeConfigBuilder) WithImage(image DockerImage) *ChainNodeConfigBuilder {
-	b.config.image = image
+	b.config.image = &image
 	return b
 }
 
@@ -99,6 +100,8 @@ type ChainBuilder struct {
 	logger         *zap.Logger
 	// Optional keyring with pre-generated keys (e.g., from celestia-app testnode)
 	genesisKeyring keyring.Keyring
+	// Default Docker image for all nodes in the chain (can be overridden per node)
+	defaultImage *DockerImage
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -197,6 +200,27 @@ func (b *ChainBuilder) WithCoinType(coinType string) *ChainBuilder {
 func (b *ChainBuilder) WithGasPrices(gasPrices string) *ChainBuilder {
 	b.gasPrices = gasPrices
 	return b
+}
+
+// WithDefaultImage sets the default Docker image for all nodes in the chain
+func (b *ChainBuilder) WithDefaultImage(image DockerImage) *ChainBuilder {
+	b.defaultImage = &image
+	return b
+}
+
+// GetImage returns the appropriate Docker image for a node, using node-specific override if available,
+// otherwise falling back to the chain's default image
+func (b *ChainBuilder) GetImage(nodeConfig NodeConfig) DockerImage {
+	if nodeConfig.image != nil {
+		// Use node-specific image override
+		return *nodeConfig.image
+	}
+	if b.defaultImage != nil {
+		// Use chain default image
+		return *b.defaultImage
+	}
+	// this should not happen if the builder is used correctly
+	panic("no image specified: neither node-specific nor chain default image provided")
 }
 
 // AddValidator adds a single validator node configuration
@@ -344,7 +368,10 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig
 		chainParams.GenesisKeyring = b.genesisKeyring
 	}
 
-	return NewChainNode(log, b.dockerClient, b.dockerNetworkID, b.t.Name(), nodeConfig.image, homeDir, index, chainParams)
+	// Get the appropriate image using fallback logic
+	imageToUse := b.GetImage(nodeConfig)
+
+	return NewChainNode(log, b.dockerClient, b.dockerNetworkID, b.t.Name(), imageToUse, homeDir, index, chainParams)
 }
 
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume

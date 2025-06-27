@@ -312,7 +312,6 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 	chainNodes := c.Nodes()
 	for _, cn := range chainNodes {
-
 		// test case is explicitly setting genesis bytes.
 		if c.cfg.ChainConfig.GenesisFileBz != nil {
 			finalGenesisBz = c.cfg.ChainConfig.GenesisFileBz
