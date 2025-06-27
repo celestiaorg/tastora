@@ -422,10 +422,10 @@ func (c *Chain) Stop(ctx context.Context) error {
 func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
 	c.cfg.ChainConfig.Image.Version = version
 	for _, n := range c.Validators {
-		n.ContainerNode.Image.Version = version
+		n.Image.Version = version
 	}
 	for _, n := range c.FullNodes {
-		n.ContainerNode.Image.Version = version
+		n.Image.Version = version
 	}
 	c.pullImages(ctx)
 }
