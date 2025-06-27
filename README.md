@@ -70,11 +70,11 @@ func TestCelestiaNodes(t *testing.T) {
 For complex setups or when running multiple networks, you can configure custom ports:
 
 ```go
-// Use predefined non-conflicting ports
+// Use predefined default ports
 daNetwork, err := docker.NewDANetwork(
     ctx,
     "test-network",
-    docker.WithNonConflictingPorts(), // Uses ports 26668, 2131, 26667, 9091
+    docker.WithDefaultPorts(), // Uses ports 26668, 2131, 26667, 9091
 )
 
 // Or configure specific ports
@@ -89,8 +89,8 @@ daNetwork, err := docker.NewDANetwork(
 daNetwork, err := docker.NewDANetwork(
     ctx,
     "test-network",
-    docker.WithBridgeNodePorts(26658, 2121, 26657, 9090),
-    docker.WithLightNodePorts(26659, 2122, 26657, 9090),
+    docker.WithNodePorts(types.BridgeNode, 0, 26658, 2121),
+    docker.WithNodePorts(types.LightNode, 0, 26659, 2122),
 )
 ```
 
@@ -100,10 +100,10 @@ Tastora supports configurable internal ports for DA nodes, solving connectivity 
 
 ### Available Configuration Options
 
-- `WithNonConflictingPorts()` - Quick setup with predefined ports (26668, 2131, 26667, 9091)
+- `WithDefaultPorts()` - Quick setup with predefined ports (26668, 2131, 26667, 9091)
 - `WithDANodePorts(rpc, p2p)` - Configure DA node internal ports
-- `WithDANodeCoreConnection(host, rpc, grpc)` - Configure connection to celestia-app
-- `WithBridgeNodePorts()`, `WithLightNodePorts()`, `WithFullNodePorts()` - Per-node type configuration
+- `WithDANodeCoreConnection(rpc, grpc)` - Configure connection to celestia-app
+- `WithNodePorts(nodeType, nodeIndex, rpc, p2p)` - Configure ports for specific node type and index
 
 This addresses the issue where celestia bridge nodes fail to start when trying to connect to hardcoded `localhost:26657` in multi-server setups.
 
