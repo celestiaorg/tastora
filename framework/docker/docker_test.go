@@ -6,7 +6,6 @@ import (
 	"github.com/moby/moby/client"
 	"testing"
 
-	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/cosmos/cosmos-sdk/x/auth"
@@ -26,6 +25,7 @@ type DockerTestSuite struct {
 	encConfig    testutil.TestEncodingConfig
 	provider     *Provider
 	chain        types.Chain
+	builder      *ChainBuilder
 }
 
 // SetupSuite runs once before all tests in the suite.
@@ -43,6 +43,27 @@ func (s *DockerTestSuite) SetupSuite() {
 
 func (s *DockerTestSuite) SetupTest() {
 	s.dockerClient, s.networkID = DockerSetup(s.T())
+
+	defaultImage := DockerImage{
+		Repository: "ghcr.io/celestiaorg/celestia-app",
+		Version:    "v4.0.0-rc6",
+		UIDGID:     "10001:10001",
+	}
+
+	// create a build with a default set of args, any individual test can override/modify.
+	s.builder = NewChainBuilder(s.T()).
+		WithDockerClient(s.dockerClient).
+		WithDockerNetworkID(s.networkID).
+		WithDefaultImage(defaultImage).
+		WithEncodingConfig(&s.encConfig).
+		WithDefaultAdditionalStartArgs(
+			"--force-no-bbr",
+			"--grpc.enable",
+			"--grpc.address", "0.0.0.0:9090",
+			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
+			"--timeout-commit", "1s",
+		).
+		AddValidator(NewChainNodeConfigBuilder().Build())
 }
 
 // TearDownTest removes docker resources.
@@ -52,47 +73,10 @@ func (s *DockerTestSuite) TearDownTest() {
 
 // CreateDockerProvider returns a provider with configuration options applied to the default Celestia config.
 func (s *DockerTestSuite) CreateDockerProvider(opts ...ConfigOption) *Provider {
-	numValidators := 1
-	numFullNodes := 0
-
 	cfg := Config{
 		Logger:          s.logger,
 		DockerClient:    s.dockerClient,
 		DockerNetworkID: s.networkID,
-		ChainConfig: &ChainConfig{
-			ConfigFileOverrides: map[string]any{
-				"config/app.toml":    appOverrides(),
-				"config/config.toml": configOverrides(),
-			},
-			Type:          "celestia",
-			Name:          "celestia",
-			Version:       "v4.0.0-rc6",
-			NumValidators: &numValidators,
-			NumFullNodes:  &numFullNodes,
-			ChainID:       "test",
-			Images: []DockerImage{
-				{
-					Repository: "ghcr.io/celestiaorg/celestia-app",
-					Version:    "v4.0.0-rc6",
-					UIDGID:     "10001:10001",
-				},
-			},
-			Bin:            "celestia-appd",
-			Bech32Prefix:   "celestia",
-			Denom:          "utia",
-			CoinType:       "118",
-			GasPrices:      "0.025utia",
-			GasAdjustment:  1.3,
-			EncodingConfig: &s.encConfig,
-			AdditionalStartArgs: []string{
-				"--force-no-bbr",
-				"--grpc.enable",
-				"--grpc.address",
-				"0.0.0.0:9090",
-				"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
-				"--timeout-commit", "1s", // shorter block time.
-			},
-		},
 		DataAvailabilityNetworkConfig: &DataAvailabilityNetworkConfig{
 			FullNodeCount:   1,
 			BridgeNodeCount: 1,
@@ -138,63 +122,50 @@ func (s *DockerTestSuite) getGenesisHash(ctx context.Context) string {
 	return genesisHash
 }
 
-// enable indexing of transactions so Broadcasting of transactions works.
-func appOverrides() toml.Toml {
-	tomlCfg := make(toml.Toml)
-	txIndex := make(toml.Toml)
-	txIndex["indexer"] = "kv"
-	tomlCfg["tx-index"] = txIndex
-	return tomlCfg
-}
-
-func configOverrides() toml.Toml {
-	tomlCfg := make(toml.Toml)
-	txIndex := make(toml.Toml)
-	txIndex["indexer"] = "kv"
-	tomlCfg["tx_index"] = txIndex
-	return tomlCfg
-}
-
 // TestPerNodeDifferentImages tests that nodes can be deployed with different Docker images
 func (s *DockerTestSuite) TestPerNodeDifferentImages() {
-	defaultImage := DockerImage{
-		Repository: "ghcr.io/celestiaorg/celestia-app",
-		Version:    "v4.0.0-rc6",
-		UIDGID:     "10001:10001",
-	}
-
 	alternativeImage := DockerImage{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
-		Version:    "v4.0.0-rc5", // Different version
+		Version:    "v4.0.0-rc5", // different version from default
 		UIDGID:     "10001:10001",
 	}
 
-	// set up chain with 2 validators using different images
-	numValidators := 2
+	// create node configs with different images and settings
+	validator0Config := NewChainNodeConfigBuilder().
+		WithAdditionalStartArgs(
+			"--force-no-bbr",
+			"--grpc.enable",
+			"--grpc.address", "0.0.0.0:9090",
+			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
+			"--timeout-commit", "1s",
+			"--log_level", "info",
+		).
+		Build() // uses default image
 
+	validator1Config := NewChainNodeConfigBuilder().
+		WithImage(alternativeImage). // override with different image
+		WithAdditionalStartArgs(
+			"--force-no-bbr",
+			"--grpc.enable",
+			"--grpc.address", "0.0.0.0:9090",
+			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
+			"--timeout-commit", "1s",
+			"--log_level", "debug",
+		).
+		Build()
+
+	// Use builder directly - tests can modify as needed before calling Build
 	var err error
-	s.provider = s.CreateDockerProvider(
-		WithNumValidators(numValidators),
-		WithPerNodeConfig(map[int]*ChainNodeConfig{
-			0: {
-				Image:               &defaultImage, // first validator uses one image
-				AdditionalStartArgs: []string{"--force-no-bbr", "--log_level", "info"},
-			},
-			1: {
-				Image:               &alternativeImage, // second validator uses a different image
-				AdditionalStartArgs: []string{"--force-no-bbr", "--log_level", "debug"},
-			},
-		}),
-	)
-
-	s.chain, err = s.provider.GetChain(s.ctx)
+	s.chain, err = s.builder.
+		WithValidators(validator0Config, validator1Config).
+		Build(s.ctx)
 	s.Require().NoError(err)
 
 	err = s.chain.Start(s.ctx)
 	s.Require().NoError(err)
 
 	validatorNodes := s.chain.GetNodes()
-	s.Require().Len(validatorNodes, numValidators, "expected 2 validators")
+	s.Require().Len(validatorNodes, 2, "expected 2 validators")
 
 	// verify both validators are accessible
 	for i, node := range validatorNodes {

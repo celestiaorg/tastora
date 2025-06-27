@@ -42,7 +42,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 		WithPerBridgeNodeConfig(bridgeNodeConfigs),
 		WithPerFullNodeConfig(fullNodeConfigs),
 	)
-	s.chain, err = s.provider.GetChain(ctx)
+	s.chain, err = s.builder.Build(ctx)
 	s.Require().NoError(err)
 
 	err = s.chain.Start(ctx)
@@ -148,7 +148,7 @@ func (s *DockerTestSuite) TestModifyConfigFileDANetwork() {
 
 	var err error
 	s.provider = s.CreateDockerProvider()
-	s.chain, err = s.provider.GetChain(ctx)
+	s.chain, err = s.builder.Build(ctx)
 	s.Require().NoError(err)
 
 	err = s.chain.Start(ctx)

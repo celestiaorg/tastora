@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"io"
+	"path"
 	"sync"
 	"testing"
 )
@@ -140,13 +141,7 @@ func (c *Chain) AddNode(ctx context.Context, overrides map[string]any) error {
 // AddFullNodes adds new fullnodes to the network, peering with the existing nodes.
 func (c *Chain) AddFullNodes(ctx context.Context, configFileOverrides map[string]any, inc int) error {
 	// Get peer string for existing nodes
-
-	var peerAddressers []addressutil.PeerAddresser
-	for _, n := range c.Nodes() {
-		peerAddressers = append(peerAddressers, n)
-	}
-
-	peers, err := addressutil.BuildInternalPeerAddressList(ctx, peerAddressers)
+	peers, err := addressutil.BuildInternalPeerAddressList(ctx, c.Nodes())
 	if err != nil {
 		return err
 	}
@@ -184,8 +179,8 @@ func (c *Chain) AddFullNodes(ctx context.Context, configFileOverrides map[string
 				if err := ModifyConfigFile(
 					ctx,
 					fn.logger(),
-					fn.DockerClient,
-					fn.TestName,
+					fn.ContainerNode.DockerClient,
+					fn.ContainerNode.TestName,
 					fn.VolumeName,
 					configFile,
 					modifiedToml,
@@ -238,73 +233,32 @@ func (c *Chain) Start(ctx context.Context) error {
 
 // startAndInitializeNodes initializes and starts all chain nodes, configures genesis files, and ensures proper setup for the chain.
 func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
-	cfg := c.cfg
 	c.started = true
-
-	genesisAmounts := make([][]sdk.Coin, len(c.Validators))
-	genesisSelfDelegation := make([]sdk.Coin, len(c.Validators))
-
-	for i := range c.Validators {
-		genesisAmounts[i] = []sdk.Coin{{Amount: sdkmath.NewInt(10_000_000_000_000), Denom: cfg.ChainConfig.Denom}}
-		genesisSelfDelegation[i] = sdk.Coin{Amount: sdkmath.NewInt(5_000_000), Denom: cfg.ChainConfig.Denom}
-	}
-
-	configFileOverrides := cfg.ChainConfig.ConfigFileOverrides
+	defaultGenesisAmount := sdk.NewCoins(sdk.NewCoin(c.cfg.ChainConfig.Denom, sdkmath.NewInt(10_000_000_000_000)))
+	defaultGenesisSelfDelegation := sdk.NewCoin(c.cfg.ChainConfig.Denom, sdkmath.NewInt(5_000_000))
 
 	eg := new(errgroup.Group)
-	// Initialize config and sign gentx for each validator.
-	for i, v := range c.Validators {
+	// initialize config and sign gentx for each validator.
+	for _, v := range c.Validators {
 		v.Validator = true
 		eg.Go(func() error {
 			if err := v.initFullNodeFiles(ctx); err != nil {
 				return err
 			}
-			for configFile, modifiedConfig := range configFileOverrides {
-				modifiedToml, ok := modifiedConfig.(toml.Toml)
-				if !ok {
-					return fmt.Errorf("provided toml override for file %s is of type (%T). Expected (DecodedToml)", configFile, modifiedConfig)
-				}
-				if err := ModifyConfigFile(
-					ctx,
-					c.cfg.Logger,
-					v.DockerClient,
-					v.TestName,
-					v.VolumeName,
-					configFile,
-					modifiedToml,
-				); err != nil {
-					return fmt.Errorf("failed to modify toml config file: %w", err)
-				}
+
+			// we don't want to initialize the validator if it has a keyring.
+			if v.GenesisKeyring != nil {
+				return nil
 			}
-			return v.initValidatorGenTx(ctx, genesisAmounts[i], genesisSelfDelegation[i])
+
+			return v.initValidatorGenTx(ctx, defaultGenesisAmount, defaultGenesisSelfDelegation)
 		})
 	}
-
-	// Initialize config for each full node.
+	// initialize config for each full node.
 	for _, n := range c.FullNodes {
 		n.Validator = false
 		eg.Go(func() error {
-			if err := n.initFullNodeFiles(ctx); err != nil {
-				return err
-			}
-			for configFile, modifiedConfig := range configFileOverrides {
-				modifiedToml, ok := modifiedConfig.(toml.Toml)
-				if !ok {
-					return fmt.Errorf("provided toml override for file %s is of type (%T). Expected (DecodedToml)", configFile, modifiedConfig)
-				}
-				if err := ModifyConfigFile(
-					ctx,
-					n.logger(),
-					n.DockerClient,
-					n.TestName,
-					n.VolumeName,
-					configFile,
-					modifiedToml,
-				); err != nil {
-					return err
-				}
-			}
-			return nil
+			return n.initFullNodeFiles(ctx)
 		})
 	}
 
@@ -313,60 +267,43 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	// for the validators we need to collect the gentxs and the accounts
-	// to the first node's genesis file
-	validator0 := c.Validators[0]
-	for i := 1; i < len(c.Validators); i++ {
-		validatorN := c.Validators[i]
-
-		bech32, err := validatorN.accountKeyBech32(ctx, valKey)
-		if err != nil {
-			return err
-		}
-
-		if err := validator0.addGenesisAccount(ctx, bech32, genesisAmounts[0]); err != nil {
-			return err
-		}
-
-		if err := validatorN.copyGentx(ctx, validator0); err != nil {
-			return err
-		}
-	}
-
-	// create the faucet wallet, this can be used to fund new wallets in the tests.
-	wallet, err := c.CreateWallet(ctx, consts.FaucetAccountKeyName)
-	if err != nil {
-		return fmt.Errorf("failed to create faucet wallet: %w", err)
-	}
-	c.faucetWallet = wallet
-
-	if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
-		return err
-	}
-
-	if err := validator0.collectGentxs(ctx); err != nil {
-		return err
-	}
-
-	genbz, err := validator0.genesisFileContent(ctx)
-	if err != nil {
-		return err
-	}
-
-	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, cfg.ChainConfig.Denom)))
-
-	if c.cfg.ChainConfig.ModifyGenesis != nil {
-		genbz, err = c.cfg.ChainConfig.ModifyGenesis(cfg, genbz)
+	var finalGenesisBz []byte
+	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
+	if c.Validators[0].GenesisKeyring == nil {
+		var err error
+		finalGenesisBz, err = c.initDefaultGenesis(ctx, defaultGenesisAmount)
 		if err != nil {
 			return err
 		}
 	}
 
 	chainNodes := c.Nodes()
-
 	for _, cn := range chainNodes {
-		if err := cn.overwriteGenesisFile(ctx, genbz); err != nil {
+		// test case is explicitly setting genesis bytes.
+		if c.cfg.ChainConfig.GenesisFileBz != nil {
+			finalGenesisBz = c.cfg.ChainConfig.GenesisFileBz
+		}
+
+		if err := cn.overwriteGenesisFile(ctx, finalGenesisBz); err != nil {
 			return err
+		}
+
+		// test case has explicitly set a priv_validator_key.json contents.
+		if cn.PrivValidatorKey != nil {
+			if err := cn.overwritePrivValidatorKey(ctx, cn.PrivValidatorKey); err != nil {
+				return err
+			}
+		}
+	}
+
+	// for all chain nodes, execute any functions provided.
+	// these can do things like override config files or make any other modifications
+	// before the chain node starts.
+	for _, cn := range chainNodes {
+		for _, fn := range cn.PostInit {
+			if err := fn(ctx, cn); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -380,12 +317,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	peerAddressers := make([]addressutil.PeerAddresser, len(chainNodes))
-	for i, n := range chainNodes {
-		peerAddressers[i] = n
-	}
-
-	peers, err := addressutil.BuildInternalPeerAddressList(ctx, peerAddressers)
+	peers, err := addressutil.BuildInternalPeerAddressList(ctx, chainNodes)
 	if err != nil {
 		return err
 	}
@@ -406,6 +338,50 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 	// Wait for blocks before considering the chains "started"
 	return wait.ForBlocks(ctx, 2, c.GetNode())
+}
+
+// initDefaultGenesis initializes the default genesis file with validators and a faucet account for funding test wallets.
+// it distributes the default genesis amount to all validators and ensures gentx files are collected and included.
+func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdktypes.Coins) ([]byte, error) {
+	validator0 := c.Validators[0]
+	for i := 1; i < len(c.Validators); i++ {
+		validatorN := c.Validators[i]
+
+		bech32, err := validatorN.accountKeyBech32(ctx, valKey)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := validator0.addGenesisAccount(ctx, bech32, defaultGenesisAmount); err != nil {
+			return nil, err
+		}
+
+		if err := validatorN.copyGentx(ctx, validator0); err != nil {
+			return nil, err
+		}
+	}
+
+	// create the faucet wallet, this can be used to fund new wallets in the tests.
+	wallet, err := c.CreateWallet(ctx, consts.FaucetAccountKeyName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create faucet wallet: %w", err)
+	}
+	c.faucetWallet = wallet
+
+	if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
+		return nil, err
+	}
+
+	if err := validator0.collectGentxs(ctx); err != nil {
+		return nil, err
+	}
+
+	genbz, err := validator0.genesisFileContent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
+	return genbz, nil
 }
 
 func (c *Chain) GetNode() *ChainNode {
@@ -450,7 +426,7 @@ func (c *Chain) Stop(ctx context.Context) error {
 
 // UpgradeVersion updates the chain's version across all components, including validators and full nodes, and pulls new images.
 func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
-	c.cfg.ChainConfig.Images[0].Version = version
+	c.cfg.ChainConfig.Image.Version = version
 	for _, n := range c.Validators {
 		n.Image.Version = version
 	}
@@ -470,7 +446,7 @@ func (c *Chain) initializeChainNodes(
 
 	chainCfg := c.cfg
 	c.pullImages(ctx)
-	image := chainCfg.ChainConfig.Images[0]
+	image := chainCfg.ChainConfig.Image
 
 	newVals := make(ChainNodes, numValidators)
 	copy(newVals, c.Validators)
@@ -518,7 +494,21 @@ func (c *Chain) newChainNode(
 ) (*ChainNode, error) {
 	// Construct the ChainNode first so we can access its name.
 	// The ChainNode's VolumeName cannot be set until after we create the volume.
-	tn := NewDockerChainNode(c.log, validator, c.cfg, testName, image, index)
+	chainParams := ChainNodeParams{
+		Validator:           validator,
+		ChainID:             c.cfg.ChainConfig.ChainID,
+		BinaryName:          c.cfg.ChainConfig.Bin,
+		CoinType:            c.cfg.ChainConfig.CoinType,
+		GasPrices:           c.cfg.ChainConfig.GasPrices,
+		GasAdjustment:       c.cfg.ChainConfig.GasAdjustment,
+		Env:                 c.cfg.ChainConfig.Env,
+		AdditionalStartArgs: c.cfg.ChainConfig.AdditionalStartArgs,
+		EncodingConfig:      c.cfg.ChainConfig.EncodingConfig,
+		ValidatorIndex:      index,
+	}
+
+	homeDir := path.Join("/var/cosmos-chain", c.cfg.ChainConfig.Name)
+	tn := NewChainNode(c.log, c.cfg.DockerClient, c.cfg.DockerNetworkID, testName, image, homeDir, index, chainParams)
 
 	v, err := c.cfg.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 		Labels: map[string]string{
@@ -545,14 +535,19 @@ func (c *Chain) newChainNode(
 	return tn, nil
 }
 
+// pullImages pulls all images used by the chain chains.
 func (c *Chain) pullImages(ctx context.Context) {
-	for _, image := range c.cfg.ChainConfig.Images {
-		if image.Version == "local" {
+	pulled := make(map[string]struct{})
+	for _, n := range c.Nodes() {
+		image := n.Image
+		if _, ok := pulled[image.Ref()]; ok {
 			continue
 		}
+
+		pulled[image.Ref()] = struct{}{}
 		rc, err := c.cfg.DockerClient.ImagePull(
 			ctx,
-			image.Repository+":"+image.Version,
+			image.Ref(),
 			dockerimagetypes.PullOptions{},
 		)
 		if err != nil {
