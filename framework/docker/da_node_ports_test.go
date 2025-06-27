@@ -3,6 +3,7 @@ package docker
 import (
 	"testing"
 
+	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -179,9 +180,9 @@ func TestConfigurationOptions(t *testing.T) {
 		require.Equal(t, "9091", cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort)
 	})
 
-	t.Run("WithBridgeNodePorts configures per-node ports", func(t *testing.T) {
+	t.Run("WithNodePorts configures per-node ports for bridge nodes", func(t *testing.T) {
 		cfg := Config{}
-		option := WithBridgeNodePorts(0, "28000", "4000")
+		option := WithNodePorts(types.BridgeNode, 0, "28000", "4000")
 		option(&cfg)
 
 		require.NotNil(t, cfg.DataAvailabilityNetworkConfig)
@@ -189,5 +190,29 @@ func TestConfigurationOptions(t *testing.T) {
 		require.Contains(t, cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs, 0)
 		require.Equal(t, "28000", cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[0].RPCPort)
 		require.Equal(t, "4000", cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[0].P2PPort)
+	})
+
+	t.Run("WithNodePorts configures per-node ports for full nodes", func(t *testing.T) {
+		cfg := Config{}
+		option := WithNodePorts(types.FullNode, 0, "28001", "4001")
+		option(&cfg)
+
+		require.NotNil(t, cfg.DataAvailabilityNetworkConfig)
+		require.NotNil(t, cfg.DataAvailabilityNetworkConfig.FullNodeConfigs)
+		require.Contains(t, cfg.DataAvailabilityNetworkConfig.FullNodeConfigs, 0)
+		require.Equal(t, "28001", cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[0].RPCPort)
+		require.Equal(t, "4001", cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[0].P2PPort)
+	})
+
+	t.Run("WithNodePorts configures per-node ports for light nodes", func(t *testing.T) {
+		cfg := Config{}
+		option := WithNodePorts(types.LightNode, 0, "28002", "4002")
+		option(&cfg)
+
+		require.NotNil(t, cfg.DataAvailabilityNetworkConfig)
+		require.NotNil(t, cfg.DataAvailabilityNetworkConfig.LightNodeConfigs)
+		require.Contains(t, cfg.DataAvailabilityNetworkConfig.LightNodeConfigs, 0)
+		require.Equal(t, "28002", cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[0].RPCPort)
+		require.Equal(t, "4002", cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[0].P2PPort)
 	})
 }

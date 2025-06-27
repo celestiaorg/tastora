@@ -296,10 +296,10 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 		s.Require().Contains(p2pAddr, ":3000", "P2P address should use custom port 3000")
 	})
 
-	s.T().Run("test per-node configuration with WithBridgeNodePorts", func(t *testing.T) {
+	s.T().Run("test per-node configuration with WithNodePorts", func(t *testing.T) {
 		// Test per-node configuration
 		provider := s.CreateDockerProvider(
-			WithBridgeNodePorts(0, "28000", "4000"), // Configure bridge node 0 with specific ports
+			WithNodePorts(types.BridgeNode, 0, "28000", "4000"), // Configure bridge node 0 with specific ports
 		)
 
 		chain, err := provider.GetChain(ctx)

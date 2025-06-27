@@ -1,5 +1,7 @@
 package docker
 
+import "github.com/celestiaorg/tastora/framework/types"
+
 // ConfigOption is a function that modifies a Config
 type ConfigOption func(*Config)
 
@@ -95,54 +97,44 @@ func WithDANodeCoreConnection(rpcPort, grpcPort string) ConfigOption {
 	}
 }
 
-// SIMPLE: Per-node-type configuration for bridge nodes
-func WithBridgeNodePorts(nodeIndex int, rpcPort, p2pPort string) ConfigOption {
+// WithNodePorts configures ports for a specific node type and index
+func WithNodePorts(nodeType types.DANodeType, nodeIndex int, rpcPort, p2pPort string) ConfigOption {
 	return func(cfg *Config) {
 		if cfg.DataAvailabilityNetworkConfig == nil {
 			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
 		}
-		if cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs == nil {
-			cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs = make(map[int]*DANodeConfig)
-		}
-		if cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex] == nil {
-			cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex] = &DANodeConfig{}
-		}
-		cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex].RPCPort = rpcPort
-		cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex].P2PPort = p2pPort
-	}
-}
 
-// SIMPLE: Per-node-type configuration for full nodes
-func WithFullNodePorts(nodeIndex int, rpcPort, p2pPort string) ConfigOption {
-	return func(cfg *Config) {
-		if cfg.DataAvailabilityNetworkConfig == nil {
-			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
-		}
-		if cfg.DataAvailabilityNetworkConfig.FullNodeConfigs == nil {
-			cfg.DataAvailabilityNetworkConfig.FullNodeConfigs = make(map[int]*DANodeConfig)
-		}
-		if cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex] == nil {
-			cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex] = &DANodeConfig{}
-		}
-		cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex].RPCPort = rpcPort
-		cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex].P2PPort = p2pPort
-	}
-}
+		switch nodeType {
+		case types.BridgeNode:
+			if cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs == nil {
+				cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs = make(map[int]*DANodeConfig)
+			}
+			if cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex] == nil {
+				cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex] = &DANodeConfig{}
+			}
+			cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex].RPCPort = rpcPort
+			cfg.DataAvailabilityNetworkConfig.BridgeNodeConfigs[nodeIndex].P2PPort = p2pPort
 
-// SIMPLE: Per-node-type configuration for light nodes
-func WithLightNodePorts(nodeIndex int, rpcPort, p2pPort string) ConfigOption {
-	return func(cfg *Config) {
-		if cfg.DataAvailabilityNetworkConfig == nil {
-			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
+		case types.FullNode:
+			if cfg.DataAvailabilityNetworkConfig.FullNodeConfigs == nil {
+				cfg.DataAvailabilityNetworkConfig.FullNodeConfigs = make(map[int]*DANodeConfig)
+			}
+			if cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex] == nil {
+				cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex] = &DANodeConfig{}
+			}
+			cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex].RPCPort = rpcPort
+			cfg.DataAvailabilityNetworkConfig.FullNodeConfigs[nodeIndex].P2PPort = p2pPort
+
+		case types.LightNode:
+			if cfg.DataAvailabilityNetworkConfig.LightNodeConfigs == nil {
+				cfg.DataAvailabilityNetworkConfig.LightNodeConfigs = make(map[int]*DANodeConfig)
+			}
+			if cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex] == nil {
+				cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex] = &DANodeConfig{}
+			}
+			cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex].RPCPort = rpcPort
+			cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex].P2PPort = p2pPort
 		}
-		if cfg.DataAvailabilityNetworkConfig.LightNodeConfigs == nil {
-			cfg.DataAvailabilityNetworkConfig.LightNodeConfigs = make(map[int]*DANodeConfig)
-		}
-		if cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex] == nil {
-			cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex] = &DANodeConfig{}
-		}
-		cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex].RPCPort = rpcPort
-		cfg.DataAvailabilityNetworkConfig.LightNodeConfigs[nodeIndex].P2PPort = p2pPort
 	}
 }
 
