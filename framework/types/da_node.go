@@ -3,9 +3,10 @@ package types
 import (
 	"context"
 	"fmt"
+	"regexp"
+
 	"github.com/celestiaorg/go-square/v2/share"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
-	"regexp"
 )
 
 var p2pAddressPattern *regexp.Regexp
@@ -83,6 +84,10 @@ type DANode interface {
 	GetHostRPCAddress() string
 	// GetInternalHostName returns the hostname resolvable within the network.
 	GetInternalHostName() (string, error)
+	// GetInternalRPCAddress returns the internal RPC address resolvable within the network.
+	GetInternalRPCAddress() (string, error)
+	// GetInternalP2PAddress returns the internal P2P address resolvable within the network.
+	GetInternalP2PAddress() (string, error)
 	// GetWallet returns the wallet associated with the node.
 	GetWallet() (Wallet, error)
 	// GetAuthToken returns the auth token for the node.

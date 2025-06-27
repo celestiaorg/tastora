@@ -76,12 +76,23 @@ type DataAvailabilityNetworkConfig struct {
 	FullNodeConfigs map[int]*DANodeConfig
 	// LightNodeConfigs allows per-light-node configuration overrides, keyed by light node index
 	LightNodeConfigs map[int]*DANodeConfig
+
+	// NEW: Default port configuration for all DA nodes
+	DefaultRPCPort      string // Default internal RPC port (default: "26658")
+	DefaultP2PPort      string // Default internal P2P port (default: "2121")
+	DefaultCoreRPCPort  string // Default core RPC port to connect to (default: "26657")
+	DefaultCoreGRPCPort string // Default core GRPC port to connect to (default: "9090")
 }
 
 // DANodeConfig provides per-node configuration that can override DataAvailabilityNetworkConfig defaults
 type DANodeConfig struct {
 	// Image overrides the network-level Image for this specific node
 	Image *DockerImage
+
+	RPCPort      string // Internal RPC port (overrides default)
+	P2PPort      string // Internal P2P port (overrides default)
+	CoreRPCPort  string // Port to connect to celestia-app RPC (overrides default)
+	CoreGRPCPort string // Port to connect to celestia-app GRPC (overrides default)
 }
 
 // RollkitChainConfig defines the configuration for a Rollkit-based chain
