@@ -29,7 +29,7 @@ func WithChainImage(image DockerImage) ConfigOption {
 		if cfg.ChainConfig == nil {
 			cfg.ChainConfig = &ChainConfig{}
 		}
-		cfg.ChainConfig.Images = []DockerImage{image}
+		cfg.ChainConfig.Image = image
 	}
 }
 

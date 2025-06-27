@@ -65,12 +65,10 @@ func (s *DockerTestSuite) CreateDockerProvider(opts ...ConfigOption) *Provider {
 			NumValidators: &numValidators,
 			NumFullNodes:  &numFullNodes,
 			ChainID:       "test",
-			Images: []DockerImage{
-				{
-					Repository: "ghcr.io/celestiaorg/celestia-app",
-					Version:    "v4.0.0-rc6",
-					UIDGID:     "10001:10001",
-				},
+			Image: DockerImage{
+				Repository: "ghcr.io/celestiaorg/celestia-app",
+				Version:    "v4.0.0-rc6",
+				UIDGID:     "10001:10001",
 			},
 			Bin:            "celestia-appd",
 			Bech32Prefix:   "celestia",

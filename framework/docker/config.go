@@ -32,8 +32,8 @@ type ChainConfig struct {
 	NumValidators, NumFullNodes *int
 	// Chain ID, e.g. cosmoshub-4
 	ChainID string
-	// Docker images required for running chain nodes.
-	Images []DockerImage
+	// Docker image for running chain nodes.
+	Image DockerImage
 	// Binary to execute for the chain node daemon.
 	Bin string
 	// Bech32 prefix for chain addresses, e.g. cosmos.
@@ -50,16 +50,9 @@ type ChainConfig struct {
 	Gas string
 	// Trusting period of the chain.
 	TrustingPeriod string
-	// When provided, genesis file contents will be altered before sharing for genesis.
-	ModifyGenesis func(Config, []byte) ([]byte, error)
-	// Override config parameters for files at filepath.
-	ConfigFileOverrides map[string]any
-
-	PostInit []func(chainNode *ChainNode) error
+	PostInit       []func(chainNode *ChainNode) error
 	// Non-nil will override the encoding config, used for cosmos chains only.
 	EncodingConfig *testutil.TestEncodingConfig
-	// To avoid port binding conflicts, ports are only exposed on the 0th validator.
-	HostPortOverride map[int]int
 	// Additional start command arguments
 	AdditionalStartArgs []string
 	// Environment variables for chain nodes
@@ -73,7 +66,7 @@ type ChainConfig struct {
 type ChainNodeConfig struct {
 	// AdditionalStartArgs overrides the chain-level AdditionalStartArgs for this specific node
 	AdditionalStartArgs []string
-	// Image overrides the chain-level Images[0] for this specific node
+	// Image overrides the chain-level Image for this specific node
 	Image *DockerImage
 	// Env overrides the chain-level Env for this specific node
 	Env []string

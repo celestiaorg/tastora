@@ -257,7 +257,7 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 				Name:           "celestia",
 				Version:        "v4.0.0-rc6",
 				ChainID:        b.chainID,
-				Images:         []DockerImage{b.validators[0].image},
+				Image:          *b.defaultImage, // default image must be provided, can be overridden per node.
 				Bin:            b.binaryName,
 				Bech32Prefix:   "celestia",
 				Denom:          "utia",
@@ -326,14 +326,6 @@ func (b *ChainBuilder) newChainNode(
 		if err := b.preloadKeyringToVolume(ctx, tn, index); err != nil {
 			return nil, fmt.Errorf("failed to preload keyring to volume: %w", err)
 		}
-
-		// Note: We skip preloading the private validator key to avoid conflicts with init
-		// The init command will generate one, and we'll overwrite it after init
-
-		// Validate that the preloaded keys are accessible and match the expected validator
-		if err := b.validatePreloadedKeys(ctx, tn, index); err != nil {
-			return nil, fmt.Errorf("failed to validate preloaded keys: %w", err)
-		}
 	}
 
 	return tn, nil
@@ -376,21 +368,6 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig
 
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume
 func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNode, validatorIndex int) error {
-
-	// list all keys in the genesis keyring for debugging
-	if b.logger != nil {
-		keys, err := b.genesisKeyring.List()
-		if err != nil {
-			b.logger.Error("failed to list genesis keyring keys", zap.Error(err))
-		} else {
-			keyNames := make([]string, len(keys))
-			for i, key := range keys {
-				keyNames[i] = key.Name
-			}
-			b.logger.Info("available keys in genesis keyring", zap.Strings("keys", keyNames))
-		}
-	}
-
 	// For celestia-app testnode, the default validator is named "validator"
 	validatorKeyName := "validator"
 	if validatorIndex > 0 {
@@ -509,75 +486,6 @@ func (b *ChainBuilder) copyKeyringFilesToVolume(ctx context.Context, node *Chain
 		b.logger.Info("preloaded keyring files to volume",
 			zap.String("node", node.Name()),
 			zap.Int("files", len(files)),
-		)
-	}
-
-	return nil
-}
-
-// validatePreloadedKeys verifies that the preloaded validator keys are accessible from within the container
-func (b *ChainBuilder) validatePreloadedKeys(ctx context.Context, node *ChainNode, validatorIndex int) error {
-	if b.logger != nil {
-		b.logger.Info("validating preloaded keys",
-			zap.String("node", node.Name()),
-			zap.Int("validator_index", validatorIndex),
-		)
-	}
-
-	// Create a temporary container to test key access
-	job := NewImage(b.logger, b.dockerClient, b.dockerNetworkID, b.t.Name(), node.ContainerNode.Image.Repository, node.ContainerNode.Image.Version)
-	opts := ContainerOptions{
-		Env:   []string{},
-		Binds: []string{fmt.Sprintf("%s:%s", node.VolumeName, node.homeDir)},
-	}
-
-	// First, let's see what files exist in the home directory structure
-	lsHomeCmd := []string{"find", node.homeDir, "-name", "*keyring*", "-o", "-name", "*validator*"}
-	lsHomeRes := job.Run(ctx, lsHomeCmd, opts)
-	if b.logger != nil {
-		b.logger.Info("searching for keyring files in home directory",
-			zap.String("find_output", string(lsHomeRes.Stdout)),
-			zap.String("find_stderr", string(lsHomeRes.Stderr)),
-		)
-	}
-
-	// Check the specific keyring directory
-	lsCmd := []string{"ls", "-la", fmt.Sprintf("%s/keyring-test/", node.homeDir)}
-	lsRes := job.Run(ctx, lsCmd, opts)
-	if b.logger != nil {
-		b.logger.Info("keyring directory contents",
-			zap.String("ls_output", string(lsRes.Stdout)),
-			zap.String("ls_stderr", string(lsRes.Stderr)),
-		)
-	}
-
-	// Also check if the directory exists at all
-	lsDirCmd := []string{"ls", "-la", node.homeDir}
-	lsDirRes := job.Run(ctx, lsDirCmd, opts)
-	if b.logger != nil {
-		b.logger.Info("home directory contents",
-			zap.String("home_ls_output", string(lsDirRes.Stdout)),
-		)
-	}
-
-	// List keys in the keyring to verify they're accessible
-	cmd := []string{b.binaryName, "keys", "list", "--home", node.homeDir, "--keyring-backend", "test"}
-	res := job.Run(ctx, cmd, opts)
-
-	if res.Err != nil {
-		if b.logger != nil {
-			b.logger.Error("failed to list keys in preloaded keyring",
-				zap.Error(res.Err),
-				zap.String("stdout", string(res.Stdout)),
-				zap.String("stderr", string(res.Stderr)),
-			)
-		}
-		return fmt.Errorf("failed to list keys in preloaded keyring: %w", res.Err)
-	}
-
-	if b.logger != nil {
-		b.logger.Info("successfully validated preloaded keys",
-			zap.String("keys_output", string(res.Stdout)),
 		)
 	}
 

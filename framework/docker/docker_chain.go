@@ -420,7 +420,7 @@ func (c *Chain) Stop(ctx context.Context) error {
 
 // UpgradeVersion updates the chain's version across all components, including validators and full nodes, and pulls new images.
 func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
-	c.cfg.ChainConfig.Images[0].Version = version
+	c.cfg.ChainConfig.Image.Version = version
 	for _, n := range c.Validators {
 		n.ContainerNode.Image.Version = version
 	}
@@ -440,7 +440,7 @@ func (c *Chain) initializeChainNodes(
 
 	chainCfg := c.cfg
 	c.pullImages(ctx)
-	image := chainCfg.ChainConfig.Images[0]
+	image := chainCfg.ChainConfig.Image
 
 	newVals := make(ChainNodes, numValidators)
 	copy(newVals, c.Validators)
@@ -498,14 +498,7 @@ func (c *Chain) newChainNode(
 		Env:                 c.cfg.ChainConfig.Env,
 		AdditionalStartArgs: c.cfg.ChainConfig.AdditionalStartArgs,
 		EncodingConfig:      c.cfg.ChainConfig.EncodingConfig,
-		ChainNodeConfig:     nil, // Will be set if per-node config exists
-	}
-
-	// Set per-node config if it exists
-	if c.cfg.ChainConfig.ChainNodeConfigs != nil {
-		if nodeConfig, ok := c.cfg.ChainConfig.ChainNodeConfigs[index]; ok {
-			chainParams.ChainNodeConfig = nodeConfig
-		}
+		ValidatorIndex:      index,
 	}
 
 	homeDir := path.Join("/var/cosmos-chain", c.cfg.ChainConfig.Name)
@@ -536,14 +529,19 @@ func (c *Chain) newChainNode(
 	return tn, nil
 }
 
+// pullImages pulls all images used by the chain chains.
 func (c *Chain) pullImages(ctx context.Context) {
-	for _, image := range c.cfg.ChainConfig.Images {
-		if image.Version == "local" {
+	pulled := make(map[string]struct{})
+	for _, n := range c.Nodes() {
+		image := n.Image
+		if _, ok := pulled[image.Ref()]; ok {
 			continue
 		}
+
+		pulled[image.Ref()] = struct{}{}
 		rc, err := c.cfg.DockerClient.ImagePull(
 			ctx,
-			image.Repository+":"+image.Version,
+			image.Ref(),
 			dockerimagetypes.PullOptions{},
 		)
 		if err != nil {
