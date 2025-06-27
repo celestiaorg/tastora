@@ -273,50 +273,14 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	// for the validators we need to collect the gentxs and the accounts
-	// to the first node's genesis file
-
 	var finalGenesisBz []byte
-	validator0 := c.Validators[0]
 	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
-	if validator0.Keyring == nil {
-		for i := 1; i < len(c.Validators); i++ {
-			validatorN := c.Validators[i]
-
-			bech32, err := validatorN.accountKeyBech32(ctx, valKey)
-			if err != nil {
-				return err
-			}
-
-			if err := validator0.addGenesisAccount(ctx, bech32, defaultGenesisAmount); err != nil {
-				return err
-			}
-
-			if err := validatorN.copyGentx(ctx, validator0); err != nil {
-				return err
-			}
-		}
-
-		// create the faucet wallet, this can be used to fund new wallets in the tests.
-		wallet, err := c.CreateWallet(ctx, consts.FaucetAccountKeyName)
-		if err != nil {
-			return fmt.Errorf("failed to create faucet wallet: %w", err)
-		}
-		c.faucetWallet = wallet
-
-		if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
-			return err
-		}
-
-		if err := validator0.collectGentxs(ctx); err != nil {
-			return err
-		}
-
-		genbz, err := validator0.genesisFileContent(ctx)
+	if c.Validators[0].Keyring == nil {
+		var err error
+		finalGenesisBz, err = c.initDefaultGenesis(ctx, defaultGenesisAmount)
 		if err != nil {
 			return err
 		}
-		finalGenesisBz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
 	}
 
 	chainNodes := c.Nodes()
@@ -385,6 +349,50 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 	// Wait for blocks before considering the chains "started"
 	return wait.ForBlocks(ctx, 2, c.GetNode())
+}
+
+// initDefaultGenesis initializes the default genesis file with validators and a faucet account for funding test wallets.
+// it distributes the default genesis amount to all validators and ensures gentx files are collected and included.
+func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdktypes.Coins) ([]byte, error) {
+	validator0 := c.Validators[0]
+	for i := 1; i < len(c.Validators); i++ {
+		validatorN := c.Validators[i]
+
+		bech32, err := validatorN.accountKeyBech32(ctx, valKey)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := validator0.addGenesisAccount(ctx, bech32, defaultGenesisAmount); err != nil {
+			return nil, err
+		}
+
+		if err := validatorN.copyGentx(ctx, validator0); err != nil {
+			return nil, err
+		}
+	}
+
+	// create the faucet wallet, this can be used to fund new wallets in the tests.
+	wallet, err := c.CreateWallet(ctx, consts.FaucetAccountKeyName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create faucet wallet: %w", err)
+	}
+	c.faucetWallet = wallet
+
+	if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
+		return nil, err
+	}
+
+	if err := validator0.collectGentxs(ctx); err != nil {
+		return nil, err
+	}
+
+	genbz, err := validator0.genesisFileContent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
+	return genbz, nil
 }
 
 func (c *Chain) GetNode() *ChainNode {

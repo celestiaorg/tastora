@@ -72,7 +72,7 @@ func TestDANodePortConfiguration(t *testing.T) {
 
 		daNode := &DANode{
 			cfg: cfg,
-			node: &node{
+			ContainerNode: &ContainerNode{
 				Index: 0,
 			},
 		}
@@ -117,7 +117,7 @@ func TestDANodePortConfiguration(t *testing.T) {
 
 		daNode := &DANode{
 			cfg: cfg,
-			node: &node{
+			ContainerNode: &ContainerNode{
 				TestName: "test",
 				Index:    0,
 			},

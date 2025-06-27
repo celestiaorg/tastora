@@ -94,7 +94,6 @@ type ChainNodeParams struct {
 	PrivValidatorKey []byte
 	// PostInit functions are executed sequentially after the node is initialized.
 	PostInit []func(ctx context.Context, node *ChainNode) error
-	Keyring  keyring.Keyring
 }
 
 // NewChainNode creates a new ChainNode with injected dependencies

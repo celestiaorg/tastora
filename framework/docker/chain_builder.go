@@ -106,8 +106,6 @@ type ChainBuilder struct {
 	name           string
 	chainID        string
 	logger         *zap.Logger
-	// optional keyring with pre-generated keys (e.g., from celestia-app testnode)
-	genesisKeyring keyring.Keyring
 	// default Docker image for all nodes in the chain (can be overridden per node)
 	defaultImage *DockerImage
 	// default additional start arguments for all nodes in the chain (can be overridden per node)
@@ -367,8 +365,8 @@ func (b *ChainBuilder) newChainNode(
 		return nil, fmt.Errorf("set volume owner: %w", err)
 	}
 
-	// If this is a validator and we have a genesis keyring, preload the keys using a one-shot container
-	if nodeConfig.validator && tn.Keyring != nil {
+	// tf this is a validator and we have a genesis keyring, preload the keys using a one-shot container
+	if nodeConfig.validator && tn.GenesisKeyring != nil {
 		if err := b.preloadKeyringToVolume(ctx, tn, index); err != nil {
 			return nil, fmt.Errorf("failed to preload keyring to volume: %w", err)
 		}
@@ -394,17 +392,11 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 		Env:                 nodeConfig.Env,
 		AdditionalStartArgs: b.getAdditionalStartArgs(nodeConfig),
 		EncodingConfig:      b.encodingConfig,
-		GenesisKeyring:      nil, // Will be set below if validator
+		GenesisKeyring:      nodeConfig.keyring,
 		ValidatorIndex:      index,
 		PrivValidatorKey:    nodeConfig.privValidatorKey, // Set from node config
 		PostInit:            b.getPostInit(nodeConfig),
-		Keyring:             nodeConfig.keyring,
 	}
-
-	// Set genesis keyring if this is a validator
-	//if nodeConfig.validator && b.genesisKeyring != nil {
-	//	chainParams.GenesisKeyring = b.genesisKeyring
-	//}
 
 	// Get the appropriate image using fallback logic
 	imageToUse := b.getImage(nodeConfig)
@@ -421,15 +413,10 @@ func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNo
 		validatorKeyName = fmt.Sprintf("validator-%d", validatorIndex)
 	}
 
-	// Check if the key exists in the genesis keyring
-	key, err := node.Keyring.Key(validatorKeyName)
+	// check if the key exists in the genesis keyring
+	key, err := node.GenesisKeyring.Key(validatorKeyName)
 	if err != nil {
-		// Try just "validator" as fallback
-		validatorKeyName = "validator"
-		key, err = node.Keyring.Key(validatorKeyName)
-		if err != nil {
-			return fmt.Errorf("validator key %q not found in genesis keyring: %w", validatorKeyName, err)
-		}
+		return fmt.Errorf("validator key %q not found in genesis keyring: %w", validatorKeyName, err)
 	}
 
 	// Log the key details for debugging
@@ -442,21 +429,21 @@ func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNo
 		)
 	}
 
-	// Create a temporary directory to hold the keyring files
+	// create a temporary directory to hold the keyring files
 	tempDir, err := os.MkdirTemp("", "keyring-export-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Create a temporary keyring in the temp directory
+	// create a temporary keyring in the temp directory
 	tempKeyring, err := keyring.New("test", keyring.BackendTest, tempDir, nil, b.encodingConfig.Codec)
 	if err != nil {
 		return fmt.Errorf("failed to create temp keyring: %w", err)
 	}
 
-	// Export the key from genesis keyring
-	armor, err := node.Keyring.ExportPrivKeyArmor(validatorKeyName, "")
+	// export the key from genesis keyring
+	armor, err := node.GenesisKeyring.ExportPrivKeyArmor(validatorKeyName, "")
 	if err != nil {
 		return fmt.Errorf("failed to export validator key: %w", err)
 	}
@@ -467,7 +454,7 @@ func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNo
 		return fmt.Errorf("failed to import key into temp keyring: %w", err)
 	}
 
-	// Copy keyring files to the volume using existing file utilities
+	// copy keyring files to the volume using existing file utilities
 	return b.copyKeyringFilesToVolume(ctx, node, tempDir)
 }
 
@@ -480,13 +467,13 @@ func (b *ChainBuilder) copyKeyringFilesToVolume(ctx context.Context, node *Chain
 		zap.String("host_keyring_dir", keyringSubDir),
 	)
 
-	// List files in the keyring subdirectory
+	// list files in the keyring subdirectory
 	files, err := os.ReadDir(keyringSubDir)
 	if err != nil {
 		return fmt.Errorf("failed to read keyring directory: %w", err)
 	}
 
-	b.logger.Info("found files in host keyring directory",
+	b.logger.Debug("found files in host keyring directory",
 		zap.Int("file_count", len(files)),
 	)
 
@@ -497,43 +484,23 @@ func (b *ChainBuilder) copyKeyringFilesToVolume(ctx context.Context, node *Chain
 		}
 
 		hostFilePath := path.Join(keyringSubDir, file.Name())
-		b.logger.Info("processing keyring file",
-			zap.String("file_name", file.Name()),
-			zap.String("host_file_path", hostFilePath),
-		)
-
-		// Read the file content
 		content, err := os.ReadFile(hostFilePath)
 		if err != nil {
 			return fmt.Errorf("failed to read keyring file %s: %w", file.Name(), err)
 		}
 
-		// Write the file to the volume using the existing file utilities
-		// writeFile expects a relative path from the home directory
+		// write the file to the volume
 		relativePath := path.Join("keyring-test", file.Name())
 		err = node.WriteFile(ctx, relativePath, content)
 		if err != nil {
 			return fmt.Errorf("failed to write keyring file %s to volume: %w", file.Name(), err)
 		}
-
-		previewLen := len(content)
-		if previewLen > 100 {
-			previewLen = 100
-		}
-		b.logger.Info("wrote keyring file to volume",
-			zap.String("file", file.Name()),
-			zap.String("relative_path", relativePath),
-			zap.Int("size", len(content)),
-			zap.String("content_preview", string(content[:previewLen])),
-		)
 	}
 
-	if b.logger != nil {
-		b.logger.Info("preloaded keyring files to volume",
-			zap.String("node", node.Name()),
-			zap.Int("files", len(files)),
-		)
-	}
+	b.logger.Info("wrote keyring files to volume",
+		zap.String("node", node.Name()),
+		zap.Int("files", len(files)),
+	)
 
 	return nil
 }
