@@ -95,19 +95,6 @@ func WithDANodeCoreConnection(rpcPort, grpcPort string) ConfigOption {
 	}
 }
 
-// SIMPLE: Configure everything in one call
-func WithCustomPortsSetup(daRPC, daP2P, coreRPC, coreGRPC string) ConfigOption {
-	return func(cfg *Config) {
-		if cfg.DataAvailabilityNetworkConfig == nil {
-			cfg.DataAvailabilityNetworkConfig = &DataAvailabilityNetworkConfig{}
-		}
-		cfg.DataAvailabilityNetworkConfig.DefaultRPCPort = daRPC
-		cfg.DataAvailabilityNetworkConfig.DefaultP2PPort = daP2P
-		cfg.DataAvailabilityNetworkConfig.DefaultCoreRPCPort = coreRPC
-		cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort = coreGRPC
-	}
-}
-
 // SIMPLE: Per-node-type configuration for bridge nodes
 func WithBridgeNodePorts(nodeIndex int, rpcPort, p2pPort string) ConfigOption {
 	return func(cfg *Config) {
@@ -161,5 +148,10 @@ func WithLightNodePorts(nodeIndex int, rpcPort, p2pPort string) ConfigOption {
 
 // SIMPLE: Common scenarios helper - uses non-conflicting ports
 func WithNonConflictingPorts() ConfigOption {
-	return WithCustomPortsSetup("26668", "2131", "26667", "9091")
+	return func(cfg *Config) {
+		// Apply DA node ports
+		WithDANodePorts("26668", "2131")(cfg)
+		// Apply core connection ports
+		WithDANodeCoreConnection("26667", "9091")(cfg)
+	}
 }

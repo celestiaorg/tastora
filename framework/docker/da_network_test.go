@@ -264,10 +264,11 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 		s.Require().Contains(p2pAddr, ":2131", "P2P address should use custom port 2131")
 	})
 
-	s.T().Run("test custom ports setup with WithCustomPortsSetup", func(t *testing.T) {
-		// Test the custom ports configuration
+	s.T().Run("test custom ports setup with individual functions", func(t *testing.T) {
+		// Test the custom ports configuration using individual functions
 		provider := s.CreateDockerProvider(
-			WithCustomPortsSetup("27000", "3000", "27001", "9095"),
+			WithDANodePorts("27000", "3000"),
+			WithDANodeCoreConnection("27001", "9095"),
 		)
 
 		chain, err := provider.GetChain(ctx)

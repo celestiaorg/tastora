@@ -154,10 +154,11 @@ func TestConfigurationOptions(t *testing.T) {
 		require.Equal(t, "9095", cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort)
 	})
 
-	t.Run("WithCustomPortsSetup configures all ports", func(t *testing.T) {
+	t.Run("WithDANodePorts and WithDANodeCoreConnection combined configure all ports", func(t *testing.T) {
 		cfg := Config{}
-		option := WithCustomPortsSetup("27000", "3000", "27001", "9095")
-		option(&cfg)
+		// Apply both options to configure all ports
+		WithDANodePorts("27000", "3000")(&cfg)
+		WithDANodeCoreConnection("27001", "9095")(&cfg)
 
 		require.NotNil(t, cfg.DataAvailabilityNetworkConfig)
 		require.Equal(t, "27000", cfg.DataAvailabilityNetworkConfig.DefaultRPCPort)
