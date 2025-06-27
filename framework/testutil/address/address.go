@@ -14,10 +14,10 @@ type PeerAddresser interface {
 
 // BuildInternalPeerAddressList constructs a comma-separated list of internal peer addresses from the given nodes.
 // It returns an error if any node fails to provide a peer address.
-func BuildInternalPeerAddressList(ctx context.Context, peer []PeerAddresser) (string, error) {
-	addrs := make([]string, 0, len(peer))
+func BuildInternalPeerAddressList[T PeerAddresser](ctx context.Context, peers []T) (string, error) {
+	addrs := make([]string, 0, len(peers))
 
-	for _, p := range peer {
+	for _, p := range peers {
 		addr, err := p.GetInternalPeerAddress(ctx)
 		if err != nil {
 			return "", fmt.Errorf("failed to get peer address from node of type %s: %w", p.GetType(), err)
