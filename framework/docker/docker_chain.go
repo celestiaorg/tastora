@@ -253,7 +253,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 			}
 
 			// we don't want to initialize the validator if it has a keyring.
-			if v.Keyring != nil {
+			if v.GenesisKeyring != nil {
 				return nil
 			}
 
@@ -275,7 +275,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 	var finalGenesisBz []byte
 	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
-	if c.Validators[0].Keyring == nil {
+	if c.Validators[0].GenesisKeyring == nil {
 		var err error
 		finalGenesisBz, err = c.initDefaultGenesis(ctx, defaultGenesisAmount)
 		if err != nil {
