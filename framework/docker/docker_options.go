@@ -75,7 +75,7 @@ func WithPerLightNodeConfig(nodeConfigs map[int]*DANodeConfig) ConfigOption {
 	}
 }
 
-// SIMPLE: One-liner to configure all DA node ports
+// WithDANodePorts allows the configuration of default RPC and P2P ports for all DA nodes
 func WithDANodePorts(rpcPort, p2pPort string) ConfigOption {
 	return func(cfg *Config) {
 		if cfg.DataAvailabilityNetworkConfig == nil {
@@ -86,7 +86,7 @@ func WithDANodePorts(rpcPort, p2pPort string) ConfigOption {
 	}
 }
 
-// SIMPLE: One-liner to configure core connection ports
+// WithDANodeCoreConnection allows the configuration of RPC and GRPC ports for connecting to the celestia-app core
 func WithDANodeCoreConnection(rpcPort, grpcPort string) ConfigOption {
 	return func(cfg *Config) {
 		if cfg.DataAvailabilityNetworkConfig == nil {
@@ -97,7 +97,7 @@ func WithDANodeCoreConnection(rpcPort, grpcPort string) ConfigOption {
 	}
 }
 
-// WithNodePorts configures ports for a specific node type and index
+// WithNodePorts allows the configuration of rpcPort and p2pPort for a node of the specified type at the specified index
 func WithNodePorts(nodeType types.DANodeType, nodeIndex int, rpcPort, p2pPort string) ConfigOption {
 	return func(cfg *Config) {
 		if cfg.DataAvailabilityNetworkConfig == nil {
