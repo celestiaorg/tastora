@@ -98,10 +98,12 @@ type ChainBuilder struct {
 	name           string
 	chainID        string
 	logger         *zap.Logger
-	// Optional keyring with pre-generated keys (e.g., from celestia-app testnode)
+	// optional keyring with pre-generated keys (e.g., from celestia-app testnode)
 	genesisKeyring keyring.Keyring
-	// Default Docker image for all nodes in the chain (can be overridden per node)
+	// default Docker image for all nodes in the chain (can be overridden per node)
 	defaultImage *DockerImage
+	// default additional start arguments for all nodes in the chain (can be overridden per node)
+	defaultAdditionalStartArgs []string
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -212,9 +214,15 @@ func (b *ChainBuilder) WithDefaultImage(image DockerImage) *ChainBuilder {
 	return b
 }
 
-// GetImage returns the appropriate Docker image for a node, using node-specific override if available,
+// WithDefaultAdditionalStartArgs sets the default additional start arguments for all nodes in the chain
+func (b *ChainBuilder) WithDefaultAdditionalStartArgs(args ...string) *ChainBuilder {
+	b.defaultAdditionalStartArgs = args
+	return b
+}
+
+// getImage returns the appropriate Docker image for a node, using node-specific override if available,
 // otherwise falling back to the chain's default image
-func (b *ChainBuilder) GetImage(nodeConfig NodeConfig) DockerImage {
+func (b *ChainBuilder) getImage(nodeConfig NodeConfig) DockerImage {
 	if nodeConfig.image != nil {
 		// Use node-specific image override
 		return *nodeConfig.image
@@ -227,13 +235,23 @@ func (b *ChainBuilder) GetImage(nodeConfig NodeConfig) DockerImage {
 	panic("no image specified: neither node-specific nor chain default image provided")
 }
 
+// getAdditionalStartArgs returns the appropriate additional start arguments for a node, using node-specific override if available,
+// otherwise falling back to the chain's default additional start arguments
+func (b *ChainBuilder) getAdditionalStartArgs(nodeConfig NodeConfig) []string {
+	if len(nodeConfig.additionalStartArgs) > 0 {
+		// use node-specific additional start args override
+		return nodeConfig.additionalStartArgs
+	}
+	// use chain default additional start args (may be empty)
+	return b.defaultAdditionalStartArgs
+}
+
 // AddValidator adds a single validator node configuration
 func (b *ChainBuilder) AddValidator(validator NodeConfig) *ChainBuilder {
 	validator.validator = true
 	b.validators = append(b.validators, validator)
 	return b
 }
-
 
 // AddFullNode adds a single full node configuration
 func (b *ChainBuilder) AddFullNode(fullNode NodeConfig) *ChainBuilder {
@@ -316,8 +334,8 @@ func (b *ChainBuilder) newChainNode(
 	tn.VolumeName = v.Name
 
 	// Get the appropriate image using fallback logic
-	imageToUse := b.GetImage(nodeConfig)
-	
+	imageToUse := b.getImage(nodeConfig)
+
 	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
 		Log:        b.logger,
 		Client:     b.dockerClient,
@@ -354,7 +372,7 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig
 		GasPrices:           b.gasPrices,
 		GasAdjustment:       1.0, // Default gas adjustment
 		Env:                 nodeConfig.envVars,
-		AdditionalStartArgs: nodeConfig.additionalStartArgs,
+		AdditionalStartArgs: b.getAdditionalStartArgs(nodeConfig),
 		EncodingConfig:      b.encodingConfig,
 		ChainNodeConfig:     nil, // No per-node config by default
 		GenesisKeyring:      nil, // Will be set below if validator
@@ -369,7 +387,7 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig
 	}
 
 	// Get the appropriate image using fallback logic
-	imageToUse := b.GetImage(nodeConfig)
+	imageToUse := b.getImage(nodeConfig)
 
 	return NewChainNode(log, b.dockerClient, b.dockerNetworkID, b.t.Name(), imageToUse, homeDir, index, chainParams)
 }

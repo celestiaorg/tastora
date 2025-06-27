@@ -56,9 +56,14 @@ func (s *DockerTestSuite) SetupTest() {
 		WithDockerNetworkID(s.networkID).
 		WithDefaultImage(defaultImage).
 		WithEncodingConfig(&s.encConfig).
-		AddValidator(NewChainNodeConfigBuilder().
-			WithAdditionalStartArgs("--force-no-bbr").
-			Build())
+		WithDefaultAdditionalStartArgs(
+			"--force-no-bbr",
+			"--grpc.enable",
+			"--grpc.address", "0.0.0.0:9090",
+			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
+			"--timeout-commit", "1s",
+		).
+		AddValidator(NewChainNodeConfigBuilder().Build())
 }
 
 // TearDownTest removes docker resources.
@@ -158,12 +163,26 @@ func (s *DockerTestSuite) TestPerNodeDifferentImages() {
 
 	// create node configs with different images and settings
 	validator0Config := NewChainNodeConfigBuilder().
-		WithAdditionalStartArgs("--force-no-bbr", "--log_level", "info").
+		WithAdditionalStartArgs(
+			"--force-no-bbr",
+			"--grpc.enable",
+			"--grpc.address", "0.0.0.0:9090",
+			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
+			"--timeout-commit", "1s",
+			"--log_level", "info",
+		).
 		Build() // uses default image
 
 	validator1Config := NewChainNodeConfigBuilder().
 		WithImage(alternativeImage). // override with different image
-		WithAdditionalStartArgs("--force-no-bbr", "--log_level", "debug").
+		WithAdditionalStartArgs(
+			"--force-no-bbr",
+			"--grpc.enable",
+			"--grpc.address", "0.0.0.0:9090",
+			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
+			"--timeout-commit", "1s",
+			"--log_level", "debug",
+		).
 		Build()
 
 	// Use builder directly - tests can modify as needed before calling Build
