@@ -251,6 +251,12 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 			if err := v.initFullNodeFiles(ctx); err != nil {
 				return err
 			}
+
+			// we don't want to initialize the validator if it has a keyring.
+			if v.Keyring != nil {
+				return nil
+			}
+
 			return v.initValidatorGenTx(ctx, defaultGenesisAmount, defaultGenesisSelfDelegation)
 		})
 	}
@@ -270,45 +276,48 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	// for the validators we need to collect the gentxs and the accounts
 	// to the first node's genesis file
 
+	var finalGenesisBz []byte
 	validator0 := c.Validators[0]
-	for i := 1; i < len(c.Validators); i++ {
-		validatorN := c.Validators[i]
+	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
+	if validator0.Keyring == nil {
+		for i := 1; i < len(c.Validators); i++ {
+			validatorN := c.Validators[i]
 
-		bech32, err := validatorN.accountKeyBech32(ctx, valKey)
+			bech32, err := validatorN.accountKeyBech32(ctx, valKey)
+			if err != nil {
+				return err
+			}
+
+			if err := validator0.addGenesisAccount(ctx, bech32, defaultGenesisAmount); err != nil {
+				return err
+			}
+
+			if err := validatorN.copyGentx(ctx, validator0); err != nil {
+				return err
+			}
+		}
+
+		// create the faucet wallet, this can be used to fund new wallets in the tests.
+		wallet, err := c.CreateWallet(ctx, consts.FaucetAccountKeyName)
+		if err != nil {
+			return fmt.Errorf("failed to create faucet wallet: %w", err)
+		}
+		c.faucetWallet = wallet
+
+		if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
+			return err
+		}
+
+		if err := validator0.collectGentxs(ctx); err != nil {
+			return err
+		}
+
+		genbz, err := validator0.genesisFileContent(ctx)
 		if err != nil {
 			return err
 		}
-
-		if err := validator0.addGenesisAccount(ctx, bech32, defaultGenesisAmount); err != nil {
-			return err
-		}
-
-		if err := validatorN.copyGentx(ctx, validator0); err != nil {
-			return err
-		}
+		finalGenesisBz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
 	}
-
-	// create the faucet wallet, this can be used to fund new wallets in the tests.
-	wallet, err := c.CreateWallet(ctx, consts.FaucetAccountKeyName)
-	if err != nil {
-		return fmt.Errorf("failed to create faucet wallet: %w", err)
-	}
-	c.faucetWallet = wallet
-
-	if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
-		return err
-	}
-
-	if err := validator0.collectGentxs(ctx); err != nil {
-		return err
-	}
-
-	genbz, err := validator0.genesisFileContent(ctx)
-	if err != nil {
-		return err
-	}
-
-	finalGenesisBz := bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
 
 	chainNodes := c.Nodes()
 	for _, cn := range chainNodes {

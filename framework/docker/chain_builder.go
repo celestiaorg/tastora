@@ -32,6 +32,7 @@ type ChainNodeConfig struct {
 	privValidatorKey []byte
 	// postInit functions are executed sequentially after the node is initialized.
 	postInit []func(ctx context.Context, node *ChainNode) error
+	keyring  keyring.Keyring
 }
 
 // ChainNodeConfigBuilder provides a fluent interface for building ChainNodeConfig
@@ -48,6 +49,11 @@ func NewChainNodeConfigBuilder() *ChainNodeConfigBuilder {
 			Env:                 make([]string, 0),
 		},
 	}
+}
+
+func (b *ChainNodeConfigBuilder) WithKeyring(kr keyring.Keyring) *ChainNodeConfigBuilder {
+	b.config.keyring = kr
+	return b
 }
 
 // WithImage sets the Docker image for the node (overrides chain default)
@@ -132,13 +138,6 @@ func (b *ChainBuilder) WithName(name string) *ChainBuilder {
 // WithChainID sets the chain ID
 func (b *ChainBuilder) WithChainID(chainID string) *ChainBuilder {
 	b.chainID = chainID
-	return b
-}
-
-// WithGenesisKeyring sets a keyring containing keys that match the genesis
-// This is useful when using celestia-app's testnode package which pre-generates keys
-func (b *ChainBuilder) WithGenesisKeyring(kr keyring.Keyring) *ChainBuilder {
-	b.genesisKeyring = kr
 	return b
 }
 
@@ -369,7 +368,7 @@ func (b *ChainBuilder) newChainNode(
 	}
 
 	// If this is a validator and we have a genesis keyring, preload the keys using a one-shot container
-	if nodeConfig.validator && b.genesisKeyring != nil {
+	if nodeConfig.validator && tn.Keyring != nil {
 		if err := b.preloadKeyringToVolume(ctx, tn, index); err != nil {
 			return nil, fmt.Errorf("failed to preload keyring to volume: %w", err)
 		}
@@ -399,12 +398,13 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 		ValidatorIndex:      index,
 		PrivValidatorKey:    nodeConfig.privValidatorKey, // Set from node config
 		PostInit:            b.getPostInit(nodeConfig),
+		Keyring:             nodeConfig.keyring,
 	}
 
 	// Set genesis keyring if this is a validator
-	if nodeConfig.validator && b.genesisKeyring != nil {
-		chainParams.GenesisKeyring = b.genesisKeyring
-	}
+	//if nodeConfig.validator && b.genesisKeyring != nil {
+	//	chainParams.GenesisKeyring = b.genesisKeyring
+	//}
 
 	// Get the appropriate image using fallback logic
 	imageToUse := b.getImage(nodeConfig)
@@ -422,11 +422,11 @@ func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNo
 	}
 
 	// Check if the key exists in the genesis keyring
-	key, err := b.genesisKeyring.Key(validatorKeyName)
+	key, err := node.Keyring.Key(validatorKeyName)
 	if err != nil {
 		// Try just "validator" as fallback
 		validatorKeyName = "validator"
-		key, err = b.genesisKeyring.Key(validatorKeyName)
+		key, err = node.Keyring.Key(validatorKeyName)
 		if err != nil {
 			return fmt.Errorf("validator key %q not found in genesis keyring: %w", validatorKeyName, err)
 		}
@@ -456,7 +456,7 @@ func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNo
 	}
 
 	// Export the key from genesis keyring
-	armor, err := b.genesisKeyring.ExportPrivKeyArmor(validatorKeyName, "")
+	armor, err := node.Keyring.ExportPrivKeyArmor(validatorKeyName, "")
 	if err != nil {
 		return fmt.Errorf("failed to export validator key: %w", err)
 	}
