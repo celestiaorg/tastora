@@ -73,41 +73,10 @@ func (s *DockerTestSuite) TearDownTest() {
 
 // CreateDockerProvider returns a provider with configuration options applied to the default Celestia config.
 func (s *DockerTestSuite) CreateDockerProvider(opts ...ConfigOption) *Provider {
-	numValidators := 1
-	numFullNodes := 0
-
 	cfg := Config{
 		Logger:          s.logger,
 		DockerClient:    s.dockerClient,
 		DockerNetworkID: s.networkID,
-		ChainConfig: &ChainConfig{
-			Type:          "celestia",
-			Name:          "celestia",
-			Version:       "v4.0.0-rc6",
-			NumValidators: &numValidators,
-			NumFullNodes:  &numFullNodes,
-			ChainID:       "test",
-			Image: DockerImage{
-				Repository: "ghcr.io/celestiaorg/celestia-app",
-				Version:    "v4.0.0-rc6",
-				UIDGID:     "10001:10001",
-			},
-			Bin:            "celestia-appd",
-			Bech32Prefix:   "celestia",
-			Denom:          "utia",
-			CoinType:       "118",
-			GasPrices:      "0.025utia",
-			GasAdjustment:  1.3,
-			EncodingConfig: &s.encConfig,
-			AdditionalStartArgs: []string{
-				"--force-no-bbr",
-				"--grpc.enable",
-				"--grpc.address",
-				"0.0.0.0:9090",
-				"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
-				"--timeout-commit", "1s", // shorter block time.
-			},
-		},
 		DataAvailabilityNetworkConfig: &DataAvailabilityNetworkConfig{
 			FullNodeCount:   1,
 			BridgeNodeCount: 1,
@@ -157,7 +126,7 @@ func (s *DockerTestSuite) getGenesisHash(ctx context.Context) string {
 func (s *DockerTestSuite) TestPerNodeDifferentImages() {
 	alternativeImage := DockerImage{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
-		Version:    "v4.0.0-rc5", // Different version from default
+		Version:    "v4.0.0-rc5", // different version from default
 		UIDGID:     "10001:10001",
 	}
 
