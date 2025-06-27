@@ -88,7 +88,6 @@ type ChainNodeParams struct {
 	Env                 []string
 	AdditionalStartArgs []string
 	EncodingConfig      *testutil.TestEncodingConfig
-	ChainNodeConfig     *ChainNodeConfig
 	// Optional fields for key preloading
 	GenesisKeyring   keyring.Keyring
 	ValidatorIndex   int
@@ -559,35 +558,6 @@ func (tn *ChainNode) keyBech32(ctx context.Context, name string, bech string) (s
 	}
 
 	return string(bytes.TrimSuffix(stdout, []byte("\n"))), nil
-}
-
-// getNodeConfig returns the per-node configuration if it exists
-func (tn *ChainNode) getNodeConfig() *ChainNodeConfig {
-	return tn.ChainNodeConfig
-}
-
-// getAdditionalStartArgs returns the start arguments for this node, preferring per-node config over chain config
-func (tn *ChainNode) getAdditionalStartArgs() []string {
-	if tn.ChainNodeConfig != nil && tn.ChainNodeConfig.AdditionalStartArgs != nil {
-		return tn.ChainNodeConfig.AdditionalStartArgs
-	}
-	return tn.AdditionalStartArgs
-}
-
-// getImage returns the Docker image for this node, preferring per-node config over the default image
-func (tn *ChainNode) getImage() DockerImage {
-	if tn.ChainNodeConfig != nil && tn.ChainNodeConfig.Image != nil {
-		return *tn.ChainNodeConfig.Image
-	}
-	return tn.ContainerNode.Image
-}
-
-// getEnv returns the environment variables for this node, preferring per-node config over chain config
-func (tn *ChainNode) getEnv() []string {
-	if tn.ChainNodeConfig != nil && tn.ChainNodeConfig.Env != nil {
-		return tn.ChainNodeConfig.Env
-	}
-	return tn.Env
 }
 
 // CondenseMoniker fits a moniker into the cosmos character limit for monikers.

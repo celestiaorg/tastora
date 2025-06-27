@@ -19,50 +19,52 @@ import (
 	"testing"
 )
 
-type NodeConfig struct {
+type ChainNodeConfig struct {
 	// validator is a flag indicating whether the node is a validator or a full node.
 	validator bool
-	// image overrides the chain's default image for this specific node (optional)
-	image               *DockerImage
-	additionalStartArgs []string
-	envVars             []string
+	// Image overrides the chain's default image for this specific node (optional)
+	Image *DockerImage
+	// AdditionalStartArgs overrides the chain-level AdditionalStartArgs for this specific node
+	AdditionalStartArgs []string
+	// Env overrides the chain-level Env for this specific node
+	Env []string
 	// privValidatorKey contains the private validator key bytes for this specific node
 	privValidatorKey []byte
 	// postInit functions are executed sequentially after the node is initialized.
 	postInit []func(ctx context.Context, node *ChainNode) error
 }
 
-// ChainNodeConfigBuilder provides a fluent interface for building NodeConfig
+// ChainNodeConfigBuilder provides a fluent interface for building ChainNodeConfig
 type ChainNodeConfigBuilder struct {
-	config NodeConfig
+	config *ChainNodeConfig
 }
 
 // NewChainNodeConfigBuilder creates a new ChainNodeConfigBuilder
 func NewChainNodeConfigBuilder() *ChainNodeConfigBuilder {
 	return &ChainNodeConfigBuilder{
-		config: NodeConfig{
+		config: &ChainNodeConfig{
 			validator:           false,
-			additionalStartArgs: make([]string, 0),
-			envVars:             make([]string, 0),
+			AdditionalStartArgs: make([]string, 0),
+			Env:                 make([]string, 0),
 		},
 	}
 }
 
 // WithImage sets the Docker image for the node (overrides chain default)
 func (b *ChainNodeConfigBuilder) WithImage(image DockerImage) *ChainNodeConfigBuilder {
-	b.config.image = &image
+	b.config.Image = &image
 	return b
 }
 
 // WithAdditionalStartArgs sets the additional start arguments
 func (b *ChainNodeConfigBuilder) WithAdditionalStartArgs(args ...string) *ChainNodeConfigBuilder {
-	b.config.additionalStartArgs = args
+	b.config.AdditionalStartArgs = args
 	return b
 }
 
 // WithEnvVars sets the environment variables
 func (b *ChainNodeConfigBuilder) WithEnvVars(envVars ...string) *ChainNodeConfigBuilder {
-	b.config.envVars = envVars
+	b.config.Env = envVars
 	return b
 }
 
@@ -78,15 +80,15 @@ func (b *ChainNodeConfigBuilder) WithPostInit(postInitFns ...func(ctx context.Co
 	return b
 }
 
-// Build returns the configured NodeConfig
-func (b *ChainNodeConfigBuilder) Build() NodeConfig {
-	return b.config
+// Build returns the configured ChainNodeConfig
+func (b *ChainNodeConfigBuilder) Build() ChainNodeConfig {
+	return *b.config
 }
 
 type ChainBuilder struct {
 	t               *testing.T
-	validators      []NodeConfig
-	fullNodes       []NodeConfig
+	validators      []ChainNodeConfig
+	fullNodes       []ChainNodeConfig
 	dockerClient    *client.Client
 	dockerNetworkID string
 	// raw bytes that should be written as the config/genesis.json file for the chain.
@@ -104,6 +106,8 @@ type ChainBuilder struct {
 	defaultImage *DockerImage
 	// default additional start arguments for all nodes in the chain (can be overridden per node)
 	defaultAdditionalStartArgs []string
+	// default post init functions for all nodes in the chain (can be overridden per node)
+	defaultPostInit []func(ctx context.Context, node *ChainNode) error
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -151,8 +155,8 @@ func (b *ChainBuilder) WithLogger(logger *zap.Logger) *ChainBuilder {
 }
 
 // WithValidators sets the validator node configurations
-func (b *ChainBuilder) WithValidators(validators ...NodeConfig) *ChainBuilder {
-	b.validators = make([]NodeConfig, 0, len(validators))
+func (b *ChainBuilder) WithValidators(validators ...ChainNodeConfig) *ChainBuilder {
+	b.validators = make([]ChainNodeConfig, 0, len(validators))
 	for _, validator := range validators {
 		validator.validator = true
 		b.validators = append(b.validators, validator)
@@ -161,7 +165,7 @@ func (b *ChainBuilder) WithValidators(validators ...NodeConfig) *ChainBuilder {
 }
 
 // WithFullNodes sets the full node configurations
-func (b *ChainBuilder) WithFullNodes(fullNodes ...NodeConfig) *ChainBuilder {
+func (b *ChainBuilder) WithFullNodes(fullNodes ...ChainNodeConfig) *ChainBuilder {
 	b.fullNodes = fullNodes
 	return b
 }
@@ -220,12 +224,18 @@ func (b *ChainBuilder) WithDefaultAdditionalStartArgs(args ...string) *ChainBuil
 	return b
 }
 
+// WithDefaultPostInit sets the default post init functions for all nodes in the chain
+func (b *ChainBuilder) WithDefaultPostInit(postInitFns ...func(ctx context.Context, node *ChainNode) error) *ChainBuilder {
+	b.defaultPostInit = postInitFns
+	return b
+}
+
 // getImage returns the appropriate Docker image for a node, using node-specific override if available,
 // otherwise falling back to the chain's default image
-func (b *ChainBuilder) getImage(nodeConfig NodeConfig) DockerImage {
-	if nodeConfig.image != nil {
+func (b *ChainBuilder) getImage(nodeConfig ChainNodeConfig) DockerImage {
+	if nodeConfig.Image != nil {
 		// Use node-specific image override
-		return *nodeConfig.image
+		return *nodeConfig.Image
 	}
 	if b.defaultImage != nil {
 		// Use chain default image
@@ -237,24 +247,35 @@ func (b *ChainBuilder) getImage(nodeConfig NodeConfig) DockerImage {
 
 // getAdditionalStartArgs returns the appropriate additional start arguments for a node, using node-specific override if available,
 // otherwise falling back to the chain's default additional start arguments
-func (b *ChainBuilder) getAdditionalStartArgs(nodeConfig NodeConfig) []string {
-	if len(nodeConfig.additionalStartArgs) > 0 {
+func (b *ChainBuilder) getAdditionalStartArgs(nodeConfig ChainNodeConfig) []string {
+	if len(nodeConfig.AdditionalStartArgs) > 0 {
 		// use node-specific additional start args override
-		return nodeConfig.additionalStartArgs
+		return nodeConfig.AdditionalStartArgs
 	}
 	// use chain default additional start args (may be empty)
 	return b.defaultAdditionalStartArgs
 }
 
+// getPostInit returns the appropriate post init functions for a node, using node-specific override if available,
+// otherwise falling back to the chain's default post init functions
+func (b *ChainBuilder) getPostInit(nodeConfig ChainNodeConfig) []func(ctx context.Context, node *ChainNode) error {
+	if len(nodeConfig.postInit) > 0 {
+		// use node-specific post init override
+		return nodeConfig.postInit
+	}
+	// use chain default post init functions (may be empty)
+	return b.defaultPostInit
+}
+
 // AddValidator adds a single validator node configuration
-func (b *ChainBuilder) AddValidator(validator NodeConfig) *ChainBuilder {
+func (b *ChainBuilder) AddValidator(validator ChainNodeConfig) *ChainBuilder {
 	validator.validator = true
 	b.validators = append(b.validators, validator)
 	return b
 }
 
 // AddFullNode adds a single full node configuration
-func (b *ChainBuilder) AddFullNode(fullNode NodeConfig) *ChainBuilder {
+func (b *ChainBuilder) AddFullNode(fullNode ChainNodeConfig) *ChainBuilder {
 	fullNode.validator = false
 	b.fullNodes = append(b.fullNodes, fullNode)
 	return b
@@ -315,7 +336,7 @@ func (b *ChainBuilder) initializeChainNodes(ctx context.Context) ([]*ChainNode, 
 // newChainNode constructs a new cosmos chain node with a docker volume.
 func (b *ChainBuilder) newChainNode(
 	ctx context.Context,
-	nodeConfig NodeConfig,
+	nodeConfig ChainNodeConfig,
 	index int,
 ) (*ChainNode, error) {
 	// Construct the ChainNode first so we can access its name.
@@ -357,7 +378,7 @@ func (b *ChainBuilder) newChainNode(
 	return tn, nil
 }
 
-func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig, index int) *ChainNode {
+func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeConfig, index int) *ChainNode {
 	// use a default home directory if name is not set
 	homeDir := "/var/cosmos-chain"
 	if b.name != "" {
@@ -371,14 +392,13 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig NodeConfig
 		CoinType:            b.coinType,
 		GasPrices:           b.gasPrices,
 		GasAdjustment:       1.0, // Default gas adjustment
-		Env:                 nodeConfig.envVars,
+		Env:                 nodeConfig.Env,
 		AdditionalStartArgs: b.getAdditionalStartArgs(nodeConfig),
 		EncodingConfig:      b.encodingConfig,
-		ChainNodeConfig:     nil, // No per-node config by default
 		GenesisKeyring:      nil, // Will be set below if validator
 		ValidatorIndex:      index,
 		PrivValidatorKey:    nodeConfig.privValidatorKey, // Set from node config
-		PostInit:            nodeConfig.postInit,
+		PostInit:            b.getPostInit(nodeConfig),
 	}
 
 	// Set genesis keyring if this is a validator

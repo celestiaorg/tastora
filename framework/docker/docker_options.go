@@ -3,16 +3,6 @@ package docker
 // ConfigOption is a function that modifies a Config
 type ConfigOption func(*Config)
 
-// WithPerNodeConfig adds per-node configuration to the chain config
-func WithPerNodeConfig(nodeConfigs map[int]*ChainNodeConfig) ConfigOption {
-	return func(cfg *Config) {
-		if cfg.ChainConfig == nil {
-			cfg.ChainConfig = &ChainConfig{}
-		}
-		cfg.ChainConfig.ChainNodeConfigs = nodeConfigs
-	}
-}
-
 // WithNumValidators sets the number of validators to start the chain with.
 func WithNumValidators(numValidators int) ConfigOption {
 	return func(cfg *Config) {

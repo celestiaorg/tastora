@@ -26,7 +26,6 @@ func TestChainNodeHostName(t *testing.T) {
 		Env:             []string{},
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
-		ChainNodeConfig: nil,
 	}
 	node1 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 0, chainParams1)
 
@@ -40,7 +39,6 @@ func TestChainNodeHostName(t *testing.T) {
 		Env:             []string{},
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
-		ChainNodeConfig: nil,
 	}
 	node2 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 1, chainParams2)
 
@@ -54,7 +52,6 @@ func TestChainNodeHostName(t *testing.T) {
 		Env:             []string{},
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
-		ChainNodeConfig: nil,
 	}
 	node3 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 2, chainParams3)
 

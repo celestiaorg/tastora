@@ -57,19 +57,7 @@ type ChainConfig struct {
 	AdditionalStartArgs []string
 	// Environment variables for chain nodes
 	Env []string
-	// ChainNodeConfigs allows per-node configuration overrides, keyed by node index
-	ChainNodeConfigs map[int]*ChainNodeConfig
 	GenesisFileBz    []byte
-}
-
-// ChainNodeConfig provides per-node configuration that can override ChainConfig defaults
-type ChainNodeConfig struct {
-	// AdditionalStartArgs overrides the chain-level AdditionalStartArgs for this specific node
-	AdditionalStartArgs []string
-	// Image overrides the chain-level Image for this specific node
-	Image *DockerImage
-	// Env overrides the chain-level Env for this specific node
-	Env []string
 }
 
 // DataAvailabilityNetworkConfig defines the configuration for the data availability network, including node counts and image settings.
