@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,15 +21,17 @@ import (
 var _ types.RollkitNode = &RollkitNode{}
 
 const (
-	rollkitRpcPort = "7331/tcp"
+	rollkitRpcPort  = "7331/tcp"
+	rollkitHttpPort = "8080/tcp"
 )
 
 var rollkitSentryPorts = nat.PortMap{
-	nat.Port(p2pPort):        {},
-	nat.Port(rollkitRpcPort): {}, // rollkit uses a different rpc port
-	nat.Port(grpcPort):       {},
-	nat.Port(apiPort):        {},
-	nat.Port(privValPort):    {},
+	nat.Port(p2pPort):         {},
+	nat.Port(rollkitRpcPort):  {}, // rollkit uses a different rpc port
+	nat.Port(grpcPort):        {},
+	nat.Port(apiPort):         {},
+	nat.Port(privValPort):     {},
+	nat.Port(rollkitHttpPort): {},
 }
 
 type RollkitNode struct {
@@ -43,6 +46,7 @@ type RollkitNode struct {
 	hostAPIPort  string
 	hostGRPCPort string
 	hostP2PPort  string
+	hostHTTPPort string
 }
 
 func NewRollkitNode(cfg Config, testName string, image DockerImage, index int) *RollkitNode {
@@ -149,11 +153,11 @@ func (rn *RollkitNode) startContainer(ctx context.Context) error {
 	}
 
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := rn.containerLifecycle.GetHostPorts(ctx, rollkitRpcPort, grpcPort, apiPort, p2pPort)
+	hostPorts, err := rn.containerLifecycle.GetHostPorts(ctx, rollkitRpcPort, grpcPort, apiPort, p2pPort, rollkitHttpPort)
 	if err != nil {
 		return err
 	}
-	rn.hostRPCPort, rn.hostGRPCPort, rn.hostAPIPort, rn.hostP2PPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3]
+	rn.hostRPCPort, rn.hostGRPCPort, rn.hostAPIPort, rn.hostP2PPort, rn.hostHTTPPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3], hostPorts[4]
 
 	err = rn.initGRPCConnection("tcp://" + rn.hostRPCPort)
 	if err != nil {
@@ -188,6 +192,31 @@ func (rn *RollkitNode) initGRPCConnection(addr string) error {
 // GetHostName returns the hostname of the RollkitNode
 func (rn *RollkitNode) GetHostName() string {
 	return rn.HostName()
+}
+
+// GetHostRPCPort returns the host RPC port
+func (rn *RollkitNode) GetHostRPCPort() string {
+	return strings.Replace(rn.hostRPCPort, "0.0.0.0:", "", -1)
+}
+
+// GetHostAPIPort returns the host API port
+func (rn *RollkitNode) GetHostAPIPort() string {
+	return strings.Replace(rn.hostAPIPort, "0.0.0.0:", "", -1)
+}
+
+// GetHostGRPCPort returns the host GRPC port
+func (rn *RollkitNode) GetHostGRPCPort() string {
+	return strings.Replace(rn.hostGRPCPort, "0.0.0.0:", "", -1)
+}
+
+// GetHostP2PPort returns the host P2P port
+func (rn *RollkitNode) GetHostP2PPort() string {
+	return strings.Replace(rn.hostP2PPort, "0.0.0.0:", "", -1)
+}
+
+// GetHostHTTPPort returns the host HTTP port
+func (rn *RollkitNode) GetHostHTTPPort() string {
+	return strings.Replace(rn.hostHTTPPort, "0.0.0.0:", "", -1)
 }
 
 // waitForNodeReady polls the health endpoint until the node is ready or timeout is reached
