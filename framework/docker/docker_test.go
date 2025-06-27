@@ -25,6 +25,7 @@ type DockerTestSuite struct {
 	encConfig    testutil.TestEncodingConfig
 	provider     *Provider
 	chain        types.Chain
+	builder      *ChainBuilder
 }
 
 // SetupSuite runs once before all tests in the suite.
@@ -42,6 +43,22 @@ func (s *DockerTestSuite) SetupSuite() {
 
 func (s *DockerTestSuite) SetupTest() {
 	s.dockerClient, s.networkID = DockerSetup(s.T())
+
+	defaultImage := DockerImage{
+		Repository: "ghcr.io/celestiaorg/celestia-app",
+		Version:    "v4.0.0-rc6",
+		UIDGID:     "10001:10001",
+	}
+
+	// create a build with a default set of args, any individual test can override/modify.
+	s.builder = NewChainBuilder(s.T()).
+		WithDockerClient(s.dockerClient).
+		WithDockerNetworkID(s.networkID).
+		WithDefaultImage(defaultImage).
+		WithEncodingConfig(&s.encConfig).
+		AddValidator(NewChainNodeConfigBuilder().
+			WithAdditionalStartArgs("--force-no-bbr").
+			Build())
 }
 
 // TearDownTest removes docker resources.
@@ -133,44 +150,34 @@ func (s *DockerTestSuite) getGenesisHash(ctx context.Context) string {
 
 // TestPerNodeDifferentImages tests that nodes can be deployed with different Docker images
 func (s *DockerTestSuite) TestPerNodeDifferentImages() {
-	defaultImage := DockerImage{
-		Repository: "ghcr.io/celestiaorg/celestia-app",
-		Version:    "v4.0.0-rc6",
-		UIDGID:     "10001:10001",
-	}
-
 	alternativeImage := DockerImage{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
-		Version:    "v4.0.0-rc5", // Different version
+		Version:    "v4.0.0-rc5", // Different version from default
 		UIDGID:     "10001:10001",
 	}
 
-	// set up chain with 2 validators using different images
-	numValidators := 2
+	// create node configs with different images and settings
+	validator0Config := NewChainNodeConfigBuilder().
+		WithAdditionalStartArgs("--force-no-bbr", "--log_level", "info").
+		Build() // uses default image
 
+	validator1Config := NewChainNodeConfigBuilder().
+		WithImage(alternativeImage). // override with different image
+		WithAdditionalStartArgs("--force-no-bbr", "--log_level", "debug").
+		Build()
+
+	// Use builder directly - tests can modify as needed before calling Build
 	var err error
-	s.provider = s.CreateDockerProvider(
-		WithNumValidators(numValidators),
-		WithPerNodeConfig(map[int]*ChainNodeConfig{
-			0: {
-				Image:               &defaultImage, // first validator uses one image
-				AdditionalStartArgs: []string{"--force-no-bbr", "--log_level", "info"},
-			},
-			1: {
-				Image:               &alternativeImage, // second validator uses a different image
-				AdditionalStartArgs: []string{"--force-no-bbr", "--log_level", "debug"},
-			},
-		}),
-	)
-
-	s.chain, err = s.provider.GetChain(s.ctx)
+	s.chain, err = s.builder.
+		WithValidators(validator0Config, validator1Config).
+		Build(s.ctx)
 	s.Require().NoError(err)
 
 	err = s.chain.Start(s.ctx)
 	s.Require().NoError(err)
 
 	validatorNodes := s.chain.GetNodes()
-	s.Require().Len(validatorNodes, numValidators, "expected 2 validators")
+	s.Require().Len(validatorNodes, 2, "expected 2 validators")
 
 	// verify both validators are accessible
 	for i, node := range validatorNodes {

@@ -150,7 +150,11 @@ func (b *ChainBuilder) WithLogger(logger *zap.Logger) *ChainBuilder {
 
 // WithValidators sets the validator node configurations
 func (b *ChainBuilder) WithValidators(validators ...NodeConfig) *ChainBuilder {
-	b.validators = validators
+	b.validators = make([]NodeConfig, 0, len(validators))
+	for _, validator := range validators {
+		validator.validator = true
+		b.validators = append(b.validators, validator)
+	}
 	return b
 }
 
@@ -229,6 +233,7 @@ func (b *ChainBuilder) AddValidator(validator NodeConfig) *ChainBuilder {
 	b.validators = append(b.validators, validator)
 	return b
 }
+
 
 // AddFullNode adds a single full node configuration
 func (b *ChainBuilder) AddFullNode(fullNode NodeConfig) *ChainBuilder {
@@ -310,13 +315,16 @@ func (b *ChainBuilder) newChainNode(
 	}
 	tn.VolumeName = v.Name
 
+	// Get the appropriate image using fallback logic
+	imageToUse := b.GetImage(nodeConfig)
+	
 	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
 		Log:        b.logger,
 		Client:     b.dockerClient,
 		VolumeName: v.Name,
-		ImageRef:   nodeConfig.image.Ref(),
+		ImageRef:   imageToUse.Ref(),
 		TestName:   b.t.Name(),
-		UidGid:     nodeConfig.image.UIDGID,
+		UidGid:     imageToUse.UIDGID,
 	}); err != nil {
 		return nil, fmt.Errorf("set volume owner: %w", err)
 	}
