@@ -31,7 +31,9 @@ type ChainNodeConfig struct {
 	privValidatorKey []byte
 	// postInit functions are executed sequentially after the node is initialized.
 	postInit []func(ctx context.Context, node *ChainNode) error
-	keyring  keyring.Keyring
+	keyring keyring.Keyring
+	// AccountName specifies the name of the account/key in the genesis keyring to use for this validator
+	AccountName string
 }
 
 // ChainNodeConfigBuilder provides a fluent interface for building ChainNodeConfig
@@ -82,6 +84,12 @@ func (b *ChainNodeConfigBuilder) WithPrivValidatorKey(privValKey []byte) *ChainN
 // WithPostInit sets the post init functions.
 func (b *ChainNodeConfigBuilder) WithPostInit(postInitFns ...func(ctx context.Context, node *ChainNode) error) *ChainNodeConfigBuilder {
 	b.config.postInit = postInitFns
+	return b
+}
+
+// WithAccountName sets the account name to use from the genesis keyring for this validator
+func (b *ChainNodeConfigBuilder) WithAccountName(accountName string) *ChainNodeConfigBuilder {
+	b.config.AccountName = accountName
 	return b
 }
 
@@ -366,7 +374,7 @@ func (b *ChainBuilder) newChainNode(
 
 	// if this is a validator and we have a genesis keyring, preload the keys using a one-shot container
 	if nodeConfig.validator && tn.GenesisKeyring != nil {
-		if err := preloadKeyringToVolume(ctx, tn, index); err != nil {
+		if err := preloadKeyringToVolume(ctx, tn, nodeConfig); err != nil {
 			return nil, fmt.Errorf("failed to preload keyring to volume: %w", err)
 		}
 	}
@@ -404,23 +412,16 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 }
 
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume
-func preloadKeyringToVolume(ctx context.Context, node *ChainNode, validatorIndex int) error {
-	// list all keys in the genesis keyring to find the appropriate validator key
-	keys, err := node.GenesisKeyring.List()
-	if err != nil {
-		return fmt.Errorf("failed to list keys in genesis keyring: %w", err)
+func preloadKeyringToVolume(ctx context.Context, node *ChainNode, nodeConfig ChainNodeConfig) error {
+	// check if AccountName is specified
+	if nodeConfig.AccountName == "" {
+		return fmt.Errorf("AccountName must be specified for validator nodes when using a genesis keyring")
 	}
 
-	// ensure we have enough keys for this validator index
-	if validatorIndex >= len(keys) {
-		return fmt.Errorf("validator index %d exceeds available keys in genesis keyring (found %d keys)", validatorIndex, len(keys))
-	}
-
-	// use the key at the given index
-	validatorKeyName := keys[validatorIndex].Name
+	validatorKeyName := nodeConfig.AccountName
 
 	// get the key from the genesis keyring
-	_, err = node.GenesisKeyring.Key(validatorKeyName)
+	_, err := node.GenesisKeyring.Key(validatorKeyName)
 	if err != nil {
 		return fmt.Errorf("validator key %q not found in genesis keyring: %w", validatorKeyName, err)
 	}
