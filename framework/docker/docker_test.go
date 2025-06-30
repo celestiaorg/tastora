@@ -54,9 +54,9 @@ func (s *DockerTestSuite) SetupTest() {
 	s.builder = NewChainBuilder(s.T()).
 		WithDockerClient(s.dockerClient).
 		WithDockerNetworkID(s.networkID).
-		WithDefaultImage(defaultImage).
+		WithImage(defaultImage).
 		WithEncodingConfig(&s.encConfig).
-		WithDefaultAdditionalStartArgs(
+		WithAdditionalStartArgs(
 			"--force-no-bbr",
 			"--grpc.enable",
 			"--grpc.address", "0.0.0.0:9090",

@@ -478,7 +478,7 @@ func (c *Chain) initializeChainNodes(
 		WithCoinType(c.cfg.ChainConfig.CoinType).
 		WithGasPrices(c.cfg.ChainConfig.GasPrices).
 		WithEncodingConfig(c.cfg.ChainConfig.EncodingConfig).
-		WithDefaultImage(c.cfg.ChainConfig.Image).
+		WithImage(c.cfg.ChainConfig.Image).
 		WithValidators(validatorConfigs...).
 		WithFullNodes(fullNodeConfigs...)
 
@@ -514,7 +514,6 @@ func (c *Chain) initializeChainNodes(
 	c.FullNodes = newFullNodes
 	return nil
 }
-
 
 // pullImages pulls all images used by the chain chains.
 func (c *Chain) pullImages(ctx context.Context) {

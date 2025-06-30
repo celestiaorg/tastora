@@ -8,7 +8,6 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/moby/moby/client"
@@ -107,11 +106,11 @@ type ChainBuilder struct {
 	chainID        string
 	logger         *zap.Logger
 	// default Docker image for all nodes in the chain (can be overridden per node)
-	defaultImage *DockerImage
+	dockerImage *DockerImage
 	// default additional start arguments for all nodes in the chain (can be overridden per node)
-	defaultAdditionalStartArgs []string
+	additionalStartArgs []string
 	// default post init functions for all nodes in the chain (can be overridden per node)
-	defaultPostInit []func(ctx context.Context, node *ChainNode) error
+	postInit []func(ctx context.Context, node *ChainNode) error
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -209,21 +208,21 @@ func (b *ChainBuilder) WithGasPrices(gasPrices string) *ChainBuilder {
 	return b
 }
 
-// WithDefaultImage sets the default Docker image for all nodes in the chain
-func (b *ChainBuilder) WithDefaultImage(image DockerImage) *ChainBuilder {
-	b.defaultImage = &image
+// WithImage sets the default Docker image for all nodes in the chain
+func (b *ChainBuilder) WithImage(image DockerImage) *ChainBuilder {
+	b.dockerImage = &image
 	return b
 }
 
-// WithDefaultAdditionalStartArgs sets the default additional start arguments for all nodes in the chain
-func (b *ChainBuilder) WithDefaultAdditionalStartArgs(args ...string) *ChainBuilder {
-	b.defaultAdditionalStartArgs = args
+// WithAdditionalStartArgs sets the default additional start arguments for all nodes in the chain
+func (b *ChainBuilder) WithAdditionalStartArgs(args ...string) *ChainBuilder {
+	b.additionalStartArgs = args
 	return b
 }
 
-// WithDefaultPostInit sets the default post init functions for all nodes in the chain
-func (b *ChainBuilder) WithDefaultPostInit(postInitFns ...func(ctx context.Context, node *ChainNode) error) *ChainBuilder {
-	b.defaultPostInit = postInitFns
+// WithPostInit sets the default post init functions for all nodes in the chain
+func (b *ChainBuilder) WithPostInit(postInitFns ...func(ctx context.Context, node *ChainNode) error) *ChainBuilder {
+	b.postInit = postInitFns
 	return b
 }
 
@@ -234,9 +233,9 @@ func (b *ChainBuilder) getImage(nodeConfig ChainNodeConfig) DockerImage {
 		// Use node-specific image override
 		return *nodeConfig.Image
 	}
-	if b.defaultImage != nil {
+	if b.dockerImage != nil {
 		// Use chain default image
-		return *b.defaultImage
+		return *b.dockerImage
 	}
 	// this should not happen if the builder is used correctly
 	panic("no image specified: neither node-specific nor chain default image provided")
@@ -250,7 +249,7 @@ func (b *ChainBuilder) getAdditionalStartArgs(nodeConfig ChainNodeConfig) []stri
 		return nodeConfig.AdditionalStartArgs
 	}
 	// use chain default additional start args (may be empty)
-	return b.defaultAdditionalStartArgs
+	return b.additionalStartArgs
 }
 
 // getPostInit returns the appropriate post init functions for a node, using node-specific override if available,
@@ -261,7 +260,7 @@ func (b *ChainBuilder) getPostInit(nodeConfig ChainNodeConfig) []func(ctx contex
 		return nodeConfig.postInit
 	}
 	// use chain default post init functions (may be empty)
-	return b.defaultPostInit
+	return b.postInit
 }
 
 // AddValidator adds a single validator node configuration
@@ -298,7 +297,7 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 				Name:           "celestia",
 				Version:        "v4.0.0-rc6",
 				ChainID:        b.chainID,
-				Image:          *b.defaultImage, // default image must be provided, can be overridden per node.
+				Image:          *b.dockerImage, // default image must be provided, can be overridden per node.
 				Bin:            b.binaryName,
 				Bech32Prefix:   "celestia",
 				Denom:          "utia",
@@ -365,9 +364,9 @@ func (b *ChainBuilder) newChainNode(
 		return nil, fmt.Errorf("set volume owner: %w", err)
 	}
 
-	// tf this is a validator and we have a genesis keyring, preload the keys using a one-shot container
+	// if this is a validator and we have a genesis keyring, preload the keys using a one-shot container
 	if nodeConfig.validator && tn.GenesisKeyring != nil {
-		if err := b.preloadKeyringToVolume(ctx, tn, index); err != nil {
+		if err := preloadKeyringToVolume(ctx, tn, index); err != nil {
 			return nil, fmt.Errorf("failed to preload keyring to volume: %w", err)
 		}
 	}
@@ -405,28 +404,25 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 }
 
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume
-func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNode, validatorIndex int) error {
-	// For celestia-app testnode, the default validator is named "validator"
-	validatorKeyName := "validator"
-	if validatorIndex > 0 {
-		// If there are multiple validators, they might be named differently
-		validatorKeyName = fmt.Sprintf("validator-%d", validatorIndex)
+func preloadKeyringToVolume(ctx context.Context, node *ChainNode, validatorIndex int) error {
+	// list all keys in the genesis keyring to find the appropriate validator key
+	keys, err := node.GenesisKeyring.List()
+	if err != nil {
+		return fmt.Errorf("failed to list keys in genesis keyring: %w", err)
 	}
 
-	// check if the key exists in the genesis keyring
-	key, err := node.GenesisKeyring.Key(validatorKeyName)
+	// ensure we have enough keys for this validator index
+	if validatorIndex >= len(keys) {
+		return fmt.Errorf("validator index %d exceeds available keys in genesis keyring (found %d keys)", validatorIndex, len(keys))
+	}
+
+	// use the key at the given index
+	validatorKeyName := keys[validatorIndex].Name
+
+	// get the key from the genesis keyring
+	_, err = node.GenesisKeyring.Key(validatorKeyName)
 	if err != nil {
 		return fmt.Errorf("validator key %q not found in genesis keyring: %w", validatorKeyName, err)
-	}
-
-	// Log the key details for debugging
-	pubKey, _ := key.GetPubKey()
-	if pubKey != nil {
-		b.logger.Info("found validator key in genesis keyring",
-			zap.String("key_name", validatorKeyName),
-			zap.String("pubkey_type", fmt.Sprintf("%T", pubKey)),
-			zap.String("address", sdk.AccAddress(pubKey.Address()).String()),
-		)
 	}
 
 	// create a temporary directory to hold the keyring files
@@ -434,10 +430,11 @@ func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNo
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// create a temporary keyring in the temp directory
-	tempKeyring, err := keyring.New("test", keyring.BackendTest, tempDir, nil, b.encodingConfig.Codec)
+	tempKeyring, err := keyring.New("test", keyring.BackendTest, tempDir, nil, node.EncodingConfig.Codec)
 	if err != nil {
 		return fmt.Errorf("failed to create temp keyring: %w", err)
 	}
@@ -448,34 +445,26 @@ func (b *ChainBuilder) preloadKeyringToVolume(ctx context.Context, node *ChainNo
 		return fmt.Errorf("failed to export validator key: %w", err)
 	}
 
-	// Import the key into the temp keyring
+	// import the key into the temp keyring
 	err = tempKeyring.ImportPrivKey(validatorKeyName, armor, "")
 	if err != nil {
 		return fmt.Errorf("failed to import key into temp keyring: %w", err)
 	}
 
-	// copy keyring files to the volume using existing file utilities
-	return b.copyKeyringFilesToVolume(ctx, node, tempDir)
+	// copy keyring files to the volume.
+	return copyKeyringFilesToVolume(ctx, node, tempDir)
 }
 
 // copyKeyringFilesToVolume copies keyring files from host temp directory to container volume
-func (b *ChainBuilder) copyKeyringFilesToVolume(ctx context.Context, node *ChainNode, hostKeyringDir string) error {
+func copyKeyringFilesToVolume(ctx context.Context, node *ChainNode, hostKeyringDir string) error {
 	// The cosmos keyring creates files in a keyring-test subdirectory
 	keyringSubDir := path.Join(hostKeyringDir, "keyring-test")
-
-	b.logger.Info("copying keyring files from host directory",
-		zap.String("host_keyring_dir", keyringSubDir),
-	)
 
 	// list files in the keyring subdirectory
 	files, err := os.ReadDir(keyringSubDir)
 	if err != nil {
 		return fmt.Errorf("failed to read keyring directory: %w", err)
 	}
-
-	b.logger.Debug("found files in host keyring directory",
-		zap.Int("file_count", len(files)),
-	)
 
 	// Copy each keyring file to the volume
 	for _, file := range files {
@@ -489,18 +478,11 @@ func (b *ChainBuilder) copyKeyringFilesToVolume(ctx context.Context, node *Chain
 			return fmt.Errorf("failed to read keyring file %s: %w", file.Name(), err)
 		}
 
-		// write the file to the volume
 		relativePath := path.Join("keyring-test", file.Name())
 		err = node.WriteFile(ctx, relativePath, content)
 		if err != nil {
 			return fmt.Errorf("failed to write keyring file %s to volume: %w", file.Name(), err)
 		}
 	}
-
-	b.logger.Info("wrote keyring files to volume",
-		zap.String("node", node.Name()),
-		zap.Int("files", len(files)),
-	)
-
 	return nil
 }
