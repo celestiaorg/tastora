@@ -59,7 +59,7 @@ func (n *ChainNode) GetInternalRPCAddress(ctx context.Context) (string, error) {
 type ChainNodes []*ChainNode
 
 type ChainNode struct {
-	*node
+	*ContainerNode
 	cfg       Config
 	Validator bool
 	Client    rpcclient.Client
@@ -108,9 +108,9 @@ func NewDockerChainNode(log *zap.Logger, validator bool, cfg Config, testName st
 		zap.Int("i", index),
 	)
 	tn := &ChainNode{
-		Validator: validator,
-		cfg:       cfg,
-		node:      newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var/cosmos-chain", cfg.ChainConfig.Name), index, nodeType, log),
+		Validator:     validator,
+		cfg:           cfg,
+		ContainerNode: newContainerNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var/cosmos-chain", cfg.ChainConfig.Name), index, nodeType, log),
 	}
 
 	tn.containerLifecycle = NewContainerLifecycle(log, cfg.DockerClient, tn.Name())

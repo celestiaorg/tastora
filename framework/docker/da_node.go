@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
-	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"path"
@@ -40,44 +38,25 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 		zap.String("node_type", nodeType.String()),
 	)
 	daNode := &DANode{
-		cfg:      cfg,
-		nodeType: nodeType,
-		node:     newNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String(), logger),
+		cfg:           cfg,
+		nodeType:      nodeType,
+		ContainerNode: newContainerNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String(), logger),
 	}
 
 	daNode.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name())
 
 	// image may be overridden by each node.
-	image := daNode.getImage()
-
-	v, err := cfg.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
-		Labels: map[string]string{
-			consts.CleanupLabel:   testName,
-			consts.NodeOwnerLabel: daNode.Name(),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("creating volume for chain node: %w", err)
-	}
-	daNode.VolumeName = v.Name
-
-	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
-		Log:        daNode.logger,
-		Client:     cfg.DockerClient,
-		VolumeName: v.Name,
-		ImageRef:   image.Ref(),
-		TestName:   testName,
-		UidGid:     image.UIDGID,
-	}); err != nil {
-		return nil, fmt.Errorf("set volume owner: %w", err)
+	daNode.Image = daNode.getImage()
+	if err := daNode.createAndSetupVolume(ctx); err != nil {
+		return nil, fmt.Errorf("failed to create and setup volume: %w", err)
 	}
 
 	return daNode, nil
 }
 
-// DANode is a docker implementation of a celestia bridge node.
+// DANode is a docker implementation of a celestia da node.
 type DANode struct {
-	*node
+	*ContainerNode
 	cfg            Config
 	mu             sync.Mutex
 	hasBeenStarted bool
@@ -167,12 +146,12 @@ func (n *DANode) startAndInitialize(ctx context.Context, opts ...types.DANodeSta
 }
 
 // Name of the test node container.
-func (n *node) Name() string {
+func (n *ContainerNode) Name() string {
 	return fmt.Sprintf("%s-%d-%s", n.GetType(), n.Index, SanitizeContainerName(n.TestName))
 }
 
 // HostName of the test node container.
-func (n *node) HostName() string {
+func (n *ContainerNode) HostName() string {
 	return CondenseHostName(n.Name())
 }
 
