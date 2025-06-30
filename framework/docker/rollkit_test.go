@@ -2,15 +2,16 @@ package docker
 
 import (
 	"context"
-	"cosmossdk.io/math"
 	"encoding/hex"
 	"fmt"
+	"testing"
+
+	"cosmossdk.io/math"
 	"github.com/celestiaorg/go-square/v2/share"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	"testing"
 )
 
 func (s *DockerTestSuite) TestRollkit() {
@@ -75,13 +76,13 @@ func (s *DockerTestSuite) TestRollkit() {
 	err = aggregatorNode.Init(ctx)
 	s.Require().NoError(err)
 
-	bridgeNodeHostName, err := bridgeNode.GetInternalHostName()
-	s.Require().NoError(err)
-
 	authToken, err := bridgeNode.GetAuthToken()
 	s.Require().NoError(err)
 
-	daAddress := fmt.Sprintf("http://%s:26658", bridgeNodeHostName)
+	// Use the configured RPC port instead of hardcoded 26658
+	bridgeRPCAddress, err := bridgeNode.GetInternalRPCAddress()
+	s.Require().NoError(err)
+	daAddress := fmt.Sprintf("http://%s", bridgeRPCAddress)
 	err = aggregatorNode.Start(ctx,
 		"--rollkit.da.address", daAddress,
 		"--rollkit.da.gas_price", "0.025",
