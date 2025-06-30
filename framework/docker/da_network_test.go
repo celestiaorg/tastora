@@ -2,9 +2,10 @@ package docker
 
 import (
 	"context"
+	"testing"
+
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
-	"testing"
 )
 
 // TestDANetworkCreation tests the creation of a DataAvailabilityNetwork with one of each type of node.
@@ -222,4 +223,136 @@ func (s *DockerTestSuite) setAuth(ctx context.Context, daNode types.DANode, auth
 
 	err = daNode.Start(ctx)
 	s.Require().NoErrorf(err, "failed to re-start %s node", daNode.GetType().String())
+}
+
+// TestDANetworkCustomPorts tests the configuration of custom ports for DA nodes
+func (s *DockerTestSuite) TestDANetworkCustomPorts() {
+	if testing.Short() {
+		s.T().Skip("skipping due to short mode")
+	}
+
+	ctx := context.Background()
+
+	s.T().Run("test simple configuration with WithDefaultPorts", func(t *testing.T) {
+		// Test the simple one-liner configuration
+		provider := s.CreateDockerProvider(
+			WithDefaultPorts(), // This should use ports 26668, 2131, 26667, 9091
+		)
+
+		chain, err := provider.GetChain(ctx)
+		s.Require().NoError(err)
+
+		err = chain.Start(ctx)
+		s.Require().NoError(err)
+		defer func() { _ = chain.Stop(ctx) }()
+
+		daNetwork, err := provider.GetDataAvailabilityNetwork(ctx)
+		s.Require().NoError(err)
+
+		bridgeNodes := daNetwork.GetBridgeNodes()
+		s.Require().Len(bridgeNodes, 1)
+
+		bridgeNode := bridgeNodes[0]
+
+		// Verify that internal addresses use the custom ports
+		rpcAddr, err := bridgeNode.GetInternalRPCAddress()
+		s.Require().NoError(err)
+		s.Require().Contains(rpcAddr, ":26668", "RPC address should use custom port 26668")
+
+		p2pAddr, err := bridgeNode.GetInternalP2PAddress()
+		s.Require().NoError(err)
+		s.Require().Contains(p2pAddr, ":2131", "P2P address should use custom port 2131")
+	})
+
+	s.T().Run("test custom ports setup with individual functions", func(t *testing.T) {
+		// Test the custom ports configuration using individual functions
+		provider := s.CreateDockerProvider(
+			WithDANodePorts("27000", "3000"),
+			WithDANodeCoreConnection("27001", "9095"),
+		)
+
+		chain, err := provider.GetChain(ctx)
+		s.Require().NoError(err)
+
+		err = chain.Start(ctx)
+		s.Require().NoError(err)
+		defer func() { _ = chain.Stop(ctx) }()
+
+		daNetwork, err := provider.GetDataAvailabilityNetwork(ctx)
+		s.Require().NoError(err)
+
+		bridgeNodes := daNetwork.GetBridgeNodes()
+		s.Require().Len(bridgeNodes, 1)
+
+		bridgeNode := bridgeNodes[0]
+
+		// Verify that internal addresses use the custom ports
+		rpcAddr, err := bridgeNode.GetInternalRPCAddress()
+		s.Require().NoError(err)
+		s.Require().Contains(rpcAddr, ":27000", "RPC address should use custom port 27000")
+
+		p2pAddr, err := bridgeNode.GetInternalP2PAddress()
+		s.Require().NoError(err)
+		s.Require().Contains(p2pAddr, ":3000", "P2P address should use custom port 3000")
+	})
+
+	s.T().Run("test per-node configuration with WithNodePorts", func(t *testing.T) {
+		// Test per-node configuration
+		provider := s.CreateDockerProvider(
+			WithNodePorts(types.BridgeNode, 0, "28000", "4000"), // Configure bridge node 0 with specific ports
+		)
+
+		chain, err := provider.GetChain(ctx)
+		s.Require().NoError(err)
+
+		err = chain.Start(ctx)
+		s.Require().NoError(err)
+		defer func() { _ = chain.Stop(ctx) }()
+
+		daNetwork, err := provider.GetDataAvailabilityNetwork(ctx)
+		s.Require().NoError(err)
+
+		bridgeNodes := daNetwork.GetBridgeNodes()
+		s.Require().Len(bridgeNodes, 1)
+
+		bridgeNode := bridgeNodes[0]
+
+		// Verify that internal addresses use the per-node custom ports
+		rpcAddr, err := bridgeNode.GetInternalRPCAddress()
+		s.Require().NoError(err)
+		s.Require().Contains(rpcAddr, ":28000", "RPC address should use per-node custom port 28000")
+
+		p2pAddr, err := bridgeNode.GetInternalP2PAddress()
+		s.Require().NoError(err)
+		s.Require().Contains(p2pAddr, ":4000", "P2P address should use per-node custom port 4000")
+	})
+
+	s.T().Run("test backward compatibility - default behavior unchanged", func(t *testing.T) {
+		// Test that existing code works unchanged
+		provider := s.CreateDockerProvider() // No custom configuration
+
+		chain, err := provider.GetChain(ctx)
+		s.Require().NoError(err)
+
+		err = chain.Start(ctx)
+		s.Require().NoError(err)
+		defer func() { _ = chain.Stop(ctx) }()
+
+		daNetwork, err := provider.GetDataAvailabilityNetwork(ctx)
+		s.Require().NoError(err)
+
+		bridgeNodes := daNetwork.GetBridgeNodes()
+		s.Require().Len(bridgeNodes, 1)
+
+		bridgeNode := bridgeNodes[0]
+
+		// Verify that internal addresses use the default ports
+		rpcAddr, err := bridgeNode.GetInternalRPCAddress()
+		s.Require().NoError(err)
+		s.Require().Contains(rpcAddr, ":26658", "RPC address should use default port 26658")
+
+		p2pAddr, err := bridgeNode.GetInternalP2PAddress()
+		s.Require().NoError(err)
+		s.Require().Contains(p2pAddr, ":2121", "P2P address should use default port 2121")
+	})
 }

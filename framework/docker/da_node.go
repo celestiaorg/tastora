@@ -4,27 +4,26 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path"
+	"regexp"
+	"strings"
+	"sync"
+
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
-	"path"
-	"regexp"
-	"sync"
 )
 
 var _ types.DANode = &DANode{}
 
 const (
-	daNodeRPCPort = "26658/tcp"
-	daNodeP2PPort = "2121/tcp"
+	// Default port numbers (without /tcp suffix)
+	defaultDANodeRPCPort = "26658" // Default RPC port for DANode
+	defaultDANodeP2PPort = "2121"  // Default P2P port for DANode
+	defaultCoreRPCPort   = "26657" // Default RPC port for Core
+	defaultCoreGRPCPort  = "9090"  // Default GRPC port for Core
 )
-
-// daNodePorts defines the default port mappings for the DANode's RPC and P2P communication.
-var daNodePorts = nat.PortMap{
-	nat.Port(daNodeRPCPort): {},
-	nat.Port(daNodeP2PPort): {},
-}
 
 // newDANode initializes and returns a new DANode instance using the provided context, test name, and configuration.
 func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeType types.DANodeType) (*DANode, error) {
@@ -82,6 +81,18 @@ func (n *DANode) GetAuthToken() (string, error) {
 
 func (n *DANode) GetInternalHostName() (string, error) {
 	return n.HostName(), nil
+}
+
+// GetInternalRPCAddress returns the internal RPC address resolvable within the network
+func (n *DANode) GetInternalRPCAddress() (string, error) {
+	rpcPort := strings.TrimSuffix(n.getRPCPort(), "/tcp")
+	return fmt.Sprintf("%s:%s", n.HostName(), rpcPort), nil
+}
+
+// GetInternalP2PAddress returns the internal P2P address resolvable within the network
+func (n *DANode) GetInternalP2PAddress() (string, error) {
+	p2pPort := strings.TrimSuffix(n.getP2PPort(), "/tcp")
+	return fmt.Sprintf("%s:%s", n.HostName(), p2pPort), nil
 }
 
 // GetType returns the type of the DANode as defined by the types.DANodeType enum.
@@ -189,7 +200,7 @@ func (n *DANode) startNode(ctx context.Context, additionalStartArgs []string, co
 	}
 
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := n.containerLifecycle.GetHostPorts(ctx, daNodeRPCPort, daNodeP2PPort)
+	hostPorts, err := n.containerLifecycle.GetHostPorts(ctx, n.getRPCPort(), n.getP2PPort())
 	if err != nil {
 		return err
 	}
@@ -248,10 +259,7 @@ func extractAddressFromCreateWalletOutput(output string) string {
 func (n *DANode) createNodeContainer(ctx context.Context, additionalStartArgs []string, env []string) error {
 	cmd := []string{"celestia", n.nodeType.String(), "start"}
 	cmd = append(cmd, additionalStartArgs...)
-	usingPorts := nat.PortMap{}
-	for k, v := range daNodePorts {
-		usingPorts[k] = v
-	}
+	usingPorts := n.getPortMap() // Use configurable port map
 	return n.containerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.getImage(), usingPorts, "", n.bind(), nil, n.HostName(), cmd, env, []string{})
 }
 
@@ -307,6 +315,58 @@ func (n *DANode) getImage() DockerImage {
 		return *nodeConfig.Image
 	}
 	return n.Image
+}
+
+// getRPCPort returns the RPC port for this node, with per-node config taking priority over network defaults
+func (n *DANode) getRPCPort() string {
+	if nodeConfig := n.getNodeConfig(); nodeConfig != nil && nodeConfig.RPCPort != "" {
+		return nodeConfig.RPCPort + "/tcp"
+	}
+	if n.cfg.DataAvailabilityNetworkConfig.DefaultRPCPort != "" {
+		return n.cfg.DataAvailabilityNetworkConfig.DefaultRPCPort + "/tcp"
+	}
+	return defaultDANodeRPCPort + "/tcp"
+}
+
+// getP2PPort returns the P2P port for this node, with per-node config taking priority over network defaults
+func (n *DANode) getP2PPort() string {
+	if nodeConfig := n.getNodeConfig(); nodeConfig != nil && nodeConfig.P2PPort != "" {
+		return nodeConfig.P2PPort + "/tcp"
+	}
+	if n.cfg.DataAvailabilityNetworkConfig.DefaultP2PPort != "" {
+		return n.cfg.DataAvailabilityNetworkConfig.DefaultP2PPort + "/tcp"
+	}
+	return defaultDANodeP2PPort + "/tcp"
+}
+
+// getCoreRPCPort returns the core RPC port this node should connect to
+func (n *DANode) getCoreRPCPort() string {
+	if nodeConfig := n.getNodeConfig(); nodeConfig != nil && nodeConfig.CoreRPCPort != "" {
+		return nodeConfig.CoreRPCPort
+	}
+	if n.cfg.DataAvailabilityNetworkConfig.DefaultCoreRPCPort != "" {
+		return n.cfg.DataAvailabilityNetworkConfig.DefaultCoreRPCPort
+	}
+	return defaultCoreRPCPort
+}
+
+// getCoreGRPCPort returns the core GRPC port this node should connect to
+func (n *DANode) getCoreGRPCPort() string {
+	if nodeConfig := n.getNodeConfig(); nodeConfig != nil && nodeConfig.CoreGRPCPort != "" {
+		return nodeConfig.CoreGRPCPort
+	}
+	if n.cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort != "" {
+		return n.cfg.DataAvailabilityNetworkConfig.DefaultCoreGRPCPort
+	}
+	return defaultCoreGRPCPort
+}
+
+// getPortMap returns the port mapping for this node using configurable ports
+func (n *DANode) getPortMap() nat.PortMap {
+	return nat.PortMap{
+		nat.Port(n.getRPCPort()): {},
+		nat.Port(n.getP2PPort()): {},
+	}
 }
 
 // disableRPCAuthModification provides a modification which disables RPC authentication so that the tests can use the endpoints without configuring auth.
