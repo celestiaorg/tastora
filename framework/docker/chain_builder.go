@@ -3,13 +3,11 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
-	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -31,7 +29,7 @@ type ChainNodeConfig struct {
 	privValidatorKey []byte
 	// postInit functions are executed sequentially after the node is initialized.
 	postInit []func(ctx context.Context, node *ChainNode) error
-	keyring keyring.Keyring
+	keyring  keyring.Keyring
 	// AccountName specifies the name of the account/key in the genesis keyring to use for this validator
 	AccountName string
 }
@@ -347,29 +345,9 @@ func (b *ChainBuilder) newChainNode(
 	// The ChainNode's VolumeName cannot be set until after we create the volume.
 	tn := b.newDockerChainNode(b.logger, nodeConfig, index)
 
-	v, err := b.dockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
-		Labels: map[string]string{
-			consts.CleanupLabel:   b.t.Name(),
-			consts.NodeOwnerLabel: tn.Name(),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("creating volume for chain node: %w", err)
-	}
-	tn.VolumeName = v.Name
-
-	// Get the appropriate image using fallback logic
-	imageToUse := b.getImage(nodeConfig)
-
-	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
-		Log:        b.logger,
-		Client:     b.dockerClient,
-		VolumeName: v.Name,
-		ImageRef:   imageToUse.Ref(),
-		TestName:   b.t.Name(),
-		UidGid:     imageToUse.UIDGID,
-	}); err != nil {
-		return nil, fmt.Errorf("set volume owner: %w", err)
+	// create and setup volume using shared logic
+	if err := tn.createAndSetupVolume(ctx); err != nil {
+		return nil, err
 	}
 
 	// if this is a validator and we have a genesis keyring, preload the keys using a one-shot container
@@ -395,13 +373,13 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 		BinaryName:          b.binaryName,
 		CoinType:            b.coinType,
 		GasPrices:           b.gasPrices,
-		GasAdjustment:       1.0, // Default gas adjustment
+		GasAdjustment:       1.0,
 		Env:                 nodeConfig.Env,
 		AdditionalStartArgs: b.getAdditionalStartArgs(nodeConfig),
 		EncodingConfig:      b.encodingConfig,
 		GenesisKeyring:      nodeConfig.keyring,
 		ValidatorIndex:      index,
-		PrivValidatorKey:    nodeConfig.privValidatorKey, // Set from node config
+		PrivValidatorKey:    nodeConfig.privValidatorKey,
 		PostInit:            b.getPostInit(nodeConfig),
 	}
 

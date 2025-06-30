@@ -3,9 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/types"
-	volumetypes "github.com/docker/docker/api/types/volume"
 	"go.uber.org/zap"
 )
 
@@ -59,27 +57,9 @@ func newRollkitNode(
 ) (*RollkitNode, error) {
 	rn := NewRollkitNode(cfg, testName, image, index)
 
-	v, err := cfg.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
-		Labels: map[string]string{
-			consts.CleanupLabel:   testName,
-			consts.NodeOwnerLabel: rn.Name(),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("creating volume for rollkit node: %w", err)
-	}
-
-	rn.VolumeName = v.Name
-
-	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
-		Log:        cfg.Logger,
-		Client:     cfg.DockerClient,
-		VolumeName: v.Name,
-		ImageRef:   image.Ref(),
-		TestName:   testName,
-		UidGid:     image.UIDGID,
-	}); err != nil {
-		return nil, fmt.Errorf("set volume owner: %w", err)
+	// create and setup volume using shared logic
+	if err := rn.createAndSetupVolume(ctx); err != nil {
+		return nil, err
 	}
 
 	return rn, nil

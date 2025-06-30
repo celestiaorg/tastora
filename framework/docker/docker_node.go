@@ -3,7 +3,9 @@ package docker
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/file"
+	volumetypes "github.com/docker/docker/api/types/volume"
 	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
@@ -110,4 +112,36 @@ func (n *ContainerNode) Name() string {
 // HostName of the test node container.
 func (n *ContainerNode) HostName() string {
 	return CondenseHostName(n.Name())
+}
+
+// createAndSetupVolume creates a Docker volume for the node and sets up proper ownership.
+// This consolidates the volume creation pattern used across all node types.
+func (n *ContainerNode) createAndSetupVolume(ctx context.Context) error {
+	// create volume with appropriate labels
+	v, err := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
+		Labels: map[string]string{
+			consts.CleanupLabel:   n.TestName,
+			consts.NodeOwnerLabel: n.Name(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("creating volume for %s: %w", n.nodeType, err)
+	}
+
+	// set the node's volume name
+	n.VolumeName = v.Name
+
+	// configure volume ownership
+	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
+		Log:        n.logger,
+		Client:     n.DockerClient,
+		VolumeName: v.Name,
+		ImageRef:   n.Image.Ref(),
+		TestName:   n.TestName,
+		UidGid:     n.Image.UIDGID,
+	}); err != nil {
+		return fmt.Errorf("set volume owner: %w", err)
+	}
+
+	return nil
 }

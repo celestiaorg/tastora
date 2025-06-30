@@ -9,10 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
-	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 )
@@ -46,29 +44,12 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 
 	daNode.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name())
 
-	// image may be overridden by each node.
-	image := daNode.getImage()
+	// image may be overridden by each node, update ContainerNode with the final image
+	daNode.Image = daNode.getImage()
 
-	v, err := cfg.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
-		Labels: map[string]string{
-			consts.CleanupLabel:   testName,
-			consts.NodeOwnerLabel: daNode.Name(),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("creating volume for chain node: %w", err)
-	}
-	daNode.VolumeName = v.Name
-
-	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
-		Log:        daNode.logger,
-		Client:     cfg.DockerClient,
-		VolumeName: v.Name,
-		ImageRef:   image.Ref(),
-		TestName:   testName,
-		UidGid:     image.UIDGID,
-	}); err != nil {
-		return nil, fmt.Errorf("set volume owner: %w", err)
+	// create and setup volume using shared logic
+	if err := daNode.createAndSetupVolume(ctx); err != nil {
+		return nil, err
 	}
 
 	return daNode, nil
