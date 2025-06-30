@@ -21,13 +21,8 @@ type Config struct {
 }
 
 type ChainConfig struct {
-	// Chain type, e.g. cosmos.
-	Type string
-	// Chain name, e.g. cosmoshub.
+	// Chain name, e.g. celestia.
 	Name string
-	// Version of the docker image to use.
-	// Must be set.
-	Version string
 	// How many validators and how many full nodes to use when instantiating the chain.
 	NumValidators, NumFullNodes *int
 	// Chain ID, e.g. cosmoshub-4
@@ -56,8 +51,8 @@ type ChainConfig struct {
 	// Additional start command arguments
 	AdditionalStartArgs []string
 	// Environment variables for chain nodes
-	Env []string
-	GenesisFileBz    []byte
+	Env           []string
+	GenesisFileBz []byte
 }
 
 // DataAvailabilityNetworkConfig defines the configuration for the data availability network, including node counts and image settings.

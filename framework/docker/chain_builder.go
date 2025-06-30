@@ -108,6 +108,9 @@ type ChainBuilder struct {
 	binaryName     string
 	coinType       string
 	gasPrices      string
+	gasAdjustment  float64
+	bech32Prefix   string
+	denom          string
 	name           string
 	chainID        string
 	logger         *zap.Logger
@@ -128,6 +131,9 @@ func NewChainBuilder(t *testing.T) *ChainBuilder {
 		WithBinaryName("celestia-appd").
 		WithCoinType("118").
 		WithGasPrices("0.025utia").
+		WithGasAdjustment(1.3).
+		WithBech32Prefix("celestia").
+		WithDenom("utia").
 		WithChainID("test").
 		WithLogger(zaptest.NewLogger(t)).
 		WithName("celestia")
@@ -211,6 +217,24 @@ func (b *ChainBuilder) WithCoinType(coinType string) *ChainBuilder {
 // WithGasPrices sets the gas prices
 func (b *ChainBuilder) WithGasPrices(gasPrices string) *ChainBuilder {
 	b.gasPrices = gasPrices
+	return b
+}
+
+// WithGasAdjustment sets the gas adjustment.
+func (b *ChainBuilder) WithGasAdjustment(gasAdjustment float64) *ChainBuilder {
+	b.gasAdjustment = gasAdjustment
+	return b
+}
+
+// WithBech32Prefix sets the bech32 prefix
+func (b *ChainBuilder) WithBech32Prefix(bech32Prefix string) *ChainBuilder {
+	b.bech32Prefix = bech32Prefix
+	return b
+}
+
+// WithDenom sets the denomination
+func (b *ChainBuilder) WithDenom(denom string) *ChainBuilder {
+	b.denom = denom
 	return b
 }
 
@@ -299,17 +323,15 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 			DockerClient:    b.dockerClient,
 			DockerNetworkID: b.dockerNetworkID,
 			ChainConfig: &ChainConfig{
-				Type:           "cosmos",
-				Name:           "celestia",
-				Version:        "v4.0.0-rc6",
+				Name:           b.name,
 				ChainID:        b.chainID,
 				Image:          *b.dockerImage, // default image must be provided, can be overridden per node.
 				Bin:            b.binaryName,
-				Bech32Prefix:   "celestia",
-				Denom:          "utia",
+				Bech32Prefix:   b.bech32Prefix,
+				Denom:          b.denom,
 				CoinType:       b.coinType,
 				GasPrices:      b.gasPrices,
-				GasAdjustment:  1.3,
+				GasAdjustment:  b.gasAdjustment,
 				EncodingConfig: b.encodingConfig,
 				GenesisFileBz:  b.genesisBz,
 			},
@@ -373,7 +395,7 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 		BinaryName:          b.binaryName,
 		CoinType:            b.coinType,
 		GasPrices:           b.gasPrices,
-		GasAdjustment:       1.0,
+		GasAdjustment:       b.gasAdjustment,
 		Env:                 nodeConfig.Env,
 		AdditionalStartArgs: b.getAdditionalStartArgs(nodeConfig),
 		EncodingConfig:      b.encodingConfig,
