@@ -55,7 +55,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 	return daNode, nil
 }
 
-// DANode is a docker implementation of a celestia bridge node.
+// DANode is a docker implementation of a celestia da node.
 type DANode struct {
 	*ContainerNode
 	cfg            Config

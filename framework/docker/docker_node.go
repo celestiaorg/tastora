@@ -61,32 +61,32 @@ func (n *ContainerNode) exec(ctx context.Context, logger *zap.Logger, cmd []stri
 	return res.Stdout, res.Stderr, res.Err
 }
 
-// bind returns the home folder bind point for running the node.
+// bind returns the home folder bind point for running the ContainerNode.
 func (n *ContainerNode) bind() []string {
 	return []string{fmt.Sprintf("%s:%s", n.VolumeName, n.homeDir)}
 }
 
-// GetType returns the node type as a string.
+// GetType returns the ContainerNode type as a string.
 func (n *ContainerNode) GetType() string {
 	return n.nodeType
 }
 
-// removeContainer gracefully stops and removes the container associated with the node using the provided context.
+// removeContainer gracefully stops and removes the container associated with the ContainerNode using the provided context.
 func (n *ContainerNode) removeContainer(ctx context.Context) error {
 	return n.containerLifecycle.RemoveContainer(ctx)
 }
 
-// stopContainer gracefully stops the container associated with the node using the provided context.
+// stopContainer gracefully stops the container associated with the ContainerNode using the provided context.
 func (n *ContainerNode) stopContainer(ctx context.Context) error {
 	return n.containerLifecycle.StopContainer(ctx)
 }
 
-// startContainer starts the container associated with the node using the provided context.
+// startContainer starts the container associated with the ContainerNode using the provided context.
 func (n *ContainerNode) startContainer(ctx context.Context) error {
 	return n.containerLifecycle.StartContainer(ctx)
 }
 
-// ReadFile reads a file from the node's container volume at the given relative path.
+// ReadFile reads a file from the ContainerNode's container volume at the given relative path.
 func (n *ContainerNode) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
 	fr := file.NewRetriever(n.logger, n.DockerClient, n.TestName)
 	content, err := fr.SingleFileContent(ctx, n.VolumeName, relPath)
@@ -128,7 +128,6 @@ func (n *ContainerNode) createAndSetupVolume(ctx context.Context) error {
 		return fmt.Errorf("creating volume for %s: %w", n.nodeType, err)
 	}
 
-	// set the node's volume name
 	n.VolumeName = v.Name
 
 	// configure volume ownership

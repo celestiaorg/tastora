@@ -57,7 +57,6 @@ func newRollkitNode(
 ) (*RollkitNode, error) {
 	rn := NewRollkitNode(cfg, testName, image, index)
 
-	// create and setup volume using shared logic
 	if err := rn.createAndSetupVolume(ctx); err != nil {
 		return nil, err
 	}
