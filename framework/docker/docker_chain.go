@@ -18,12 +18,10 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
-	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"io"
-	"path"
 	"sync"
 	"testing"
 )
@@ -441,42 +439,75 @@ func (c *Chain) initializeChainNodes(
 	ctx context.Context,
 	testName string,
 ) error {
-
 	numValidators := *c.cfg.ChainConfig.NumValidators
 
-	chainCfg := c.cfg
 	c.pullImages(ctx)
-	image := chainCfg.ChainConfig.Image
 
+	// create validator node configurations
+	var validatorConfigs []ChainNodeConfig
+	for i := len(c.Validators); i < numValidators; i++ {
+		validatorConfig := NewChainNodeConfigBuilder().
+			WithEnvVars(c.cfg.ChainConfig.Env...).
+			WithAdditionalStartArgs(c.cfg.ChainConfig.AdditionalStartArgs...).
+			Build()
+		// set as validator manually
+		validatorConfig.validator = true
+		validatorConfigs = append(validatorConfigs, validatorConfig)
+	}
+
+	// create full node configurations
+	var fullNodeConfigs []ChainNodeConfig
+	for i := len(c.FullNodes); i < c.numFullNodes; i++ {
+		fullNodeConfig := NewChainNodeConfigBuilder().
+			WithEnvVars(c.cfg.ChainConfig.Env...).
+			WithAdditionalStartArgs(c.cfg.ChainConfig.AdditionalStartArgs...).
+			Build()
+		// set as full node manually (already false by default)
+		fullNodeConfig.validator = false
+		fullNodeConfigs = append(fullNodeConfigs, fullNodeConfig)
+	}
+
+	// create a chain builder to handle node creation
+	builder := NewChainBuilder(c.t).
+		WithDockerClient(c.cfg.DockerClient).
+		WithDockerNetworkID(c.cfg.DockerNetworkID).
+		WithLogger(c.log).
+		WithName(c.cfg.ChainConfig.Name).
+		WithChainID(c.cfg.ChainConfig.ChainID).
+		WithBinaryName(c.cfg.ChainConfig.Bin).
+		WithCoinType(c.cfg.ChainConfig.CoinType).
+		WithGasPrices(c.cfg.ChainConfig.GasPrices).
+		WithEncodingConfig(c.cfg.ChainConfig.EncodingConfig).
+		WithDefaultImage(c.cfg.ChainConfig.Image).
+		WithValidators(validatorConfigs...).
+		WithFullNodes(fullNodeConfigs...)
+
+	// create the nodes using the builder
+	nodes, err := builder.initializeChainNodes(ctx)
+	if err != nil {
+		return err
+	}
+
+	// separate validators and full nodes
 	newVals := make(ChainNodes, numValidators)
 	copy(newVals, c.Validators)
 	newFullNodes := make(ChainNodes, c.numFullNodes)
 	copy(newFullNodes, c.FullNodes)
 
-	eg, egCtx := errgroup.WithContext(ctx)
-	for i := len(c.Validators); i < numValidators; i++ {
-		eg.Go(func() error {
-			val, err := c.newChainNode(egCtx, testName, image, true, i)
-			if err != nil {
-				return err
-			}
-			newVals[i] = val
-			return nil
-		})
+	// assign the newly created nodes
+	validatorIndex := len(c.Validators)
+	fullNodeIndex := len(c.FullNodes)
+
+	for _, node := range nodes {
+		if node.Validator {
+			newVals[validatorIndex] = node
+			validatorIndex++
+		} else {
+			newFullNodes[fullNodeIndex] = node
+			fullNodeIndex++
+		}
 	}
-	for i := len(c.FullNodes); i < c.numFullNodes; i++ {
-		eg.Go(func() error {
-			fn, err := c.newChainNode(egCtx, testName, image, false, i)
-			if err != nil {
-				return err
-			}
-			newFullNodes[i] = fn
-			return nil
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return err
-	}
+
 	c.findTxMu.Lock()
 	defer c.findTxMu.Unlock()
 	c.Validators = newVals
@@ -484,56 +515,6 @@ func (c *Chain) initializeChainNodes(
 	return nil
 }
 
-// newChainNode constructs a new cosmos chain node with a docker volume.
-func (c *Chain) newChainNode(
-	ctx context.Context,
-	testName string,
-	image DockerImage,
-	validator bool,
-	index int,
-) (*ChainNode, error) {
-	// Construct the ChainNode first so we can access its name.
-	// The ChainNode's VolumeName cannot be set until after we create the volume.
-	chainParams := ChainNodeParams{
-		Validator:           validator,
-		ChainID:             c.cfg.ChainConfig.ChainID,
-		BinaryName:          c.cfg.ChainConfig.Bin,
-		CoinType:            c.cfg.ChainConfig.CoinType,
-		GasPrices:           c.cfg.ChainConfig.GasPrices,
-		GasAdjustment:       c.cfg.ChainConfig.GasAdjustment,
-		Env:                 c.cfg.ChainConfig.Env,
-		AdditionalStartArgs: c.cfg.ChainConfig.AdditionalStartArgs,
-		EncodingConfig:      c.cfg.ChainConfig.EncodingConfig,
-		ValidatorIndex:      index,
-	}
-
-	homeDir := path.Join("/var/cosmos-chain", c.cfg.ChainConfig.Name)
-	tn := NewChainNode(c.log, c.cfg.DockerClient, c.cfg.DockerNetworkID, testName, image, homeDir, index, chainParams)
-
-	v, err := c.cfg.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
-		Labels: map[string]string{
-			consts.CleanupLabel:   testName,
-			consts.NodeOwnerLabel: tn.Name(),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("creating volume for chain node: %w", err)
-	}
-	tn.VolumeName = v.Name
-
-	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
-		Log:        c.log,
-		Client:     c.cfg.DockerClient,
-		VolumeName: v.Name,
-		ImageRef:   image.Ref(),
-		TestName:   testName,
-		UidGid:     image.UIDGID,
-	}); err != nil {
-		return nil, fmt.Errorf("set volume owner: %w", err)
-	}
-
-	return tn, nil
-}
 
 // pullImages pulls all images used by the chain chains.
 func (c *Chain) pullImages(ctx context.Context) {
