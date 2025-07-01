@@ -248,6 +248,87 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 	})
 }
 
+// TestHelperFunctions tests the extracted helper functions
+func TestHelperFunctions(t *testing.T) {
+	t.Run("shouldShowContainerLogs", func(t *testing.T) {
+		testCases := []struct {
+			name              string
+			testFailed        bool
+			showContainerLogs string
+			expected          bool
+		}{
+			{
+				name:              "Failed test with empty env var",
+				testFailed:        true,
+				showContainerLogs: "",
+				expected:          true,
+			},
+			{
+				name:              "Failed test with always",
+				testFailed:        true,
+				showContainerLogs: "always",
+				expected:          true,
+			},
+			{
+				name:              "Success test with empty env var",
+				testFailed:        false,
+				showContainerLogs: "",
+				expected:          false,
+			},
+			{
+				name:              "Success test with always",
+				testFailed:        false,
+				showContainerLogs: "always",
+				expected:          true,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				result := shouldShowContainerLogs(tc.testFailed, tc.showContainerLogs)
+				require.Equal(t, tc.expected, result)
+			})
+		}
+	})
+
+	t.Run("configureLogOptions", func(t *testing.T) {
+		testCases := []struct {
+			name             string
+			testFailed       bool
+			containerLogTail string
+			expectedTail     string
+		}{
+			{
+				name:             "Failed test ignores tail",
+				testFailed:       true,
+				containerLogTail: "100",
+				expectedTail:     "",
+			},
+			{
+				name:             "Success test with custom tail",
+				testFailed:       false,
+				containerLogTail: "25",
+				expectedTail:     "25",
+			},
+			{
+				name:             "Success test with default tail",
+				testFailed:       false,
+				containerLogTail: "",
+				expectedTail:     "50", // consts.DefaultLogTail
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				opts := configureLogOptions(tc.testFailed, tc.containerLogTail)
+				require.True(t, opts.ShowStdout)
+				require.True(t, opts.ShowStderr)
+				require.Equal(t, tc.expectedTail, opts.Tail)
+			})
+		}
+	})
+}
+
 // TestDockerCleanupBehaviorSimulation simulates the key behavior changes
 func TestDockerCleanupBehaviorSimulation(t *testing.T) {
 	t.Run("failed_test_shows_full_logs", func(t *testing.T) {
