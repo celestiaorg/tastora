@@ -46,13 +46,15 @@ type ChainConfig struct {
 	Gas string
 	// Trusting period of the chain.
 	TrustingPeriod string
-	PostInit       []func(ctx context.Context, chainNode *ChainNode) error
+	// PostInit defines a set of functions executed after initializing a chain node, allowing custom setups or configurations.
+	PostInit []func(ctx context.Context, chainNode *ChainNode) error
 	// Non-nil will override the encoding config, used for cosmos chains only.
 	EncodingConfig *testutil.TestEncodingConfig
 	// Additional start command arguments
 	AdditionalStartArgs []string
 	// Environment variables for chain nodes
-	Env           []string
+	Env []string
+	// GenesisFileBz contains the raw bytes of the genesis file that will be written to config/gensis.json
 	GenesisFileBz []byte
 }
 
