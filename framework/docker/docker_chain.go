@@ -93,10 +93,9 @@ func (c *Chain) BroadcastBlobMessage(ctx context.Context, signingWallet types.Wa
 
 // AddNode adds a single full node to the chain with the given configuration
 func (c *Chain) AddNode(ctx context.Context, nodeConfig ChainNodeConfig) error {
-	// get peer string for existing nodes
-	peers, err := addressutil.BuildInternalPeerAddressList(ctx, c.Nodes())
-	if err != nil {
-		return err
+	if nodeConfig.nodeType != FullNodeType {
+		// TODO: this is preserving existing functionality, we can update this to support addition of validator nodes.
+		return fmt.Errorf("node type must be FullNodeType")
 	}
 
 	// get genesis.json
@@ -108,7 +107,7 @@ func (c *Chain) AddNode(ctx context.Context, nodeConfig ChainNodeConfig) error {
 	// create a builder to access newChainNode method
 	builder := NewChainBuilderFromChain(c)
 
-	existingNodeCount := len(c.Validators) + len(c.FullNodes)
+	existingNodeCount := len(c.Nodes())
 
 	// create the node directly using builder's newChainNode method
 	node, err := builder.newChainNode(ctx, nodeConfig, existingNodeCount)
@@ -116,26 +115,31 @@ func (c *Chain) AddNode(ctx context.Context, nodeConfig ChainNodeConfig) error {
 		return err
 	}
 
-	// initialize the node
 	if err := node.initNodeFiles(ctx); err != nil {
 		return err
 	}
-	// always set peers and genesis
+
+	peers, err := addressutil.BuildInternalPeerAddressList(ctx, c.Nodes())
+	if err != nil {
+		return err
+	}
+
 	if err := node.setPeers(ctx, peers); err != nil {
 		return err
 	}
+
 	if err := node.overwriteGenesisFile(ctx, genbz); err != nil {
 		return err
 	}
 
 	// execute any custom post-init functions
+	// these can modify config files or modify genesis etc.
 	for _, fn := range node.PostInit {
 		if err := fn(ctx, node); err != nil {
 			return err
 		}
 	}
 
-	// create and start the node
 	if err := node.createNodeContainer(ctx); err != nil {
 		return err
 	}
