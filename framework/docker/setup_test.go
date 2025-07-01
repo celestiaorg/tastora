@@ -48,64 +48,64 @@ func generateSampleLogs(lines int) string {
 // TestLogBehaviorLogic tests the logic for determining when to show full vs tailed logs
 func TestLogBehaviorLogic(t *testing.T) {
 	testCases := []struct {
-		name                string
-		testFailed          bool
-		showContainerLogs   string
-		containerLogTail    string
-		expectedShowLogs    bool
-		expectedUseTail     bool
-		expectedTailValue   string
-		expectedLogHeader   string
+		name              string
+		testFailed        bool
+		showContainerLogs string
+		containerLogTail  string
+		expectedShowLogs  bool
+		expectedUseTail   bool
+		expectedTailValue string
+		expectedLogHeader string
 	}{
 		{
-			name:                "Failed test with default settings",
-			testFailed:          true,
-			showContainerLogs:   "",
-			containerLogTail:    "",
-			expectedShowLogs:    true,
-			expectedUseTail:     false, // This is the key change - no tail for failed tests
-			expectedTailValue:   "",
-			expectedLogHeader:   "Full container logs",
+			name:              "Failed test with default settings",
+			testFailed:        true,
+			showContainerLogs: "",
+			containerLogTail:  "",
+			expectedShowLogs:  true,
+			expectedUseTail:   false, // This is the key change - no tail for failed tests
+			expectedTailValue: "",
+			expectedLogHeader: "Full container logs",
 		},
 		{
-			name:                "Failed test ignores CONTAINER_LOG_TAIL",
-			testFailed:          true,
-			showContainerLogs:   "",
-			containerLogTail:    "10",
-			expectedShowLogs:    true,
-			expectedUseTail:     false, // Should still not use tail
-			expectedTailValue:   "",
-			expectedLogHeader:   "Full container logs",
+			name:              "Failed test ignores CONTAINER_LOG_TAIL",
+			testFailed:        true,
+			showContainerLogs: "",
+			containerLogTail:  "10",
+			expectedShowLogs:  true,
+			expectedUseTail:   false, // Should still not use tail
+			expectedTailValue: "",
+			expectedLogHeader: "Full container logs",
 		},
 		{
-			name:                "Success test with SHOW_CONTAINER_LOGS=always",
-			testFailed:          false,
-			showContainerLogs:   "always",
-			containerLogTail:    "",
-			expectedShowLogs:    true,
-			expectedUseTail:     true,
-			expectedTailValue:   "50", // Default tail for success
-			expectedLogHeader:   "Container logs",
+			name:              "Success test with SHOW_CONTAINER_LOGS=always",
+			testFailed:        false,
+			showContainerLogs: "always",
+			containerLogTail:  "",
+			expectedShowLogs:  true,
+			expectedUseTail:   true,
+			expectedTailValue: "50", // Default tail for success
+			expectedLogHeader: "Container logs",
 		},
 		{
-			name:                "Success test with custom CONTAINER_LOG_TAIL",
-			testFailed:          false,
-			showContainerLogs:   "always",
-			containerLogTail:    "20",
-			expectedShowLogs:    true,
-			expectedUseTail:     true,
-			expectedTailValue:   "20",
-			expectedLogHeader:   "Container logs",
+			name:              "Success test with custom CONTAINER_LOG_TAIL",
+			testFailed:        false,
+			showContainerLogs: "always",
+			containerLogTail:  "20",
+			expectedShowLogs:  true,
+			expectedUseTail:   true,
+			expectedTailValue: "20",
+			expectedLogHeader: "Container logs",
 		},
 		{
-			name:                "Success test without SHOW_CONTAINER_LOGS",
-			testFailed:          false,
-			showContainerLogs:   "",
-			containerLogTail:    "",
-			expectedShowLogs:    false,
-			expectedUseTail:     false,
-			expectedTailValue:   "",
-			expectedLogHeader:   "",
+			name:              "Success test without SHOW_CONTAINER_LOGS",
+			testFailed:        false,
+			showContainerLogs: "",
+			containerLogTail:  "",
+			expectedShowLogs:  false,
+			expectedUseTail:   false,
+			expectedTailValue: "",
+			expectedLogHeader: "",
 		},
 	}
 
@@ -174,10 +174,10 @@ func TestLogContentDifference(t *testing.T) {
 	tailedLines := allLines[len(allLines)-50:]
 	tailedLogs := strings.Join(tailedLines, "\n")
 	tailedLogLines := strings.Count(tailedLogs, "Log line")
-	
+
 	require.Equal(t, 50, tailedLogLines, "Tailed logs should have exactly 50 lines")
 	require.Greater(t, fullLogLines, tailedLogLines, "Full logs should have more lines than tailed logs")
-	
+
 	// Verify that tailed logs are a subset of full logs
 	require.Contains(t, fullLogs, tailedLogs, "Tailed logs should be contained in full logs")
 }
@@ -214,17 +214,17 @@ func TestLogHeaderGeneration(t *testing.T) {
 			// Simulate the header logic from DockerCleanup
 			var logHeader string
 			var tailValue string
-			
+
 			if tc.tailSet {
 				tailValue = "50"
 			}
-			
+
 			if tc.testFailed && tailValue == "" {
 				logHeader = "Full container logs"
 			} else {
 				logHeader = "Container logs"
 			}
-			
+
 			require.Equal(t, tc.expectedHeader, logHeader, "Log header should match expected")
 		})
 	}
@@ -235,7 +235,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 	t.Run("default_behavior", func(t *testing.T) {
 		showLogs := os.Getenv("SHOW_CONTAINER_LOGS")
 		tailValue := os.Getenv("CONTAINER_LOG_TAIL")
-		
+
 		// With no env vars, these should be empty
 		require.Empty(t, showLogs, "SHOW_CONTAINER_LOGS should be empty by default")
 		require.Empty(t, tailValue, "CONTAINER_LOG_TAIL should be empty by default")
@@ -245,10 +245,10 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 	t.Run("with_env_vars", func(t *testing.T) {
 		t.Setenv("SHOW_CONTAINER_LOGS", "always")
 		t.Setenv("CONTAINER_LOG_TAIL", "25")
-		
+
 		showLogs := os.Getenv("SHOW_CONTAINER_LOGS")
 		tailValue := os.Getenv("CONTAINER_LOG_TAIL")
-		
+
 		require.Equal(t, "always", showLogs, "SHOW_CONTAINER_LOGS should be set")
 		require.Equal(t, "25", tailValue, "CONTAINER_LOG_TAIL should be set")
 	})
@@ -262,15 +262,15 @@ func TestDockerCleanupBehaviorSimulation(t *testing.T) {
 			name:   "failed-test",
 			failed: true,
 		}
-		
+
 		// Environment setup that would trigger log display
-		showContainerLogs := "" // Default - shows logs on failure
+		showContainerLogs := ""  // Default - shows logs on failure
 		containerLogTail := "50" // This should be ignored for failed tests
-		
+
 		// Logic from DockerCleanup: should show logs because test failed
 		shouldShowLogs := (mockT.Failed() && showContainerLogs == "") || showContainerLogs == "always"
 		require.True(t, shouldShowLogs, "Failed test should trigger log display")
-		
+
 		// Logic for tail behavior - THIS IS THE KEY CHANGE
 		// Failed tests should NOT use tail limits
 		var tailValue string
@@ -280,9 +280,9 @@ func TestDockerCleanupBehaviorSimulation(t *testing.T) {
 			tailValue = "50"
 		}
 		// For failed tests, tailValue remains empty (no tail limit)
-		
+
 		require.Empty(t, tailValue, "Failed test should not set tail limit")
-		
+
 		// Header should indicate full logs
 		logHeader := "Container logs"
 		if mockT.Failed() && tailValue == "" {
@@ -290,23 +290,23 @@ func TestDockerCleanupBehaviorSimulation(t *testing.T) {
 		}
 		require.Equal(t, "Full container logs", logHeader, "Failed test should show 'Full container logs' header")
 	})
-	
+
 	t.Run("success_test_respects_tail", func(t *testing.T) {
 		// Simulate a successful test scenario
 		mockT := &mockTestingT{
 			name:   "success-test",
 			failed: false,
 		}
-		
+
 		t.Setenv("SHOW_CONTAINER_LOGS", "always") // Force log display for success test
-		
+
 		showContainerLogs := os.Getenv("SHOW_CONTAINER_LOGS")
 		containerLogTail := "" // Use default
-		
+
 		// Should show logs because SHOW_CONTAINER_LOGS=always
 		shouldShowLogs := (mockT.Failed() && showContainerLogs == "") || showContainerLogs == "always"
 		require.True(t, shouldShowLogs, "Success test with SHOW_CONTAINER_LOGS=always should show logs")
-		
+
 		// Success tests should use tail limits
 		var tailValue string
 		if !mockT.Failed() && containerLogTail != "" {
@@ -314,9 +314,9 @@ func TestDockerCleanupBehaviorSimulation(t *testing.T) {
 		} else if !mockT.Failed() {
 			tailValue = "50" // Default for success
 		}
-		
+
 		require.Equal(t, "50", tailValue, "Success test should use default tail limit")
-		
+
 		// Header should indicate regular (tailed) logs
 		logHeader := "Container logs"
 		if mockT.Failed() && tailValue == "" {
