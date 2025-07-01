@@ -48,7 +48,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 	daNode.Image = daNode.getImage()
 
 	// create and setup volume using shared logic
-	if err := daNode.createAndSetupVolume(ctx); err != nil {
+	if err := daNode.createAndSetupVolume(ctx, daNode.Name()); err != nil {
 		return nil, err
 	}
 
@@ -100,6 +100,16 @@ func (n *DANode) GetInternalP2PAddress() (string, error) {
 // GetType returns the type of the DANode as defined by the types.DANodeType enum.
 func (n *DANode) GetType() types.DANodeType {
 	return n.nodeType
+}
+
+// Name returns the container name for the DANode.
+func (n *DANode) Name() string {
+	return fmt.Sprintf("da-%s-%d-%s", n.nodeType.String(), n.Index, SanitizeContainerName(n.TestName))
+}
+
+// HostName returns the condensed hostname for the DANode.
+func (n *DANode) HostName() string {
+	return CondenseHostName(n.Name())
 }
 
 // GetHostRPCAddress returns the externally resolvable RPC address of the bridge node.

@@ -417,7 +417,7 @@ func (b *ChainBuilder) newChainNode(
 	tn := b.newDockerChainNode(b.logger, nodeConfig, index)
 
 	// create and setup volume using shared logic
-	if err := tn.createAndSetupVolume(ctx); err != nil {
+	if err := tn.createAndSetupVolume(ctx, tn.Name()); err != nil {
 		return nil, err
 	}
 

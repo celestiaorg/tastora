@@ -57,7 +57,7 @@ func newRollkitNode(
 ) (*RollkitNode, error) {
 	rn := NewRollkitNode(cfg, testName, image, index)
 
-	if err := rn.createAndSetupVolume(ctx); err != nil {
+	if err := rn.createAndSetupVolume(ctx, rn.Name()); err != nil {
 		return nil, err
 	}
 
