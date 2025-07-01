@@ -202,10 +202,7 @@ func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
 					b := new(bytes.Buffer)
 					_, err := b.ReadFrom(rc)
 					if err == nil {
-						logHeader := "Container logs"
-						if t.Failed() && logOptions.Tail == "" {
-							logHeader = "Full container logs"
-						}
+						logHeader := generateLogHeader(t.Failed(), logOptions.Tail)
 						t.Logf("\n\n%s - {%s}\n%s", logHeader, strings.Join(c.Names, " "), b.String())
 					}
 				}
@@ -329,4 +326,12 @@ func IsLoggableStopError(err error) bool {
 		return false
 	}
 	return !(errdefs.IsNotModified(err) || errdefs.IsNotFound(err))
+}
+
+// generateLogHeader returns the appropriate log header based on test failure and tail settings
+func generateLogHeader(testFailed bool, tail string) string {
+	if testFailed && tail == "" {
+		return "Full container logs"
+	}
+	return "Container logs"
 }

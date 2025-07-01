@@ -151,12 +151,11 @@ func TestLogBehaviorLogic(t *testing.T) {
 				require.Equal(t, tc.expectedTailValue, tailValue, "Tail value should match expected")
 
 				// Test log header logic
-				var logHeader string
-				if mockT.Failed() && !useTail {
-					logHeader = "Full container logs"
-				} else {
-					logHeader = "Container logs"
+				var tailStr string
+				if useTail {
+					tailStr = tailValue
 				}
+				logHeader := generateLogHeader(mockT.Failed(), tailStr)
 				require.Equal(t, tc.expectedLogHeader, logHeader, "Log header should match expected")
 			}
 		})
@@ -212,18 +211,13 @@ func TestLogHeaderGeneration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Simulate the header logic from DockerCleanup
-			var logHeader string
 			var tailValue string
 
 			if tc.tailSet {
 				tailValue = "50"
 			}
 
-			if tc.testFailed && tailValue == "" {
-				logHeader = "Full container logs"
-			} else {
-				logHeader = "Container logs"
-			}
+			logHeader := generateLogHeader(tc.testFailed, tailValue)
 
 			require.Equal(t, tc.expectedHeader, logHeader, "Log header should match expected")
 		})
@@ -284,10 +278,7 @@ func TestDockerCleanupBehaviorSimulation(t *testing.T) {
 		require.Empty(t, tailValue, "Failed test should not set tail limit")
 
 		// Header should indicate full logs
-		logHeader := "Container logs"
-		if mockT.Failed() && tailValue == "" {
-			logHeader = "Full container logs"
-		}
+		logHeader := generateLogHeader(mockT.Failed(), tailValue)
 		require.Equal(t, "Full container logs", logHeader, "Failed test should show 'Full container logs' header")
 	})
 
@@ -318,10 +309,7 @@ func TestDockerCleanupBehaviorSimulation(t *testing.T) {
 		require.Equal(t, "50", tailValue, "Success test should use default tail limit")
 
 		// Header should indicate regular (tailed) logs
-		logHeader := "Container logs"
-		if mockT.Failed() && tailValue == "" {
-			logHeader = "Full container logs"
-		}
+		logHeader := generateLogHeader(mockT.Failed(), tailValue)
 		require.Equal(t, "Container logs", logHeader, "Success test should show 'Container logs' header")
 	})
 }
