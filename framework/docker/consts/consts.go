@@ -12,4 +12,6 @@ const (
 	UserRootString = "0:0"
 	// FaucetAccountKeyName defines the default key name used for the faucet account.
 	FaucetAccountKeyName = "faucet"
+	// DefaultLogTail defines the default number of log lines to show when containers logs are displayed.
+	DefaultLogTail = "50"
 )

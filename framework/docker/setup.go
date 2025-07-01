@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/consts"
-	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"math/rand"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/testutil/random"
 
 	"github.com/avast/retry-go/v4"
 	"github.com/docker/docker/api/types/container"
@@ -182,23 +183,9 @@ func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
 		}
 
 		for _, c := range cs {
-			if (t.Failed() && showContainerLogs == "") || showContainerLogs == "always" {
-				logTail := "50"
-				if containerLogTail != "" {
-					logTail = containerLogTail
-				}
-				rc, err := cli.ContainerLogs(ctx, c.ID, container.LogsOptions{
-					ShowStdout: true,
-					ShowStderr: true,
-					Tail:       logTail,
-				})
-				if err == nil {
-					b := new(bytes.Buffer)
-					_, err := b.ReadFrom(rc)
-					if err == nil {
-						t.Logf("\n\nContainer logs - {%s}\n%s", strings.Join(c.Names, " "), b.String())
-					}
-				}
+			if shouldShowContainerLogs(t.Failed(), showContainerLogs) {
+				logOptions := configureLogOptions(t.Failed(), containerLogTail)
+				displayContainerLogs(ctx, t, cli, c.ID, c.Names, logOptions)
 			}
 			if !keepContainers {
 				var stopTimeout container.StopOptions
@@ -319,4 +306,62 @@ func IsLoggableStopError(err error) bool {
 		return false
 	}
 	return !(errdefs.IsNotModified(err) || errdefs.IsNotFound(err))
+}
+
+// shouldShowContainerLogs determines if container logs should be displayed based on test status and environment variables
+func shouldShowContainerLogs(testFailed bool, showContainerLogs string) bool {
+	return (testFailed && showContainerLogs == "") || showContainerLogs == "always"
+}
+
+// configureLogOptions creates container log options based on test status and environment variables
+func configureLogOptions(testFailed bool, containerLogTail string) container.LogsOptions {
+	logOptions := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+	}
+
+	// Only apply tail limit if test hasn't failed
+	if !testFailed {
+		if containerLogTail != "" {
+			logOptions.Tail = containerLogTail
+		} else {
+			logOptions.Tail = consts.DefaultLogTail
+		}
+	}
+	// When test fails, Tail is not set, so full logs are returned
+
+	return logOptions
+}
+
+// displayContainerLogs fetches and displays container logs
+func displayContainerLogs(
+	ctx context.Context,
+	t DockerSetupTestingT,
+	cli *client.Client,
+	containerID string,
+	containerNames []string,
+	logOptions container.LogsOptions,
+) {
+	rc, err := cli.ContainerLogs(ctx, containerID, logOptions)
+	if err != nil {
+		return
+	}
+	defer rc.Close()
+
+	b := new(bytes.Buffer)
+	_, err = b.ReadFrom(rc)
+	if err != nil {
+		return
+	}
+
+	logHeader := generateLogHeader(t.Failed(), logOptions.Tail)
+	t.Logf("\n\n%s - {%s}\n%s", logHeader, strings.Join(containerNames, " "), b.String())
+}
+
+// generateLogHeader returns the appropriate log header based on test failure and tail settings
+func generateLogHeader(testFailed bool, tail string) string {
+	if testFailed && tail == "" {
+		return "Full container logs"
+	}
+	return "Container logs"
 }
