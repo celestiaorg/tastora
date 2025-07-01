@@ -98,8 +98,7 @@ func (b *ChainNodeConfigBuilder) Build() ChainNodeConfig {
 
 type ChainBuilder struct {
 	t               *testing.T
-	validators      []ChainNodeConfig
-	fullNodes       []ChainNodeConfig
+	nodes           []ChainNodeConfig
 	dockerClient    *client.Client
 	dockerNetworkID string
 	// raw bytes that should be written as the config/genesis.json file for the chain.
@@ -139,6 +138,27 @@ func NewChainBuilder(t *testing.T) *ChainBuilder {
 		WithName("celestia")
 }
 
+// NewChainBuilderFromChain initializes and returns a new ChainBuilder that copies the values from the given chain.
+func NewChainBuilderFromChain(chain *Chain) *ChainBuilder {
+	cfg := chain.cfg.ChainConfig
+	return NewChainBuilder(chain.t).
+		WithLogger(chain.log).
+		WithEncodingConfig(cfg.EncodingConfig).
+		WithName(cfg.Name).
+		WithChainID(cfg.ChainID).
+		WithBinaryName(cfg.Bin).
+		WithCoinType(cfg.CoinType).
+		WithGasPrices(cfg.GasPrices).
+		WithGasAdjustment(cfg.GasAdjustment).
+		WithBech32Prefix(cfg.Bech32Prefix).
+		WithDenom(cfg.Denom).
+		WithGenesis(cfg.GenesisFileBz).
+		WithImage(cfg.Image).
+		WithDockerClient(chain.cfg.DockerClient).
+		WithDockerNetworkID(chain.cfg.DockerNetworkID).
+		WithAdditionalStartArgs(cfg.AdditionalStartArgs...)
+}
+
 func (b *ChainBuilder) WithName(name string) *ChainBuilder {
 	b.name = name
 	return b
@@ -162,19 +182,36 @@ func (b *ChainBuilder) WithLogger(logger *zap.Logger) *ChainBuilder {
 	return b
 }
 
-// WithValidators sets the validator node configurations
+// WithNode adds a node of the specified type to the chain
+func (b *ChainBuilder) WithNode(nodeType NodeType, config ChainNodeConfig) *ChainBuilder {
+	config.validator = nodeType == ValidatorNodeType
+	b.nodes = append(b.nodes, config)
+	return b
+}
+
+// WithValidator adds a validator node with the given configuration
+func (b *ChainBuilder) WithValidator(config ChainNodeConfig) *ChainBuilder {
+	return b.WithNode(ValidatorNodeType, config)
+}
+
+// WithFullNode adds a full node with the given configuration
+func (b *ChainBuilder) WithFullNode(config ChainNodeConfig) *ChainBuilder {
+	return b.WithNode(FullNodeType, config)
+}
+
+// WithValidators adds multiple validator configurations
 func (b *ChainBuilder) WithValidators(validators ...ChainNodeConfig) *ChainBuilder {
-	b.validators = make([]ChainNodeConfig, 0, len(validators))
 	for _, validator := range validators {
-		validator.validator = true
-		b.validators = append(b.validators, validator)
+		b.WithValidator(validator)
 	}
 	return b
 }
 
-// WithFullNodes sets the full node configurations
+// WithFullNodes adds multiple full node configurations
 func (b *ChainBuilder) WithFullNodes(fullNodes ...ChainNodeConfig) *ChainBuilder {
-	b.fullNodes = fullNodes
+	for _, fullNode := range fullNodes {
+		b.WithFullNode(fullNode)
+	}
 	return b
 }
 
@@ -293,20 +330,6 @@ func (b *ChainBuilder) getPostInit(nodeConfig ChainNodeConfig) []func(ctx contex
 	return b.postInit
 }
 
-// AddValidator adds a single validator node configuration
-func (b *ChainBuilder) AddValidator(validator ChainNodeConfig) *ChainBuilder {
-	validator.validator = true
-	b.validators = append(b.validators, validator)
-	return b
-}
-
-// AddFullNode adds a single full node configuration
-func (b *ChainBuilder) AddFullNode(fullNode ChainNodeConfig) *ChainBuilder {
-	fullNode.validator = false
-	b.fullNodes = append(b.fullNodes, fullNode)
-	return b
-}
-
 func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 	registry := codectypes.NewInterfaceRegistry()
 	cryptocodec.RegisterInterfaces(registry)
@@ -323,17 +346,20 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 			DockerClient:    b.dockerClient,
 			DockerNetworkID: b.dockerNetworkID,
 			ChainConfig: &ChainConfig{
-				Name:           b.name,
-				ChainID:        b.chainID,
-				Image:          *b.dockerImage, // default image must be provided, can be overridden per node.
-				Bin:            b.binaryName,
-				Bech32Prefix:   b.bech32Prefix,
-				Denom:          b.denom,
-				CoinType:       b.coinType,
-				GasPrices:      b.gasPrices,
-				GasAdjustment:  b.gasAdjustment,
-				EncodingConfig: b.encodingConfig,
-				GenesisFileBz:  b.genesisBz,
+				Name:          b.name,
+				ChainID:       b.chainID,
+				Image:         *b.dockerImage, // default image must be provided, can be overridden per node.
+				Bin:           b.binaryName,
+				Bech32Prefix:  b.bech32Prefix,
+				Denom:         b.denom,
+				CoinType:      b.coinType,
+				GasPrices:     b.gasPrices,
+				GasAdjustment: b.gasAdjustment,
+				// PostInit:            nil, TODO
+				EncodingConfig:      b.encodingConfig,
+				AdditionalStartArgs: b.additionalStartArgs,
+				//Env:                 nil, TODO
+				GenesisFileBz: b.genesisBz,
 			},
 		},
 		t:          b.t,
@@ -347,13 +373,15 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 
 func (b *ChainBuilder) initializeChainNodes(ctx context.Context) ([]*ChainNode, error) {
 	var nodes []*ChainNode
-	for i, val := range b.validators {
-		n, err := b.newChainNode(ctx, val, i)
+
+	for i, nodeConfig := range b.nodes {
+		n, err := b.newChainNode(ctx, nodeConfig, i)
 		if err != nil {
 			return nil, err
 		}
 		nodes = append(nodes, n)
 	}
+
 	return nodes, nil
 }
 

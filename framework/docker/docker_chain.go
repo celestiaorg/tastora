@@ -12,8 +12,6 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
@@ -28,11 +26,6 @@ import (
 
 var _ types.Chain = &Chain{}
 
-const (
-	defaultNumValidators = 2
-	defaultNumFullNodes  = 1
-)
-
 var sentryPorts = nat.PortMap{
 	nat.Port(p2pPort):     {},
 	nat.Port(rpcPort):     {},
@@ -41,44 +34,13 @@ var sentryPorts = nat.PortMap{
 	nat.Port(privValPort): {},
 }
 
-func newChain(ctx context.Context, t *testing.T, cfg Config) (types.Chain, error) {
-	if cfg.ChainConfig == nil {
-		return nil, fmt.Errorf("chain config must be set")
-	}
-	if cfg.ChainConfig.EncodingConfig == nil {
-		return nil, fmt.Errorf("chain config must have an encoding config set")
-	}
+// NodeType represents the type of blockchain node
+type NodeType int
 
-	registry := codectypes.NewInterfaceRegistry()
-	cryptocodec.RegisterInterfaces(registry)
-	cdc := codec.NewProtoCodec(registry)
-	kr := keyring.NewInMemory(cdc)
-
-	// If unspecified, NumValidators defaults to 2 and NumFullNodes defaults to 1.
-	if cfg.ChainConfig.NumValidators == nil {
-		nv := defaultNumValidators
-		cfg.ChainConfig.NumValidators = &nv
-	}
-	if cfg.ChainConfig.NumFullNodes == nil {
-		nf := defaultNumFullNodes
-		cfg.ChainConfig.NumFullNodes = &nf
-	}
-
-	c := &Chain{
-		t:       t,
-		cfg:     cfg,
-		cdc:     cdc,
-		keyring: kr,
-		log:     cfg.Logger,
-	}
-
-	// create the underlying docker resources for the chain.
-	if err := c.initializeChainNodes(ctx, c.t.Name()); err != nil {
-		return nil, err
-	}
-
-	return c, nil
-}
+const (
+	ValidatorNodeType NodeType = iota
+	FullNodeType
+)
 
 type Chain struct {
 	t            *testing.T
@@ -132,67 +94,168 @@ func (c *Chain) BroadcastBlobMessage(ctx context.Context, signingWallet types.Wa
 	return c.getBroadcaster().BroadcastBlobMessage(ctx, signingWallet, msg, blobs...)
 }
 
-func (c *Chain) AddNode(ctx context.Context, overrides map[string]any) error {
-	return c.AddFullNodes(ctx, overrides, 1)
-}
-
-// AddFullNodes adds new fullnodes to the network, peering with the existing nodes.
-func (c *Chain) AddFullNodes(ctx context.Context, configFileOverrides map[string]any, inc int) error {
-	// Get peer string for existing nodes
+// AddNode adds a single full node to the chain with the given configuration
+func (c *Chain) AddNode(ctx context.Context, nodeConfig ChainNodeConfig) error {
+	// get peer string for existing nodes
 	peers, err := addressutil.BuildInternalPeerAddressList(ctx, c.Nodes())
 	if err != nil {
 		return err
 	}
 
-	// Get genesis.json
+	// get genesis.json
 	genbz, err := c.Validators[0].genesisFileContent(ctx)
 	if err != nil {
 		return err
 	}
 
-	prevCount := c.numFullNodes
-	c.numFullNodes += inc
-	if err := c.initializeChainNodes(ctx, c.t.Name()); err != nil {
+	// create a builder to access newChainNode method
+	builder := NewChainBuilderFromChain(c)
+
+	existingNodeCount := len(c.Validators) + len(c.FullNodes)
+
+	// create the node directly using builder's newChainNode method
+	node, err := builder.newChainNode(ctx, nodeConfig, existingNodeCount)
+	if err != nil {
 		return err
 	}
 
+	// initialize the node
+	if err := node.initFullNodeFiles(ctx); err != nil {
+		return err
+	}
+	// always set peers and genesis
+	if err := node.setPeers(ctx, peers); err != nil {
+		return err
+	}
+	if err := node.overwriteGenesisFile(ctx, genbz); err != nil {
+		return err
+	}
+
+	// execute any custom post-init functions
+	for _, fn := range node.PostInit {
+		if err := fn(ctx, node); err != nil {
+			return err
+		}
+	}
+
+	// create and start the node
+	if err := node.createNodeContainer(ctx); err != nil {
+		return err
+	}
+	if err := node.startContainer(ctx); err != nil {
+		return err
+	}
+
+	// add the new node to the chain
+	c.findTxMu.Lock()
+	defer c.findTxMu.Unlock()
+	c.FullNodes = append(c.FullNodes, node)
+	c.numFullNodes++
+
+	return nil
+}
+
+// AddNodes adds multiple nodes of the specified type to the chain with optional config overrides
+func (c *Chain) AddNodes(ctx context.Context, nodeType NodeType, count int, configOverrides map[string]any) error {
+	// get peer string for existing nodes
+	peers, err := addressutil.BuildInternalPeerAddressList(ctx, c.Nodes())
+	if err != nil {
+		return err
+	}
+
+	// get genesis.json
+	genbz, err := c.Validators[0].genesisFileContent(ctx)
+	if err != nil {
+		return err
+	}
+
+	// create post-init function to handle config overrides, peers, and genesis
+	postInitFn := func(ctx context.Context, node *ChainNode) error {
+		if err := node.setPeers(ctx, peers); err != nil {
+			return err
+		}
+		if err := node.overwriteGenesisFile(ctx, genbz); err != nil {
+			return err
+		}
+		for configFile, modifiedConfig := range configOverrides {
+			modifiedToml, ok := modifiedConfig.(toml.Toml)
+			if !ok {
+				return fmt.Errorf("provided toml override for file %s is of type (%T). Expected (DecodedToml)", configFile, modifiedConfig)
+			}
+			if err := ModifyConfigFile(
+				ctx,
+				node.logger(),
+				node.ContainerNode.DockerClient,
+				node.ContainerNode.TestName,
+				node.VolumeName,
+				configFile,
+				modifiedToml,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// create a builder to access newChainNode method
+	builder := NewChainBuilderFromChain(c)
+
+	// create only the new nodes we need
+	var newNodes []*ChainNode
+	existingNodeCount := len(c.Validators) + len(c.FullNodes)
+
+	for i := 0; i < count; i++ {
+		nodeConfig := NewChainNodeConfigBuilder().
+			WithPostInit(postInitFn).
+			Build()
+		nodeConfig.validator = nodeType == ValidatorNodeType
+
+		// create the node directly using builder's newChainNode method
+		node, err := builder.newChainNode(ctx, nodeConfig, existingNodeCount+i)
+		if err != nil {
+			return err
+		}
+		newNodes = append(newNodes, node)
+	}
+
+	// initialize and start the new nodes
 	var eg errgroup.Group
-	for i := prevCount; i < c.numFullNodes; i++ {
+	for _, node := range newNodes {
 		eg.Go(func() error {
-			fn := c.FullNodes[i]
-			if err := fn.initFullNodeFiles(ctx); err != nil {
+			if err := node.initFullNodeFiles(ctx); err != nil {
 				return err
 			}
-			if err := fn.setPeers(ctx, peers); err != nil {
-				return err
-			}
-			if err := fn.overwriteGenesisFile(ctx, genbz); err != nil {
-				return err
-			}
-			for configFile, modifiedConfig := range configFileOverrides {
-				modifiedToml, ok := modifiedConfig.(toml.Toml)
-				if !ok {
-					return fmt.Errorf("provided toml override for file %s is of type (%T). Expected (DecodedToml)", configFile, modifiedConfig)
-				}
-				if err := ModifyConfigFile(
-					ctx,
-					fn.logger(),
-					fn.ContainerNode.DockerClient,
-					fn.ContainerNode.TestName,
-					fn.VolumeName,
-					configFile,
-					modifiedToml,
-				); err != nil {
+			// execute post-init functions (peers, genesis, config overrides)
+			for _, fn := range node.PostInit {
+				if err := fn(ctx, node); err != nil {
 					return err
 				}
 			}
-			if err := fn.createNodeContainer(ctx); err != nil {
+			if err := node.createNodeContainer(ctx); err != nil {
 				return err
 			}
-			return fn.startContainer(ctx)
+			return node.startContainer(ctx)
 		})
 	}
-	return eg.Wait()
+
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	// add the new nodes to the chain based on their type
+	c.findTxMu.Lock()
+	defer c.findTxMu.Unlock()
+
+	for _, node := range newNodes {
+		if node.Validator {
+			c.Validators = append(c.Validators, node)
+		} else {
+			c.FullNodes = append(c.FullNodes, node)
+			c.numFullNodes++
+		}
+	}
+
+	return nil
 }
 
 func (c *Chain) GetNodes() []types.ChainNode {
@@ -432,87 +495,6 @@ func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
 		n.Image.Version = version
 	}
 	c.pullImages(ctx)
-}
-
-// creates the test node objects required for bootstrapping tests.
-func (c *Chain) initializeChainNodes(
-	ctx context.Context,
-	testName string,
-) error {
-	numValidators := *c.cfg.ChainConfig.NumValidators
-
-	c.pullImages(ctx)
-
-	// create validator node configurations
-	var validatorConfigs []ChainNodeConfig
-	for i := len(c.Validators); i < numValidators; i++ {
-		validatorConfig := NewChainNodeConfigBuilder().
-			WithEnvVars(c.cfg.ChainConfig.Env...).
-			WithAdditionalStartArgs(c.cfg.ChainConfig.AdditionalStartArgs...).
-			Build()
-		// set as validator manually
-		validatorConfig.validator = true
-		validatorConfigs = append(validatorConfigs, validatorConfig)
-	}
-
-	// create full node configurations
-	var fullNodeConfigs []ChainNodeConfig
-	for i := len(c.FullNodes); i < c.numFullNodes; i++ {
-		fullNodeConfig := NewChainNodeConfigBuilder().
-			WithEnvVars(c.cfg.ChainConfig.Env...).
-			WithAdditionalStartArgs(c.cfg.ChainConfig.AdditionalStartArgs...).
-			Build()
-		// set as full node manually (already false by default)
-		fullNodeConfig.validator = false
-		fullNodeConfigs = append(fullNodeConfigs, fullNodeConfig)
-	}
-
-	// create a chain builder to handle node creation
-	builder := NewChainBuilder(c.t).
-		WithDockerClient(c.cfg.DockerClient).
-		WithDockerNetworkID(c.cfg.DockerNetworkID).
-		WithLogger(c.log).
-		WithName(c.cfg.ChainConfig.Name).
-		WithChainID(c.cfg.ChainConfig.ChainID).
-		WithBinaryName(c.cfg.ChainConfig.Bin).
-		WithCoinType(c.cfg.ChainConfig.CoinType).
-		WithGasPrices(c.cfg.ChainConfig.GasPrices).
-		WithEncodingConfig(c.cfg.ChainConfig.EncodingConfig).
-		WithImage(c.cfg.ChainConfig.Image).
-		WithValidators(validatorConfigs...).
-		WithFullNodes(fullNodeConfigs...)
-
-	// create the nodes using the builder
-	nodes, err := builder.initializeChainNodes(ctx)
-	if err != nil {
-		return err
-	}
-
-	// separate validators and full nodes
-	newVals := make(ChainNodes, numValidators)
-	copy(newVals, c.Validators)
-	newFullNodes := make(ChainNodes, c.numFullNodes)
-	copy(newFullNodes, c.FullNodes)
-
-	// assign the newly created nodes
-	validatorIndex := len(c.Validators)
-	fullNodeIndex := len(c.FullNodes)
-
-	for _, node := range nodes {
-		if node.Validator {
-			newVals[validatorIndex] = node
-			validatorIndex++
-		} else {
-			newFullNodes[fullNodeIndex] = node
-			fullNodeIndex++
-		}
-	}
-
-	c.findTxMu.Lock()
-	defer c.findTxMu.Unlock()
-	c.Validators = newVals
-	c.FullNodes = newFullNodes
-	return nil
 }
 
 // pullImages pulls all images used by the chain chains.

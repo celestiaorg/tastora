@@ -63,7 +63,7 @@ func (s *DockerTestSuite) SetupTest() {
 			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
 			"--timeout-commit", "1s",
 		).
-		AddValidator(NewChainNodeConfigBuilder().Build())
+		WithValidator(NewChainNodeConfigBuilder().Build())
 }
 
 // TearDownTest removes docker resources.

@@ -23,8 +23,8 @@ type Chain interface {
 	GetVolumeName() string // TODO: this should be removed and is a temporary function for docker only PoC.
 	// GetNodes returns a slice of ChainNodes.
 	GetNodes() []ChainNode
-	// AddNode adds a full node to the chain. overrides can be provided to make modifications to any config files before starting.
-	AddNode(ctx context.Context, overrides map[string]any) error // TODO: use options pattern to allow for overrides.
+	// AddNode adds a full node to the chain with the given configuration.
+	//AddNode(ctx context.Context, nodeConfig ChainNodeConfig) error
 	// CreateWallet creates a new wallet with the specified keyName and returns the Wallet instance or an error.
 	CreateWallet(ctx context.Context, keyName string) (Wallet, error)
 	// BroadcastMessages sends multiple messages to the blockchain network using the signingWallet, returning a transaction response.
