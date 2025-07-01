@@ -8,11 +8,9 @@ import (
 	"github.com/celestiaorg/go-square/v2/share"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	addressutil "github.com/celestiaorg/tastora/framework/testutil/address"
-	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
@@ -43,15 +41,14 @@ const (
 )
 
 type Chain struct {
-	t            *testing.T
-	cfg          Config
-	Validators   ChainNodes
-	FullNodes    ChainNodes
-	numFullNodes int
-	cdc          *codec.ProtoCodec
-	log          *zap.Logger
-	keyring      keyring.Keyring
-	findTxMu     sync.Mutex
+	t          *testing.T
+	cfg        Config
+	Validators ChainNodes
+	FullNodes  ChainNodes
+	cdc        *codec.ProtoCodec
+	log        *zap.Logger
+
+	mu           sync.Mutex
 	faucetWallet types.Wallet
 	broadcaster  types.Broadcaster
 
@@ -120,7 +117,7 @@ func (c *Chain) AddNode(ctx context.Context, nodeConfig ChainNodeConfig) error {
 	}
 
 	// initialize the node
-	if err := node.initFullNodeFiles(ctx); err != nil {
+	if err := node.initNodeFiles(ctx); err != nil {
 		return err
 	}
 	// always set peers and genesis
@@ -147,113 +144,9 @@ func (c *Chain) AddNode(ctx context.Context, nodeConfig ChainNodeConfig) error {
 	}
 
 	// add the new node to the chain
-	c.findTxMu.Lock()
-	defer c.findTxMu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.FullNodes = append(c.FullNodes, node)
-	c.numFullNodes++
-
-	return nil
-}
-
-// AddNodes adds multiple nodes of the specified type to the chain with optional config overrides
-func (c *Chain) AddNodes(ctx context.Context, nodeType NodeType, count int, configOverrides map[string]any) error {
-	// get peer string for existing nodes
-	peers, err := addressutil.BuildInternalPeerAddressList(ctx, c.Nodes())
-	if err != nil {
-		return err
-	}
-
-	// get genesis.json
-	genbz, err := c.Validators[0].genesisFileContent(ctx)
-	if err != nil {
-		return err
-	}
-
-	// create post-init function to handle config overrides, peers, and genesis
-	postInitFn := func(ctx context.Context, node *ChainNode) error {
-		if err := node.setPeers(ctx, peers); err != nil {
-			return err
-		}
-		if err := node.overwriteGenesisFile(ctx, genbz); err != nil {
-			return err
-		}
-		for configFile, modifiedConfig := range configOverrides {
-			modifiedToml, ok := modifiedConfig.(toml.Toml)
-			if !ok {
-				return fmt.Errorf("provided toml override for file %s is of type (%T). Expected (DecodedToml)", configFile, modifiedConfig)
-			}
-			if err := ModifyConfigFile(
-				ctx,
-				node.logger(),
-				node.ContainerNode.DockerClient,
-				node.ContainerNode.TestName,
-				node.VolumeName,
-				configFile,
-				modifiedToml,
-			); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	// create a builder to access newChainNode method
-	builder := NewChainBuilderFromChain(c)
-
-	// create only the new nodes we need
-	var newNodes []*ChainNode
-	existingNodeCount := len(c.Validators) + len(c.FullNodes)
-
-	for i := 0; i < count; i++ {
-		nodeConfig := NewChainNodeConfigBuilder().
-			WithPostInit(postInitFn).
-			Build()
-		nodeConfig.validator = nodeType == ValidatorNodeType
-
-		// create the node directly using builder's newChainNode method
-		node, err := builder.newChainNode(ctx, nodeConfig, existingNodeCount+i)
-		if err != nil {
-			return err
-		}
-		newNodes = append(newNodes, node)
-	}
-
-	// initialize and start the new nodes
-	var eg errgroup.Group
-	for _, node := range newNodes {
-		eg.Go(func() error {
-			if err := node.initFullNodeFiles(ctx); err != nil {
-				return err
-			}
-			// execute post-init functions (peers, genesis, config overrides)
-			for _, fn := range node.PostInit {
-				if err := fn(ctx, node); err != nil {
-					return err
-				}
-			}
-			if err := node.createNodeContainer(ctx); err != nil {
-				return err
-			}
-			return node.startContainer(ctx)
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
-		return err
-	}
-
-	// add the new nodes to the chain based on their type
-	c.findTxMu.Lock()
-	defer c.findTxMu.Unlock()
-
-	for _, node := range newNodes {
-		if node.Validator {
-			c.Validators = append(c.Validators, node)
-		} else {
-			c.FullNodes = append(c.FullNodes, node)
-			c.numFullNodes++
-		}
-	}
 
 	return nil
 }
@@ -303,7 +196,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	for _, v := range c.Validators {
 		v.Validator = true
 		eg.Go(func() error {
-			if err := v.initFullNodeFiles(ctx); err != nil {
+			if err := v.initNodeFiles(ctx); err != nil {
 				return err
 			}
 
@@ -319,7 +212,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	for _, n := range c.FullNodes {
 		n.Validator = false
 		eg.Go(func() error {
-			return n.initFullNodeFiles(ctx)
+			return n.initNodeFiles(ctx)
 		})
 	}
 
@@ -458,8 +351,8 @@ func (c *Chain) Nodes() ChainNodes {
 // Should only be used if the chain has previously been started with .Start.
 func (c *Chain) startAllNodes(ctx context.Context) error {
 	// prevent client calls during this time
-	c.findTxMu.Lock()
-	defer c.findTxMu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	var eg errgroup.Group
 	for _, n := range c.Nodes() {
 		eg.Go(func() error {

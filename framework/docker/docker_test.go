@@ -63,7 +63,7 @@ func (s *DockerTestSuite) SetupTest() {
 			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
 			"--timeout-commit", "1s",
 		).
-		WithValidator(NewChainNodeConfigBuilder().Build())
+		WithNode(NewChainNodeConfigBuilder().Build())
 }
 
 // TearDownTest removes docker resources.
@@ -157,7 +157,7 @@ func (s *DockerTestSuite) TestPerNodeDifferentImages() {
 	// Use builder directly - tests can modify as needed before calling Build
 	var err error
 	s.chain, err = s.builder.
-		WithValidators(validator0Config, validator1Config).
+		WithNodes(validator0Config, validator1Config).
 		Build(s.ctx)
 	s.Require().NoError(err)
 

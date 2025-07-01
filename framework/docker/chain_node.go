@@ -174,7 +174,7 @@ func (tn *ChainNode) Height(ctx context.Context) (int64, error) {
 	return height, nil
 }
 
-func (tn *ChainNode) initFullNodeFiles(ctx context.Context) error {
+func (tn *ChainNode) initNodeFiles(ctx context.Context) error {
 	if err := tn.initHomeFolder(ctx); err != nil {
 		return err
 	}

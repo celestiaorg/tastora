@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"context"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/moby/moby/client"
 	"go.uber.org/zap"
@@ -45,7 +46,7 @@ type ChainConfig struct {
 	Gas string
 	// Trusting period of the chain.
 	TrustingPeriod string
-	PostInit       []func(chainNode *ChainNode) error
+	PostInit       []func(ctx context.Context, chainNode *ChainNode) error
 	// Non-nil will override the encoding config, used for cosmos chains only.
 	EncodingConfig *testutil.TestEncodingConfig
 	// Additional start command arguments
