@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/consts"
-	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"math/rand"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/testutil/random"
 
 	"github.com/avast/retry-go/v4"
 	"github.com/docker/docker/api/types/container"
@@ -183,20 +184,29 @@ func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
 
 		for _, c := range cs {
 			if (t.Failed() && showContainerLogs == "") || showContainerLogs == "always" {
-				logTail := "50"
-				if containerLogTail != "" {
-					logTail = containerLogTail
-				}
-				rc, err := cli.ContainerLogs(ctx, c.ID, container.LogsOptions{
+				logOptions := container.LogsOptions{
 					ShowStdout: true,
 					ShowStderr: true,
-					Tail:       logTail,
-				})
+				}
+
+				// Only apply tail limit if test hasn't failed or CONTAINER_LOG_TAIL is explicitly set
+				if !t.Failed() && containerLogTail != "" {
+					logOptions.Tail = containerLogTail
+				} else if !t.Failed() {
+					logOptions.Tail = consts.DefaultLogTail
+				}
+				// When test fails, Tail is not set, so full logs are returned
+
+				rc, err := cli.ContainerLogs(ctx, c.ID, logOptions)
 				if err == nil {
 					b := new(bytes.Buffer)
 					_, err := b.ReadFrom(rc)
 					if err == nil {
-						t.Logf("\n\nContainer logs - {%s}\n%s", strings.Join(c.Names, " "), b.String())
+						logHeader := "Container logs"
+						if t.Failed() && logOptions.Tail == "" {
+							logHeader = "Full container logs"
+						}
+						t.Logf("\n\n%s - {%s}\n%s", logHeader, strings.Join(c.Names, " "), b.String())
 					}
 				}
 			}
