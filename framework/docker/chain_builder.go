@@ -29,9 +29,10 @@ type ChainNodeConfig struct {
 	privValidatorKey []byte
 	// postInit functions are executed sequentially after the node is initialized.
 	postInit []func(ctx context.Context, node *ChainNode) error
-	keyring  keyring.Keyring
-	// AccountName specifies the name of the account/key in the genesis keyring to use for this validator
-	AccountName string
+	// keyring specifies the keyring backend used for managing keys and signing transactions.
+	keyring keyring.Keyring
+	// accountName specifies the name of the account/key in the genesis keyring to use for this validator
+	accountName string
 }
 
 // ChainNodeConfigBuilder provides a fluent interface for building ChainNodeConfig
@@ -87,7 +88,7 @@ func (b *ChainNodeConfigBuilder) WithPostInit(postInitFns ...func(ctx context.Co
 
 // WithAccountName sets the account name to use from the genesis keyring for this validator
 func (b *ChainNodeConfigBuilder) WithAccountName(accountName string) *ChainNodeConfigBuilder {
-	b.config.AccountName = accountName
+	b.config.accountName = accountName
 	return b
 }
 
@@ -102,30 +103,45 @@ func (b *ChainNodeConfigBuilder) Build() ChainNodeConfig {
 	return *b.config
 }
 
+// ChainBuilder defines a builder for configuring and initializing a blockchain for testing purposes.
 type ChainBuilder struct {
-	t               *testing.T
-	nodes           []ChainNodeConfig
-	dockerClient    *client.Client
+	// t is the testing context used for test assertions, container naming, and test lifecycle management
+	t *testing.T
+	// nodes is the array of node configurations that define the chain topology and individual node settings
+	nodes []ChainNodeConfig
+	// dockerClient is the Docker client instance used for all container operations (create, start, stop, etc.)
+	dockerClient *client.Client
+	// dockerNetworkID is the ID of the Docker network where all chain nodes are deployed
 	dockerNetworkID string
-	// raw bytes that should be written as the config/genesis.json file for the chain.
-	genesisBz      []byte
+	// genesisBz contains raw bytes that should be written as the config/genesis.json file for the chain (optional)
+	genesisBz []byte
+	// encodingConfig is the Cosmos SDK encoding configuration for protobuf and amino serialization/deserialization
 	encodingConfig *testutil.TestEncodingConfig
-	binaryName     string
-	coinType       string
-	gasPrices      string
-	gasAdjustment  float64
-	bech32Prefix   string
-	denom          string
-	name           string
-	chainID        string
-	logger         *zap.Logger
-	// default Docker image for all nodes in the chain (can be overridden per node)
+	// binaryName is the name of the blockchain binary executable. Default: "celestia-appd"
+	binaryName string
+	// coinType is the BIP-44 coin type used for key derivation. Default: "118"
+	coinType string
+	// gasPrices is the gas price configuration for transactions. Default: "0.025utia"
+	gasPrices string
+	// gasAdjustment is the multiplier for gas estimation to prevent out-of-gas errors. Default: 1.3 (30% buffer)
+	gasAdjustment float64
+	// bech32Prefix is the address prefix for the blockchain. Default: "celestia"
+	bech32Prefix string
+	// denom is the native token denomination used in transactions and fees. Default: "utia"
+	denom string
+	// name is the chain name identifier used in container naming and home directory paths. Default: "celestia"
+	name string
+	// chainID is the blockchain chain ID for network identification (e.g., "test"). Default: "test"
+	chainID string
+	// logger is the structured logger for chain operations and debugging. Defaults to test logger.
+	logger *zap.Logger
+	// dockerImage is the default Docker image configuration for all nodes in the chain (can be overridden per node)
 	dockerImage *DockerImage
-	// default additional start arguments for all nodes in the chain (can be overridden per node)
+	// additionalStartArgs are the default additional command-line arguments for all nodes in the chain (can be overridden per node)
 	additionalStartArgs []string
-	// default post init functions for all nodes in the chain (can be overridden per node)
+	// postInit are the default post-initialization functions for all nodes in the chain (can be overridden per node)
 	postInit []func(ctx context.Context, node *ChainNode) error
-	// default environment variables for all nodes in the chain (can be overridden per node)
+	// env are the default environment variables for all nodes in the chain (can be overridden per node)
 	env []string
 }
 
@@ -447,11 +463,11 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume
 func preloadKeyringToVolume(ctx context.Context, node *ChainNode, nodeConfig ChainNodeConfig) error {
 	// check if AccountName is specified
-	if nodeConfig.AccountName == "" {
-		return fmt.Errorf("AccountName must be specified for validator nodes when using a genesis keyring")
+	if nodeConfig.accountName == "" {
+		return fmt.Errorf("accountName must be specified for validator nodes when using a genesis keyring")
 	}
 
-	validatorKeyName := nodeConfig.AccountName
+	validatorKeyName := nodeConfig.accountName
 
 	// get the key from the genesis keyring
 	_, err := node.GenesisKeyring.Key(validatorKeyName)
@@ -459,7 +475,7 @@ func preloadKeyringToVolume(ctx context.Context, node *ChainNode, nodeConfig Cha
 		return fmt.Errorf("validator key %q not found in genesis keyring: %w", validatorKeyName, err)
 	}
 
-	// create a temporary directory to hold the keyring files
+	// create a temporary directory to hold the keyring files locally.
 	tempDir, err := os.MkdirTemp("", "keyring-export-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
