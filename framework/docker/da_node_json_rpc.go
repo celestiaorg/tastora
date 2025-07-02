@@ -94,7 +94,7 @@ func callRPC[T any](ctx context.Context, url, method string, params interface{})
 	if err != nil {
 		return zero, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		data, _ := io.ReadAll(resp.Body)

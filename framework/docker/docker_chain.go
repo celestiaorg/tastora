@@ -16,7 +16,6 @@ import (
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
@@ -119,9 +118,9 @@ func (c *Chain) getBroadcaster() types.Broadcaster {
 }
 
 // BroadcastMessages broadcasts the given messages signed on behalf of the provided user.
-func (c *Chain) BroadcastMessages(ctx context.Context, signingWallet types.Wallet, msgs ...sdktypes.Msg) (sdktypes.TxResponse, error) {
+func (c *Chain) BroadcastMessages(ctx context.Context, signingWallet types.Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error) {
 	if c.faucetWallet.GetFormattedAddress() == "" {
-		return sdktypes.TxResponse{}, fmt.Errorf("faucet wallet not initialized")
+		return sdk.TxResponse{}, fmt.Errorf("faucet wallet not initialized")
 	}
 	return c.getBroadcaster().BroadcastMessages(ctx, signingWallet, msgs...)
 }
@@ -160,7 +159,7 @@ func (c *Chain) AddFullNodes(ctx context.Context, configFileOverrides map[string
 	for i := prevCount; i < c.numFullNodes; i++ {
 		eg.Go(func() error {
 			fn := c.FullNodes[i]
-			if err := fn.initFullNodeFiles(ctx); err != nil {
+			if err := fn.initNodeFiles(ctx); err != nil {
 				return err
 			}
 			if err := fn.setPeers(ctx, peers); err != nil {
@@ -249,7 +248,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	for i, v := range c.Validators {
 		v.Validator = true
 		eg.Go(func() error {
-			if err := v.initFullNodeFiles(ctx); err != nil {
+			if err := v.initNodeFiles(ctx); err != nil {
 				return err
 			}
 			for configFile, modifiedConfig := range configFileOverrides {
@@ -277,7 +276,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	for _, n := range c.FullNodes {
 		n.Validator = false
 		eg.Go(func() error {
-			if err := n.initFullNodeFiles(ctx); err != nil {
+			if err := n.initNodeFiles(ctx); err != nil {
 				return err
 			}
 			for configFile, modifiedConfig := range configFileOverrides {
@@ -549,7 +548,7 @@ func (c *Chain) CreateWallet(ctx context.Context, keyName string) (types.Wallet,
 		return nil, fmt.Errorf("failed to get account address for key %q on chain %s: %w", keyName, c.cfg.ChainConfig.Name, err)
 	}
 
-	formattedAddres := sdktypes.MustBech32ifyAddressBytes(c.cfg.ChainConfig.Bech32Prefix, addrBytes)
+	formattedAddres := sdk.MustBech32ifyAddressBytes(c.cfg.ChainConfig.Bech32Prefix, addrBytes)
 
 	w := NewWallet(addrBytes, formattedAddres, c.cfg.ChainConfig.Bech32Prefix, keyName)
 	return &w, nil
