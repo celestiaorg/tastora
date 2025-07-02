@@ -12,7 +12,6 @@ import (
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
@@ -78,9 +77,9 @@ func (c *Chain) getBroadcaster() types.Broadcaster {
 }
 
 // BroadcastMessages broadcasts the given messages signed on behalf of the provided user.
-func (c *Chain) BroadcastMessages(ctx context.Context, signingWallet types.Wallet, msgs ...sdktypes.Msg) (sdktypes.TxResponse, error) {
+func (c *Chain) BroadcastMessages(ctx context.Context, signingWallet types.Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error) {
 	if c.faucetWallet.GetFormattedAddress() == "" {
-		return sdktypes.TxResponse{}, fmt.Errorf("faucet wallet not initialized")
+		return sdk.TxResponse{}, fmt.Errorf("faucet wallet not initialized")
 	}
 	return c.getBroadcaster().BroadcastMessages(ctx, signingWallet, msgs...)
 }
@@ -300,7 +299,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 // initDefaultGenesis initializes the default genesis file with validators and a faucet account for funding test wallets.
 // it distributes the default genesis amount to all validators and ensures gentx files are collected and included.
-func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdktypes.Coins) ([]byte, error) {
+func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdk.Coins) ([]byte, error) {
 	validator0 := c.Validators[0]
 	for i := 1; i < len(c.Validators); i++ {
 		validatorN := c.Validators[i]
@@ -433,7 +432,7 @@ func (c *Chain) CreateWallet(ctx context.Context, keyName string) (types.Wallet,
 		return nil, fmt.Errorf("failed to get account address for key %q on chain %s: %w", keyName, c.cfg.ChainConfig.Name, err)
 	}
 
-	formattedAddres := sdktypes.MustBech32ifyAddressBytes(c.cfg.ChainConfig.Bech32Prefix, addrBytes)
+	formattedAddres := sdk.MustBech32ifyAddressBytes(c.cfg.ChainConfig.Bech32Prefix, addrBytes)
 
 	w := NewWallet(addrBytes, formattedAddres, c.cfg.ChainConfig.Bech32Prefix, keyName)
 	return &w, nil

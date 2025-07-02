@@ -157,7 +157,7 @@ func (c *ContainerLifecycle) checkForFailedStart(ctx context.Context, wait time.
 	if err != nil {
 		return fmt.Errorf("failed to read logs from container %s: %w", c.containerName, err)
 	}
-	defer containerLogs.Close()
+	defer func() { _ = containerLogs.Close() }()
 
 	logs := new(strings.Builder)
 	_, err = io.Copy(logs, containerLogs)

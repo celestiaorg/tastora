@@ -305,7 +305,7 @@ func IsLoggableStopError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return !(errdefs.IsNotModified(err) || errdefs.IsNotFound(err))
+	return !errdefs.IsNotModified(err) && !errdefs.IsNotFound(err)
 }
 
 // shouldShowContainerLogs determines if container logs should be displayed based on test status and environment variables
@@ -346,7 +346,7 @@ func displayContainerLogs(
 	if err != nil {
 		return
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	b := new(bytes.Buffer)
 	_, err = b.ReadFrom(rc)

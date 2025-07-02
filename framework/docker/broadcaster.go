@@ -18,7 +18,6 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
-	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
@@ -27,7 +26,7 @@ import (
 
 type ClientContextOpt func(clientContext client.Context) client.Context
 
-type FactoryOpt func(factory tx.Factory) tx.Factory
+type FactoryOpt func(factory sdktx.Factory) sdktx.Factory
 
 // broadcaster is responsible for broadcasting trasactions to docker chains.
 type broadcaster struct {
@@ -76,20 +75,20 @@ func (b *broadcaster) ConfigureClientContextOptions(opts ...ClientContextOpt) {
 // GetFactory returns an instance of tx.Factory that is configured with this Broadcaster's Chain
 // and the provided wallet. ConfigureFactoryOptions can be used to specify arbitrary options to configure the returned
 // factory.
-func (b *broadcaster) GetFactory(ctx context.Context, wallet types.Wallet) (tx.Factory, error) {
+func (b *broadcaster) GetFactory(ctx context.Context, wallet types.Wallet) (sdktx.Factory, error) {
 	clientContext, err := b.GetClientContext(ctx, wallet)
 	if err != nil {
-		return tx.Factory{}, err
+		return sdktx.Factory{}, err
 	}
 
 	sdkAdd, err := sdkacc.AddressFromWallet(wallet)
 	if err != nil {
-		return tx.Factory{}, err
+		return sdktx.Factory{}, err
 	}
 
 	account, err := clientContext.AccountRetriever.GetAccount(clientContext, sdkAdd)
 	if err != nil {
-		return tx.Factory{}, err
+		return sdktx.Factory{}, err
 	}
 
 	f := b.defaultTxFactory(clientContext, account)
@@ -171,9 +170,9 @@ func (b *broadcaster) defaultClientContext(fromWallet types.Wallet, sdkAdd sdk.A
 }
 
 // defaultTxFactory creates a new Factory with default configuration.
-func (b *broadcaster) defaultTxFactory(clientCtx client.Context, account client.Account) tx.Factory {
+func (b *broadcaster) defaultTxFactory(clientCtx client.Context, account client.Account) sdktx.Factory {
 	chainConfig := b.chain.cfg.ChainConfig
-	return tx.Factory{}.
+	return sdktx.Factory{}.
 		WithAccountNumber(account.GetAccountNumber()).
 		WithSequence(account.GetSequence()).
 		WithSignMode(signing.SignMode_SIGN_MODE_DIRECT).
@@ -247,7 +246,7 @@ func (b *broadcaster) BroadcastMessages(ctx context.Context, signingWallet types
 		return sdk.TxResponse{}, err
 	}
 
-	if err := tx.BroadcastTx(cc, f, msgs...); err != nil {
+	if err := sdktx.BroadcastTx(cc, f, msgs...); err != nil {
 		return sdk.TxResponse{}, err
 	}
 

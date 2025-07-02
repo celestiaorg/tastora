@@ -201,27 +201,27 @@ func (rn *RollkitNode) GetHostName() string {
 
 // GetHostRPCPort returns the host RPC port
 func (rn *RollkitNode) GetHostRPCPort() string {
-	return strings.Replace(rn.hostRPCPort, "0.0.0.0:", "", -1)
+	return strings.ReplaceAll(rn.hostRPCPort, "0.0.0.0:", "")
 }
 
 // GetHostAPIPort returns the host API port
 func (rn *RollkitNode) GetHostAPIPort() string {
-	return strings.Replace(rn.hostAPIPort, "0.0.0.0:", "", -1)
+	return strings.ReplaceAll(rn.hostAPIPort, "0.0.0.0:", "")
 }
 
 // GetHostGRPCPort returns the host GRPC port
 func (rn *RollkitNode) GetHostGRPCPort() string {
-	return strings.Replace(rn.hostGRPCPort, "0.0.0.0:", "", -1)
+	return strings.ReplaceAll(rn.hostGRPCPort, "0.0.0.0:", "")
 }
 
 // GetHostP2PPort returns the host P2P port
 func (rn *RollkitNode) GetHostP2PPort() string {
-	return strings.Replace(rn.hostP2PPort, "0.0.0.0:", "", -1)
+	return strings.ReplaceAll(rn.hostP2PPort, "0.0.0.0:", "")
 }
 
 // GetHostHTTPPort returns the host HTTP port
 func (rn *RollkitNode) GetHostHTTPPort() string {
-	return strings.Replace(rn.hostHTTPPort, "0.0.0.0:", "", -1)
+	return strings.ReplaceAll(rn.hostHTTPPort, "0.0.0.0:", "")
 }
 
 // waitForNodeReady polls the health endpoint until the node is ready or timeout is reached
@@ -262,7 +262,7 @@ func (rn *RollkitNode) isNodeHealthy(client *http.Client, healthURL string) bool
 		rn.logger().Debug("rollkit node not ready yet", zap.String("url", healthURL), zap.Error(err))
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 200 {
 		return true

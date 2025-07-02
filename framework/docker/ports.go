@@ -15,7 +15,7 @@ type Listeners []net.Listener
 
 func (l Listeners) CloseAll() {
 	for _, listener := range l {
-		listener.Close()
+		_ = listener.Close()
 	}
 }
 
@@ -44,7 +44,7 @@ func OpenListener(port int) (*net.TCPListener, error) {
 func GetPort(port int) (nat.PortBinding, *net.TCPListener, error) {
 	l, err := OpenListener(port)
 	if err != nil {
-		l.Close()
+		_ = l.Close()
 		return nat.PortBinding{}, nil, err
 	}
 
