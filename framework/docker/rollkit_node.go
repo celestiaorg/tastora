@@ -68,6 +68,11 @@ func (rn *RollkitNode) Name() string {
 	return fmt.Sprintf("%s-rollkit-%d-%s", rn.cfg.RollkitChainConfig.ChainID, rn.Index, SanitizeContainerName(rn.TestName))
 }
 
+// HostName returns the condensed hostname for the RollkitNode.
+func (rn *RollkitNode) HostName() string {
+	return CondenseHostName(rn.Name())
+}
+
 func (rn *RollkitNode) logger() *zap.Logger {
 	return rn.cfg.Logger.With(
 		zap.String("chain_id", rn.cfg.RollkitChainConfig.ChainID),

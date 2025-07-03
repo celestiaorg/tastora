@@ -42,7 +42,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 		WithPerBridgeNodeConfig(bridgeNodeConfigs),
 		WithPerFullNodeConfig(fullNodeConfigs),
 	)
-	s.chain, err = s.provider.GetChain(ctx)
+	s.chain, err = s.builder.Build(ctx)
 	s.Require().NoError(err)
 
 	err = s.chain.Start(ctx)
@@ -148,7 +148,7 @@ func (s *DockerTestSuite) TestModifyConfigFileDANetwork() {
 
 	var err error
 	s.provider = s.CreateDockerProvider()
-	s.chain, err = s.provider.GetChain(ctx)
+	s.chain, err = s.builder.Build(ctx)
 	s.Require().NoError(err)
 
 	err = s.chain.Start(ctx)
@@ -239,7 +239,7 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 			WithDefaultPorts(), // This should use ports 26668, 2131, 26667, 9091
 		)
 
-		chain, err := provider.GetChain(ctx)
+		chain, err := s.builder.Build(ctx)
 		s.Require().NoError(err)
 
 		err = chain.Start(ctx)
@@ -271,7 +271,7 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 			WithDANodeCoreConnection("27001", "9095"),
 		)
 
-		chain, err := provider.GetChain(ctx)
+		chain, err := s.builder.Build(ctx)
 		s.Require().NoError(err)
 
 		err = chain.Start(ctx)
@@ -302,7 +302,7 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 			WithNodePorts(types.BridgeNode, 0, "28000", "4000"), // Configure bridge node 0 with specific ports
 		)
 
-		chain, err := provider.GetChain(ctx)
+		chain, err := s.builder.Build(ctx)
 		s.Require().NoError(err)
 
 		err = chain.Start(ctx)
@@ -331,7 +331,7 @@ func (s *DockerTestSuite) TestDANetworkCustomPorts() {
 		// Test that existing code works unchanged
 		provider := s.CreateDockerProvider() // No custom configuration
 
-		chain, err := provider.GetChain(ctx)
+		chain, err := s.builder.Build(ctx)
 		s.Require().NoError(err)
 
 		err = chain.Start(ctx)

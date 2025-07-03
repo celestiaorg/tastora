@@ -8,8 +8,6 @@ import "context"
 // different Providers can be implemented to enable different infrastructure / backends for the Chains and
 // DataAvailabilityNetwork to run on.
 type Provider interface {
-	// GetChain returns an implement of the Chain interface.
-	GetChain(ctx context.Context) (Chain, error)
 	// GetRollkitChain retrieves an implementation of the RollkitChain interface.
 	GetRollkitChain(ctx context.Context) (RollkitChain, error)
 	// GetDataAvailabilityNetwork retrieves an implementation of the DataAvailabilityNetwork.

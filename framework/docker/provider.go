@@ -22,12 +22,6 @@ func (p *Provider) GetDataAvailabilityNetwork(ctx context.Context) (types.DataAv
 	return newDataAvailabilityNetwork(ctx, p.t.Name(), p.cfg)
 }
 
-// GetChain returns an initialized Chain instance based on the provided configuration and test name context.
-// It creates necessary underlying resources and validates the configuration before instantiating the Chain.
-func (p *Provider) GetChain(ctx context.Context) (types.Chain, error) {
-	return newChain(ctx, p.t, p.cfg)
-}
-
 // NewProvider creates and returns a new Provider instance using the provided configuration and test name.
 func NewProvider(cfg Config, t *testing.T) *Provider {
 	return &Provider{

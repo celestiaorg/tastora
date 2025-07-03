@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"context"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/moby/moby/client"
 	"go.uber.org/zap"
@@ -21,19 +22,14 @@ type Config struct {
 }
 
 type ChainConfig struct {
-	// Chain type, e.g. cosmos.
-	Type string
-	// Chain name, e.g. cosmoshub.
+	// Chain name, e.g. celestia.
 	Name string
-	// Version of the docker image to use.
-	// Must be set.
-	Version string
 	// How many validators and how many full nodes to use when instantiating the chain.
 	NumValidators, NumFullNodes *int
 	// Chain ID, e.g. cosmoshub-4
 	ChainID string
-	// Docker images required for running chain nodes.
-	Images []DockerImage
+	// Docker image for running chain nodes.
+	Image DockerImage
 	// Binary to execute for the chain node daemon.
 	Bin string
 	// Bech32 prefix for chain addresses, e.g. cosmos.
@@ -50,30 +46,16 @@ type ChainConfig struct {
 	Gas string
 	// Trusting period of the chain.
 	TrustingPeriod string
-	// When provided, genesis file contents will be altered before sharing for genesis.
-	ModifyGenesis func(Config, []byte) ([]byte, error)
-	// Override config parameters for files at filepath.
-	ConfigFileOverrides map[string]any
+	// PostInit defines a set of functions executed after initializing a chain node, allowing custom setups or configurations.
+	PostInit []func(ctx context.Context, chainNode *ChainNode) error
 	// Non-nil will override the encoding config, used for cosmos chains only.
 	EncodingConfig *testutil.TestEncodingConfig
-	// To avoid port binding conflicts, ports are only exposed on the 0th validator.
-	HostPortOverride map[int]int
 	// Additional start command arguments
 	AdditionalStartArgs []string
 	// Environment variables for chain nodes
 	Env []string
-	// ChainNodeConfigs allows per-node configuration overrides, keyed by node index
-	ChainNodeConfigs map[int]*ChainNodeConfig
-}
-
-// ChainNodeConfig provides per-node configuration that can override ChainConfig defaults
-type ChainNodeConfig struct {
-	// AdditionalStartArgs overrides the chain-level AdditionalStartArgs for this specific node
-	AdditionalStartArgs []string
-	// Image overrides the chain-level Images[0] for this specific node
-	Image *DockerImage
-	// Env overrides the chain-level Env for this specific node
-	Env []string
+	// GenesisFileBz contains the raw bytes of the genesis file that will be written to config/gensis.json
+	GenesisFileBz []byte
 }
 
 // DataAvailabilityNetworkConfig defines the configuration for the data availability network, including node counts and image settings.

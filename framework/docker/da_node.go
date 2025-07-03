@@ -44,10 +44,12 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 
 	daNode.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name())
 
-	// image may be overridden by each node.
+	// image may be overridden by each node, update ContainerNode with the final image
 	daNode.Image = daNode.getImage()
-	if err := daNode.createAndSetupVolume(ctx); err != nil {
-		return nil, fmt.Errorf("failed to create and setup volume: %w", err)
+
+	// create and setup volume using shared logic
+	if err := daNode.createAndSetupVolume(ctx, daNode.Name()); err != nil {
+		return nil, err
 	}
 
 	return daNode, nil
@@ -98,6 +100,16 @@ func (n *DANode) GetInternalP2PAddress() (string, error) {
 // GetType returns the type of the DANode as defined by the types.DANodeType enum.
 func (n *DANode) GetType() types.DANodeType {
 	return n.nodeType
+}
+
+// Name returns the container name for the DANode.
+func (n *DANode) Name() string {
+	return fmt.Sprintf("da-%s-%d-%s", n.nodeType.String(), n.Index, SanitizeContainerName(n.TestName))
+}
+
+// HostName returns the condensed hostname for the DANode.
+func (n *DANode) HostName() string {
+	return CondenseHostName(n.Name())
 }
 
 // GetHostRPCAddress returns the externally resolvable RPC address of the bridge node.
@@ -154,16 +166,6 @@ func (n *DANode) startAndInitialize(ctx context.Context, opts ...types.DANodeSta
 
 	n.hasBeenStarted = true
 	return nil
-}
-
-// Name of the test node container.
-func (n *ContainerNode) Name() string {
-	return fmt.Sprintf("%s-%d-%s", n.GetType(), n.Index, SanitizeContainerName(n.TestName))
-}
-
-// HostName of the test node container.
-func (n *ContainerNode) HostName() string {
-	return CondenseHostName(n.Name())
 }
 
 // ModifyConfigFiles modifies the specified config files with the provided TOML modifications.
