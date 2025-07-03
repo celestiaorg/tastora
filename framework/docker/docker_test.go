@@ -209,6 +209,55 @@ func (s *DockerTestSuite) TestPerNodeDifferentImages() {
 	}
 }
 
+// TestChainNodeExec tests the Exec method on ChainNode
+func (s *DockerTestSuite) TestChainNodeExec() {
+	var err error
+	s.provider = s.CreateDockerProvider()
+	s.chain, err = s.provider.GetChain(s.ctx)
+	s.Require().NoError(err)
+
+	err = s.chain.Start(s.ctx)
+	s.Require().NoError(err)
+
+	nodes := s.chain.GetNodes()
+	s.Require().NotEmpty(nodes, "chain should have nodes")
+
+	node := nodes[0]
+
+	// test executing a simple command
+	cmd := []string{"echo", "hello world"}
+
+	stdout, stderr, err := node.Exec(s.ctx, cmd, nil)
+	s.Require().NoError(err, "Exec should succeed")
+	s.Require().Contains(string(stdout), "hello world", "stdout should contain expected output")
+	s.Require().Empty(stderr, "stderr should be empty for successful echo command")
+
+	// test executing a command with environment variables
+	cmd = []string{"sh", "-c", "echo $TEST_VAR"}
+	env := []string{"TEST_VAR=test_value"}
+
+	stdout, stderr, err = node.Exec(s.ctx, cmd, env)
+	s.Require().NoError(err, "Exec with env vars should succeed")
+	s.Require().Contains(string(stdout), "test_value", "stdout should contain env var value")
+	s.Require().Empty(stderr, "stderr should be empty for successful command")
+
+	// test executing a command that outputs to stderr
+	cmd = []string{"sh", "-c", "echo 'error message' >&2"}
+
+	stdout, stderr, err = node.Exec(s.ctx, cmd, nil)
+	s.Require().NoError(err, "Exec with stderr output should succeed")
+	s.Require().Empty(stdout, "stdout should be empty")
+	s.Require().Contains(string(stderr), "error message", "stderr should contain expected output")
+
+	// test executing a command that returns an error
+	cmd = []string{"sh", "-c", "exit 1"}
+
+	stdout, stderr, err = node.Exec(s.ctx, cmd, nil)
+	s.Require().Error(err, "Exec with failing command should return error")
+	s.Require().Empty(stdout, "stdout should be empty for failing command")
+	s.Require().Empty(stderr, "stderr should be empty for failing command")
+}
+
 func TestDockerSuite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")

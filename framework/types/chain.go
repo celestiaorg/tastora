@@ -56,4 +56,6 @@ type ChainNode interface {
 	WriteFile(ctx context.Context, filePath string, data []byte) error
 	// GetKeyring returns the keyring for this chain node.
 	GetKeyring() (keyring.Keyring, error)
+	// Exec executes a command in the specified context with the given environment variables, returning stdout, stderr, and an error.
+	Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error)
 }
