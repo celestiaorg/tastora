@@ -184,7 +184,7 @@ func (s *DockerTestSuite) TestPerNodeDifferentImages() {
 func (s *DockerTestSuite) TestChainNodeExec() {
 	var err error
 	s.provider = s.CreateDockerProvider()
-	s.chain, err = s.provider.GetChain(s.ctx)
+	s.chain, err = s.builder.Build(s.ctx)
 	s.Require().NoError(err)
 
 	err = s.chain.Start(s.ctx)
