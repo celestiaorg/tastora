@@ -180,6 +180,12 @@ func (cn *ChainNode) Height(ctx context.Context) (int64, error) {
 	return height, nil
 }
 
+// Exec runs a command in the node's container.
+// returns stdout, stdin, and an error if one occurred.
+func (cn *ChainNode) Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error) {
+	return cn.exec(ctx, cn.logger(), cmd, env)
+}
+
 // initNodeFiles initializes essential file structures for a chain node by creating its home folder and setting configurations.
 func (cn *ChainNode) initNodeFiles(ctx context.Context) error {
 	if err := cn.initHomeFolder(ctx); err != nil {
