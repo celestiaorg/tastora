@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+
 	"github.com/celestiaorg/go-square/v2/share"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
@@ -56,4 +57,10 @@ type ChainNode interface {
 	WriteFile(ctx context.Context, filePath string, data []byte) error
 	// GetKeyring returns the keyring for this chain node.
 	GetKeyring() (keyring.Keyring, error)
+	// Exec executes a command directly in the running container and returns stdout, stderr, and error.
+	Exec(ctx context.Context, command ...string) ([]byte, []byte, error)
+	// ExecBinInContainer executes a binary command directly in the running container.
+	// For celestia-app nodes, this automatically prefixes with the chain binary (e.g., "celestia-appd")
+	// and includes necessary flags like --home. Returns stdout, stderr, and error.
+	ExecBinInContainer(ctx context.Context, command ...string) ([]byte, []byte, error)
 }

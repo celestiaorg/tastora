@@ -4,6 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/fnv"
+	"os"
+	"path"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
 	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/config"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -18,16 +26,12 @@ import (
 	servercfg "github.com/cosmos/cosmos-sdk/server/config"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"hash/fnv"
-	"os"
-	"path"
-	"strconv"
-	"sync"
-	"time"
 )
 
 var _ types.ChainNode = &ChainNode{}
@@ -343,7 +347,13 @@ func (tn *ChainNode) collectGentxs(ctx context.Context) error {
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
 
+	// For celestia-appd v3 and earlier, the command is "collect-gentxs" without the "genesis" subcommand
+	// For newer versions, it's "genesis collect-gentxs"
 	command := []string{tn.cfg.ChainConfig.Bin, "genesis", "collect-gentxs", "--home", tn.homeDir}
+	version := tn.getImage().Version
+	if strings.HasPrefix(version, "v3.") || version == "v3" {
+		command = []string{tn.cfg.ChainConfig.Bin, "collect-gentxs", "--home", tn.homeDir}
+	}
 
 	_, _, err := tn.exec(ctx, tn.logger(), command, tn.cfg.ChainConfig.Env)
 	return err
@@ -415,7 +425,15 @@ func (tn *ChainNode) addGenesisAccount(ctx context.Context, address string, gene
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
-	command := []string{"genesis", "add-genesis-account", address, amount}
+	// For celestia-appd v3 and earlier, the command is "add-genesis-account" without the "genesis" subcommand
+	// For newer versions, it's "genesis add-genesis-account"
+	var command []string
+	version := tn.getImage().Version
+	if strings.HasPrefix(version, "v3.") || version == "v3" {
+		command = []string{"add-genesis-account", address, amount}
+	} else {
+		command = []string{"genesis", "add-genesis-account", address, amount}
+	}
 	_, _, err := tn.execBin(ctx, command...)
 
 	return err
@@ -427,17 +445,19 @@ func (tn *ChainNode) initValidatorGenTx(
 	genesisAmounts []sdk.Coin,
 	genesisSelfDelegation sdk.Coin,
 ) error {
-	if err := tn.createKey(ctx, valKey); err != nil {
+	keyName := valKey
+
+	if err := tn.createKey(ctx, keyName); err != nil {
 		return err
 	}
-	bech32, err := tn.accountKeyBech32(ctx, valKey)
+	bech32, err := tn.accountKeyBech32(ctx, keyName)
 	if err != nil {
 		return err
 	}
 	if err := tn.addGenesisAccount(ctx, bech32, genesisAmounts); err != nil {
 		return err
 	}
-	return tn.gentx(ctx, valKey, genesisSelfDelegation)
+	return tn.gentx(ctx, keyName, genesisSelfDelegation)
 }
 
 // createKey creates a key in the keyring backend test for the given node.
@@ -458,11 +478,22 @@ func (tn *ChainNode) gentx(ctx context.Context, name string, genesisSelfDelegati
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
 
-	command := []string{"genesis", "gentx", name, fmt.Sprintf("%s%s", genesisSelfDelegation.Amount.String(), genesisSelfDelegation.Denom),
+	// For celestia-appd v3 and earlier, the command is "gentx" without the "genesis" subcommand
+	// For newer versions, it's "genesis gentx"
+	var command []string
+	baseArgs := []string{
+		name, fmt.Sprintf("%s%s", genesisSelfDelegation.Amount.String(), genesisSelfDelegation.Denom),
 		"--gas-prices", tn.cfg.ChainConfig.GasPrices,
 		"--gas-adjustment", fmt.Sprint(tn.cfg.ChainConfig.GasAdjustment),
 		"--keyring-backend", keyring.BackendTest,
 		"--chain-id", tn.cfg.ChainConfig.ChainID,
+	}
+
+	version := tn.getImage().Version
+	if strings.HasPrefix(version, "v3.") || version == "v3" {
+		command = append([]string{"gentx"}, baseArgs...)
+	} else {
+		command = append([]string{"genesis", "gentx"}, baseArgs...)
 	}
 
 	_, _, err := tn.execBin(ctx, command...)
@@ -573,4 +604,73 @@ func CondenseMoniker(m string) string {
 	keepLen := (wantLen / 2) - 2
 
 	return m[:keepLen] + "..." + m[len(m)-keepLen:] + suffix
+}
+
+// Exec executes a command directly in the running container and returns stdout, stderr, and error.
+func (tn *ChainNode) Exec(ctx context.Context, command ...string) ([]byte, []byte, error) {
+	tn.lock.Lock()
+	defer tn.lock.Unlock()
+
+	if tn.containerLifecycle == nil || tn.containerLifecycle.ContainerID() == "" {
+		return nil, nil, fmt.Errorf("container not running")
+	}
+
+	// Create the exec configuration
+	execConfig := container.ExecOptions{
+		Cmd:          command,
+		AttachStdout: true,
+		AttachStderr: true,
+		Env:          tn.cfg.ChainConfig.Env,
+	}
+
+	// Create the exec instance
+	execCreateResp, err := tn.DockerClient.ContainerExecCreate(ctx, tn.containerLifecycle.ContainerID(), execConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	// Attach to the exec instance
+	attachResp, err := tn.DockerClient.ContainerExecAttach(ctx, execCreateResp.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to attach to exec: %w", err)
+	}
+	defer attachResp.Close()
+
+	// Read the output
+	var outBuf, errBuf bytes.Buffer
+	outputDone := make(chan error)
+
+	go func() {
+		// StdCopy demultiplexes the stream into stdout and stderr
+		_, err := stdcopy.StdCopy(&outBuf, &errBuf, attachResp.Reader)
+		outputDone <- err
+	}()
+
+	select {
+	case err := <-outputDone:
+		if err != nil {
+			return nil, nil, err
+		}
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+
+	// Check the exit code
+	inspectResp, err := tn.DockerClient.ContainerExecInspect(ctx, execCreateResp.ID)
+	if err != nil {
+		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("failed to inspect exec: %w", err)
+	}
+
+	if inspectResp.ExitCode != 0 {
+		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("command exited with code %d", inspectResp.ExitCode)
+	}
+
+	return outBuf.Bytes(), errBuf.Bytes(), nil
+}
+
+// ExecBinInContainer executes a binary command directly in the running container.
+// For celestia-app nodes, this automatically prefixes with the chain binary (e.g., "celestia-appd")
+// and includes necessary flags like --home. Returns stdout, stderr, and error.
+func (tn *ChainNode) ExecBinInContainer(ctx context.Context, command ...string) ([]byte, []byte, error) {
+	return tn.Exec(ctx, tn.binCommand(command...)...)
 }

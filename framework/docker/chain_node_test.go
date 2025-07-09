@@ -1,9 +1,9 @@
 package docker
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
 
@@ -41,4 +41,28 @@ func TestChainNodeHostName(t *testing.T) {
 	require.NotEqual(t, hostname1, hostname2)
 	require.NotEqual(t, hostname1, hostname3)
 	require.NotEqual(t, hostname2, hostname3)
+}
+
+func TestChainNodeBinCommand_Construction(t *testing.T) {
+	// This tests the binCommand method
+	testName := "test-exec"
+	chainID := "test-chain"
+	logger := zaptest.NewLogger(t)
+
+	node := NewDockerChainNode(logger, true, Config{
+		ChainConfig: &ChainConfig{
+			ChainID: chainID,
+			Bin:     "celestia-appd",
+		},
+	}, testName, DockerImage{}, 0)
+
+	// Test binCommand method
+	cmd := node.binCommand("keys", "show", "validator")
+	expected := []string{"celestia-appd", "keys", "show", "validator", "--home", node.homeDir}
+	require.Equal(t, expected, cmd)
+
+	// Test with different command
+	cmd2 := node.binCommand("query", "bank", "balances", "addr123")
+	expected2 := []string{"celestia-appd", "query", "bank", "balances", "addr123", "--home", node.homeDir}
+	require.Equal(t, expected2, cmd2)
 }
