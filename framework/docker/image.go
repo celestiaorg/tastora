@@ -363,7 +363,7 @@ func (c *Container) Stop(timeout time.Duration) error {
 	err := c.image.client.ContainerStop(ctx, c.containerID, stopOptions)
 	if err != nil {
 		// Only return the error if it didn't match an already stopped, or a missing container.
-		if !(errdefs.IsNotModified(err) || errdefs.IsNotFound(err)) {
+		if !errdefs.IsNotModified(err) && !errdefs.IsNotFound(err) {
 			return c.image.WrapErr(fmt.Errorf("stop container %s: %w", c.Name, err))
 		}
 	}

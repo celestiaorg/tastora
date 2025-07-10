@@ -24,8 +24,6 @@ type Chain interface {
 	GetVolumeName() string // TODO: this should be removed and is a temporary function for docker only PoC.
 	// GetNodes returns a slice of ChainNodes.
 	GetNodes() []ChainNode
-	// AddNode adds a full node to the chain. overrides can be provided to make modifications to any config files before starting.
-	AddNode(ctx context.Context, overrides map[string]any) error // TODO: use options pattern to allow for overrides.
 	// CreateWallet creates a new wallet with the specified keyName and returns the Wallet instance or an error.
 	CreateWallet(ctx context.Context, keyName string) (Wallet, error)
 	// BroadcastMessages sends multiple messages to the blockchain network using the signingWallet, returning a transaction response.
@@ -57,10 +55,10 @@ type ChainNode interface {
 	WriteFile(ctx context.Context, filePath string, data []byte) error
 	// GetKeyring returns the keyring for this chain node.
 	GetKeyring() (keyring.Keyring, error)
-	// Exec executes a command directly in the running container and returns stdout, stderr, and error.
-	Exec(ctx context.Context, command ...string) ([]byte, []byte, error)
 	// ExecBinInContainer executes a binary command directly in the running container.
 	// For celestia-app nodes, this automatically prefixes with the chain binary (e.g., "celestia-appd")
 	// and includes necessary flags like --home. Returns stdout, stderr, and error.
 	ExecBinInContainer(ctx context.Context, command ...string) ([]byte, []byte, error)
+	// Exec executes a command in the specified context with the given environment variables, returning stdout, stderr, and an error.
+	Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error)
 }

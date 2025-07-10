@@ -104,13 +104,16 @@ func (n *ContainerNode) WriteFile(ctx context.Context, relPath string, content [
 	return fw.WriteFile(ctx, n.VolumeName, relPath, content)
 }
 
+
 // createAndSetupVolume creates a Docker volume for the node and sets up proper ownership.
 // This consolidates the volume creation pattern used across all node types.
-func (n *ContainerNode) createAndSetupVolume(ctx context.Context) error {
+// The nodeName parameter should be the specific name for this node instance.
+func (n *ContainerNode) createAndSetupVolume(ctx context.Context, nodeName string) error {
+	// create volume with appropriate labels
 	v, err := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 		Labels: map[string]string{
 			consts.CleanupLabel:   n.TestName,
-			consts.NodeOwnerLabel: n.Name(),
+			consts.NodeOwnerLabel: nodeName,
 		},
 	})
 	if err != nil {

@@ -345,7 +345,7 @@ func (d *dockerKeyring) ensureInitialized() error {
 func createTarFromDirectory(srcDir string) (*bytes.Reader, error) {
 	var tarBuf bytes.Buffer
 	tarWriter := tar.NewWriter(&tarBuf)
-	defer tarWriter.Close()
+	defer func() { _ = tarWriter.Close() }()
 
 	err := filepath.Walk(srcDir, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {

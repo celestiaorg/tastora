@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+	"github.com/cosmos/cosmos-sdk/types/module/testutil"
+	dockerclient "github.com/moby/moby/client"
 )
 
 func TestChainNodeHostName(t *testing.T) {
@@ -14,23 +16,44 @@ func TestChainNodeHostName(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	// Create nodes with different indices
-	node1 := NewDockerChainNode(logger, true, Config{
-		ChainConfig: &ChainConfig{
-			ChainID: chainID,
-		},
-	}, testName, DockerImage{}, 0)
+	chainParams1 := ChainNodeParams{
+		Validator:       true,
+		ChainID:         chainID,
+		BinaryName:      "test-binary",
+		CoinType:        "118",
+		GasPrices:       "0.025utia",
+		GasAdjustment:   1.0,
+		Env:             []string{},
+		AdditionalStartArgs: []string{},
+		EncodingConfig:  &testutil.TestEncodingConfig{},
+	}
+	node1 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 0, chainParams1)
 
-	node2 := NewDockerChainNode(logger, true, Config{
-		ChainConfig: &ChainConfig{
-			ChainID: chainID,
-		},
-	}, testName, DockerImage{}, 1)
+	chainParams2 := ChainNodeParams{
+		Validator:       true,
+		ChainID:         chainID,
+		BinaryName:      "test-binary",
+		CoinType:        "118",
+		GasPrices:       "0.025utia",
+		GasAdjustment:   1.0,
+		Env:             []string{},
+		AdditionalStartArgs: []string{},
+		EncodingConfig:  &testutil.TestEncodingConfig{},
+	}
+	node2 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 1, chainParams2)
 
-	node3 := NewDockerChainNode(logger, false, Config{
-		ChainConfig: &ChainConfig{
-			ChainID: chainID,
-		},
-	}, testName, DockerImage{}, 2)
+	chainParams3 := ChainNodeParams{
+		Validator:       false,
+		ChainID:         chainID,
+		BinaryName:      "test-binary",
+		CoinType:        "118",
+		GasPrices:       "0.025utia",
+		GasAdjustment:   1.0,
+		Env:             []string{},
+		AdditionalStartArgs: []string{},
+		EncodingConfig:  &testutil.TestEncodingConfig{},
+	}
+	node3 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 2, chainParams3)
 
 	// get hostnames
 	hostname1 := node1.HostName()

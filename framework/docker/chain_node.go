@@ -25,10 +25,12 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	servercfg "github.com/cosmos/cosmos-sdk/server/config"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
+	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -46,30 +48,31 @@ const (
 	privValPort = "1234/tcp"
 )
 
-func (n *ChainNode) GetInternalPeerAddress(ctx context.Context) (string, error) {
-	id, err := n.nodeID(ctx)
+// GetInternalPeerAddress retrieves the internal peer address for the ChainNode using its ID, hostname, and default port.
+func (cn *ChainNode) GetInternalPeerAddress(ctx context.Context) (string, error) {
+	id, err := cn.nodeID(ctx)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s@%s:%d", id, n.HostName(), 26656), nil
+	return fmt.Sprintf("%s@%s:%d", id, cn.HostName(), 26656), nil
 }
 
-func (n *ChainNode) GetInternalRPCAddress(ctx context.Context) (string, error) {
-	id, err := n.nodeID(ctx)
+// GetInternalRPCAddress returns the internal RPC address of the chain node in the format "nodeID@hostname:port".
+func (cn *ChainNode) GetInternalRPCAddress(ctx context.Context) (string, error) {
+	id, err := cn.nodeID(ctx)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s@%s:%d", id, n.HostName(), 26657), nil
+	return fmt.Sprintf("%s@%s:%d", id, cn.HostName(), 26657), nil
 }
 
 type ChainNodes []*ChainNode
 
 type ChainNode struct {
+	ChainNodeParams
 	*ContainerNode
-	cfg       Config
-	Validator bool
-	Client    rpcclient.Client
-	GrpcConn  *grpc.ClientConn
+	Client   rpcclient.Client
+	GrpcConn *grpc.ClientConn
 
 	lock sync.Mutex
 
@@ -80,67 +83,100 @@ type ChainNode struct {
 	hostP2PPort  string
 }
 
-func (tn *ChainNode) GetInternalHostName(ctx context.Context) (string, error) {
-	return tn.HostName(), nil
+// ChainNodeParams contains the chain-specific parameters needed to create a ChainNode
+type ChainNodeParams struct {
+	Validator           bool
+	ChainID             string
+	BinaryName          string
+	CoinType            string
+	GasPrices           string
+	GasAdjustment       float64
+	Env                 []string
+	AdditionalStartArgs []string
+	EncodingConfig      *testutil.TestEncodingConfig
+	// Optional fields for key preloading
+	GenesisKeyring   keyring.Keyring
+	ValidatorIndex   int
+	PrivValidatorKey []byte
+	// PostInit functions are executed sequentially after the node is initialized.
+	PostInit []func(ctx context.Context, node *ChainNode) error
 }
 
-func (tn *ChainNode) HostName() string {
-	return CondenseHostName(tn.Name())
-}
-
-func (tn *ChainNode) GetType() string {
-	return tn.NodeType()
-}
-
-func (tn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
-	return tn.Client, nil
-}
-
-// GetKeyring retrieves the keyring instance for the ChainNode. The keyring will be usable
-// by the host running the test.
-func (tn *ChainNode) GetKeyring() (keyring.Keyring, error) {
-	containerKeyringDir := path.Join(tn.homeDir, "keyring-test")
-	return dockerinternal.NewDockerKeyring(tn.DockerClient, tn.containerLifecycle.ContainerID(), containerKeyringDir, tn.cfg.ChainConfig.EncodingConfig.Codec), nil
-}
-
-func NewDockerChainNode(log *zap.Logger, validator bool, cfg Config, testName string, image DockerImage, index int) *ChainNode {
+// NewChainNode creates a new ChainNode with injected dependencies
+func NewChainNode(
+	logger *zap.Logger,
+	dockerClient *dockerclient.Client,
+	dockerNetworkID string,
+	testName string,
+	image DockerImage,
+	homeDir string,
+	index int,
+	chainParams ChainNodeParams,
+) *ChainNode {
 	nodeType := "fn"
-	if validator {
+	if chainParams.Validator {
 		nodeType = "val"
 	}
 
-	log = log.With(
-		zap.Bool("validator", validator),
+	log := logger.With(
+		zap.Bool("validator", chainParams.Validator),
 		zap.Int("i", index),
 	)
+
 	tn := &ChainNode{
-		Validator:     validator,
-		cfg:           cfg,
-		ContainerNode: newContainerNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var/cosmos-chain", cfg.ChainConfig.Name), index, nodeType, log),
+		ChainNodeParams: chainParams,
+		ContainerNode:   newContainerNode(dockerNetworkID, dockerClient, testName, image, homeDir, index, nodeType, log),
 	}
 
-	tn.containerLifecycle = NewContainerLifecycle(log, cfg.DockerClient, tn.Name())
+	tn.containerLifecycle = NewContainerLifecycle(logger, dockerClient, tn.Name())
 
 	return tn
 }
 
+// GetInternalHostName retrieves the internal host name of the ChainNode instance. Returns the host name and an error if any.
+func (cn *ChainNode) GetInternalHostName(ctx context.Context) (string, error) {
+	return cn.HostName(), nil
+}
+
+// HostName returns the condensed hostname for the ChainNode, truncating if the name is 64 characters or longer.
+func (cn *ChainNode) HostName() string {
+	return CondenseHostName(cn.Name())
+}
+
+// GetType returns the type of the chain node as a string by invoking the NodeType method.
+func (cn *ChainNode) GetType() string {
+	return cn.NodeType()
+}
+
+// GetRPCClient returns the RPC client associated with the ChainNode instance.
+func (cn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
+	return cn.Client, nil
+}
+
+// GetKeyring retrieves the keyring instance for the ChainNode. The keyring will be usable
+// by the host running the test.
+func (cn *ChainNode) GetKeyring() (keyring.Keyring, error) {
+	containerKeyringDir := path.Join(cn.homeDir, "keyring-test")
+	return dockerinternal.NewDockerKeyring(cn.DockerClient, cn.containerLifecycle.ContainerID(), containerKeyringDir, cn.EncodingConfig.Codec), nil
+}
+
 // Name of the test node container.
-func (tn *ChainNode) Name() string {
-	return fmt.Sprintf("%s-%s-%d-%s", tn.cfg.ChainConfig.ChainID, tn.NodeType(), tn.Index, SanitizeContainerName(tn.TestName))
+func (cn *ChainNode) Name() string {
+	return fmt.Sprintf("%s-%s-%d-%s", cn.ChainID, cn.NodeType(), cn.Index, SanitizeContainerName(cn.TestName))
 }
 
 // NodeType returns the type of the ChainNode as a string: "fn" for full nodes and "val" for validator nodes.
-func (tn *ChainNode) NodeType() string {
+func (cn *ChainNode) NodeType() string {
 	nodeType := "fn"
-	if tn.Validator {
+	if cn.Validator {
 		nodeType = "val"
 	}
 	return nodeType
 }
 
 // Height retrieves the latest block height of the chain node using the Tendermint RPC client.
-func (tn *ChainNode) Height(ctx context.Context) (int64, error) {
-	res, err := tn.Client.Status(ctx)
+func (cn *ChainNode) Height(ctx context.Context) (int64, error) {
+	res, err := cn.Client.Status(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("tendermint rpc client status: %w", err)
 	}
@@ -148,22 +184,29 @@ func (tn *ChainNode) Height(ctx context.Context) (int64, error) {
 	return height, nil
 }
 
-func (tn *ChainNode) initFullNodeFiles(ctx context.Context) error {
-	if err := tn.initHomeFolder(ctx); err != nil {
+// Exec runs a command in the node's container.
+// returns stdout, stdin, and an error if one occurred.
+func (cn *ChainNode) Exec(ctx context.Context, command ...string) ([]byte, []byte, error) {
+	return cn.exec(ctx, command...)
+}
+
+// initNodeFiles initializes essential file structures for a chain node by creating its home folder and setting configurations.
+func (cn *ChainNode) initNodeFiles(ctx context.Context) error {
+	if err := cn.initHomeFolder(ctx); err != nil {
 		return err
 	}
 
-	return tn.setTestConfig(ctx)
+	return cn.setTestConfig(ctx)
 }
 
 // binCommand is a helper to retrieve a full command for a chain node binary.
 // For example, if chain node binary is `gaiad`, and desired command is `gaiad keys show key1`,
 // pass ("keys", "show", "key1") for command to return the full command.
 // Will include additional flags for home directory and chain ID.
-func (tn *ChainNode) binCommand(command ...string) []string {
-	command = append([]string{tn.cfg.ChainConfig.Bin}, command...)
+func (cn *ChainNode) binCommand(command ...string) []string {
+	command = append([]string{cn.BinaryName}, command...)
 	return append(command,
-		"--home", tn.homeDir,
+		"--home", cn.homeDir,
 	)
 }
 
@@ -171,25 +214,25 @@ func (tn *ChainNode) binCommand(command ...string) []string {
 // For example, if chain node binary is `gaiad`, and desired command is `gaiad keys show key1`,
 // pass ("keys", "show", "key1") for command to execute the command against the node.
 // Will include additional flags for home directory and chain ID.
-func (tn *ChainNode) execBin(ctx context.Context, command ...string) ([]byte, []byte, error) {
-	return tn.exec(ctx, tn.logger(), tn.binCommand(command...), tn.cfg.ChainConfig.Env)
+func (cn *ChainNode) execBin(ctx context.Context, command ...string) ([]byte, []byte, error) {
+	return cn.exec(ctx, cn.binCommand(command...)...)
 }
 
 // initHomeFolder initializes a home folder for the given node.
-func (tn *ChainNode) initHomeFolder(ctx context.Context) error {
-	tn.lock.Lock()
-	defer tn.lock.Unlock()
+func (cn *ChainNode) initHomeFolder(ctx context.Context) error {
+	cn.lock.Lock()
+	defer cn.lock.Unlock()
 
-	_, _, err := tn.execBin(ctx,
-		"init", CondenseMoniker(tn.Name()),
-		"--chain-id", tn.cfg.ChainConfig.ChainID,
+	_, _, err := cn.execBin(ctx,
+		"init", CondenseMoniker(cn.Name()),
+		"--chain-id", cn.ChainID,
 	)
 	return err
 }
 
 // setTestConfig modifies the config to reasonable values for use within celestia-test.
-func (tn *ChainNode) setTestConfig(ctx context.Context) error {
-	err := config.Modify(ctx, tn, "config/config.toml", func(cfg *cometcfg.Config) {
+func (cn *ChainNode) setTestConfig(ctx context.Context) error {
+	err := config.Modify(ctx, cn, "config/config.toml", func(cfg *cometcfg.Config) {
 		cfg.LogLevel = "info"
 		cfg.TxIndex.Indexer = "kv"
 		cfg.P2P.AllowDuplicateIP = true
@@ -208,8 +251,8 @@ func (tn *ChainNode) setTestConfig(ctx context.Context) error {
 		return fmt.Errorf("modifying config/config.toml: %w", err)
 	}
 
-	err = config.Modify(ctx, tn, "config/app.toml", func(cfg *servercfg.Config) {
-		cfg.MinGasPrices = tn.cfg.ChainConfig.GasPrices
+	err = config.Modify(ctx, cn, "config/app.toml", func(cfg *servercfg.Config) {
+		cfg.MinGasPrices = cn.GasPrices
 		cfg.GRPC.Address = "0.0.0.0:9090"
 		cfg.API.Enable = true
 		cfg.API.Swagger = true
@@ -223,28 +266,28 @@ func (tn *ChainNode) setTestConfig(ctx context.Context) error {
 	return nil
 }
 
-func (tn *ChainNode) logger() *zap.Logger {
-	return tn.ContainerNode.logger.With(
-		zap.String("chain_id", tn.cfg.ChainConfig.ChainID),
-		zap.String("test", tn.TestName),
+func (cn *ChainNode) logger() *zap.Logger {
+	return cn.ContainerNode.logger.With(
+		zap.String("chain_id", cn.ChainID),
+		zap.String("test", cn.TestName),
 	)
 }
 
 // startContainer starts the container for the ChainNode, initializes its ports, and ensures the node is synced before returning.
 // Returns an error if the container fails to start, ports cannot be set, or syncing is not completed within the timeout.
-func (tn *ChainNode) startContainer(ctx context.Context) error {
-	if err := tn.containerLifecycle.StartContainer(ctx); err != nil {
+func (cn *ChainNode) startContainer(ctx context.Context) error {
+	if err := cn.containerLifecycle.StartContainer(ctx); err != nil {
 		return err
 	}
 
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := tn.containerLifecycle.GetHostPorts(ctx, rpcPort, grpcPort, apiPort, p2pPort)
+	hostPorts, err := cn.containerLifecycle.GetHostPorts(ctx, rpcPort, grpcPort, apiPort, p2pPort)
 	if err != nil {
 		return err
 	}
-	tn.hostRPCPort, tn.hostGRPCPort, tn.hostAPIPort, tn.hostP2PPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3]
+	cn.hostRPCPort, cn.hostGRPCPort, cn.hostAPIPort, cn.hostP2PPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3]
 
-	err = tn.initClient("tcp://" + tn.hostRPCPort)
+	err = cn.initClient("tcp://" + cn.hostRPCPort)
 	if err != nil {
 		return err
 	}
@@ -264,7 +307,7 @@ func (tn *ChainNode) startContainer(ctx context.Context) error {
 		case <-timeout:
 			return fmt.Errorf("node did not finish syncing within timeout")
 		case <-ticker.C:
-			stat, err := tn.Client.Status(ctx)
+			stat, err := cn.Client.Status(ctx)
 			if err != nil {
 				continue // retry on transient error
 			}
@@ -279,7 +322,7 @@ func (tn *ChainNode) startContainer(ctx context.Context) error {
 }
 
 // initClient creates and assigns a new Tendermint RPC client to the ChainNode.
-func (tn *ChainNode) initClient(addr string) error {
+func (cn *ChainNode) initClient(addr string) error {
 	httpClient, err := libclient.DefaultHTTPClient(addr)
 	if err != nil {
 		return err
@@ -291,76 +334,86 @@ func (tn *ChainNode) initClient(addr string) error {
 		return err
 	}
 
-	tn.Client = rpcClient
+	cn.Client = rpcClient
 
 	grpcConn, err := grpc.NewClient(
-		tn.hostGRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		cn.hostGRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return fmt.Errorf("grpc dial: %w", err)
 	}
-	tn.GrpcConn = grpcConn
+	cn.GrpcConn = grpcConn
 
 	return nil
 }
 
 // stop stops the underlying container.
-func (tn *ChainNode) stop(ctx context.Context) error {
-	return tn.containerLifecycle.StopContainer(ctx)
+func (cn *ChainNode) stop(ctx context.Context) error {
+	return cn.containerLifecycle.StopContainer(ctx)
 }
 
 // setPeers modifies the config persistent_peers for a node.
-func (tn *ChainNode) setPeers(ctx context.Context, peers string) error {
-	return config.Modify(ctx, tn, "config/config.toml", func(cfg *cometcfg.Config) {
+func (cn *ChainNode) setPeers(ctx context.Context, peers string) error {
+	return config.Modify(ctx, cn, "config/config.toml", func(cfg *cometcfg.Config) {
 		cfg.P2P.PersistentPeers = peers
 	})
 }
 
 // createNodeContainer initializes but does not start a container for the ChainNode with the specified configuration and context.
-func (tn *ChainNode) createNodeContainer(ctx context.Context) error {
-	chainCfg := tn.cfg.ChainConfig
-
-	cmd := []string{chainCfg.Bin, "start", "--home", tn.homeDir}
-	if startArgs := tn.getAdditionalStartArgs(); len(startArgs) > 0 {
-		cmd = append(cmd, startArgs...)
+func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
+	cmd := []string{cn.BinaryName, "start", "--home", cn.homeDir}
+	if len(cn.AdditionalStartArgs) > 0 {
+		cmd = append(cmd, cn.AdditionalStartArgs...)
 	}
-
 	usingPorts := nat.PortMap{}
 	for k, v := range sentryPorts {
 		usingPorts[k] = v
 	}
 
-	return tn.containerLifecycle.CreateContainer(ctx, tn.TestName, tn.NetworkID, tn.getImage(), usingPorts, "", tn.bind(), nil, tn.HostName(), cmd, tn.getEnv(), []string{})
+	return cn.containerLifecycle.CreateContainer(ctx, cn.TestName, cn.NetworkID, cn.Image, usingPorts, "", cn.bind(), nil, cn.HostName(), cmd, cn.Env, []string{})
 }
 
-func (tn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) error {
-	err := tn.WriteFile(ctx, "config/genesis.json", content)
+// overwriteGenesisFile writes the provided content to the genesis.json file in the container's configuration directory.
+// returns an error if writing the file fails.
+func (cn *ChainNode) overwriteGenesisFile(ctx context.Context, content []byte) error {
+	err := cn.WriteFile(ctx, "config/genesis.json", content)
 	if err != nil {
 		return fmt.Errorf("overwriting genesis.json: %w", err)
 	}
+	cn.logger().Debug("successfully wrote genesis file contents")
+	return nil
+}
 
+// overwritePrivValidatorKey overwrites the private validator key after init
+func (cn *ChainNode) overwritePrivValidatorKey(ctx context.Context, contents []byte) error {
+	err := cn.WriteFile(ctx, "config/priv_validator_key.json", contents)
+	if err != nil {
+		return fmt.Errorf("overwriting priv_validator_key.json: %w", err)
+	}
+	cn.logger().Debug("successfully wrote private validator key")
 	return nil
 }
 
 // collectGentxs runs collect gentxs on the node's home folders.
-func (tn *ChainNode) collectGentxs(ctx context.Context) error {
-	tn.lock.Lock()
-	defer tn.lock.Unlock()
+func (cn *ChainNode) collectGentxs(ctx context.Context) error {
+	cn.lock.Lock()
+	defer cn.lock.Unlock()
 
 	// For celestia-appd v3 and earlier, the command is "collect-gentxs" without the "genesis" subcommand
 	// For newer versions, it's "genesis collect-gentxs"
-	command := []string{tn.cfg.ChainConfig.Bin, "genesis", "collect-gentxs", "--home", tn.homeDir}
-	version := tn.getImage().Version
+	command := []string{cn.BinaryName, "genesis", "collect-gentxs", "--home", cn.homeDir}
+	version := cn.Image.Version
 	if strings.HasPrefix(version, "v3.") || version == "v3" {
-		command = []string{tn.cfg.ChainConfig.Bin, "collect-gentxs", "--home", tn.homeDir}
+		command = []string{cn.BinaryName, "collect-gentxs", "--home", cn.homeDir}
 	}
 
-	_, _, err := tn.exec(ctx, tn.logger(), command, tn.cfg.ChainConfig.Env)
+	_, _, err := cn.exec(ctx, command...)
 	return err
 }
 
-func (tn *ChainNode) genesisFileContent(ctx context.Context) ([]byte, error) {
-	gen, err := tn.ReadFile(ctx, "config/genesis.json")
+// genesisFileContent retrieves the contents of the "config/genesis.json" file from the node's container volume.
+func (cn *ChainNode) genesisFileContent(ctx context.Context) ([]byte, error) {
+	gen, err := cn.ReadFile(ctx, "config/genesis.json")
 	if err != nil {
 		return nil, fmt.Errorf("getting genesis.json content: %w", err)
 	}
@@ -368,15 +421,16 @@ func (tn *ChainNode) genesisFileContent(ctx context.Context) ([]byte, error) {
 	return gen, nil
 }
 
-func (tn *ChainNode) copyGentx(ctx context.Context, destVal *ChainNode) error {
-	nid, err := tn.nodeID(ctx)
+// copyGentx transfers a gentx file from the source ChainNode to the destination ChainNode by reading and writing the file.
+func (cn *ChainNode) copyGentx(ctx context.Context, destVal *ChainNode) error {
+	nid, err := cn.nodeID(ctx)
 	if err != nil {
 		return fmt.Errorf("getting node ID: %w", err)
 	}
 
 	relPath := fmt.Sprintf("config/gentx/gentx-%s.json", nid)
 
-	gentx, err := tn.ReadFile(ctx, relPath)
+	gentx, err := cn.ReadFile(ctx, relPath)
 	if err != nil {
 		return fmt.Errorf("getting gentx content: %w", err)
 	}
@@ -390,11 +444,11 @@ func (tn *ChainNode) copyGentx(ctx context.Context, destVal *ChainNode) error {
 }
 
 // nodeID returns the persistent ID of a given node.
-func (tn *ChainNode) nodeID(ctx context.Context) (string, error) {
+func (cn *ChainNode) nodeID(ctx context.Context) (string, error) {
 	// This used to call p2p.LoadNodeKey against the file on the host,
 	// but because we are transitioning to operating on Docker volumes,
 	// we only have to tmjson.Unmarshal the raw content.
-	j, err := tn.ReadFile(ctx, "config/node_key.json")
+	j, err := cn.ReadFile(ctx, "config/node_key.json")
 	if err != nil {
 		return "", fmt.Errorf("getting node_key.json content: %w", err)
 	}
@@ -408,9 +462,9 @@ func (tn *ChainNode) nodeID(ctx context.Context) (string, error) {
 }
 
 // addGenesisAccount adds a genesis account for each key.
-func (tn *ChainNode) addGenesisAccount(ctx context.Context, address string, genesisAmount []sdk.Coin) error {
-	tn.lock.Lock()
-	defer tn.lock.Unlock()
+func (cn *ChainNode) addGenesisAccount(ctx context.Context, address string, genesisAmount []sdk.Coin) error {
+	cn.lock.Lock()
+	defer cn.lock.Unlock()
 
 	amount := ""
 	for i, coin := range genesisAmount {
@@ -428,105 +482,102 @@ func (tn *ChainNode) addGenesisAccount(ctx context.Context, address string, gene
 	// For celestia-appd v3 and earlier, the command is "add-genesis-account" without the "genesis" subcommand
 	// For newer versions, it's "genesis add-genesis-account"
 	var command []string
-	version := tn.getImage().Version
+	version := cn.Image.Version
 	if strings.HasPrefix(version, "v3.") || version == "v3" {
 		command = []string{"add-genesis-account", address, amount}
 	} else {
 		command = []string{"genesis", "add-genesis-account", address, amount}
 	}
-	_, _, err := tn.execBin(ctx, command...)
+	_, _, err := cn.execBin(ctx, command...)
 
 	return err
 }
 
 // initValidatorGenTx creates the node files and signs a genesis transaction.
-func (tn *ChainNode) initValidatorGenTx(
+func (cn *ChainNode) initValidatorGenTx(
 	ctx context.Context,
 	genesisAmounts []sdk.Coin,
 	genesisSelfDelegation sdk.Coin,
 ) error {
-	keyName := valKey
-
-	if err := tn.createKey(ctx, keyName); err != nil {
+	if err := cn.createKey(ctx, valKey); err != nil {
 		return err
 	}
-	bech32, err := tn.accountKeyBech32(ctx, keyName)
+	bech32, err := cn.accountKeyBech32(ctx, valKey)
 	if err != nil {
 		return err
 	}
-	if err := tn.addGenesisAccount(ctx, bech32, genesisAmounts); err != nil {
+	if err := cn.addGenesisAccount(ctx, bech32, genesisAmounts); err != nil {
 		return err
 	}
-	return tn.gentx(ctx, keyName, genesisSelfDelegation)
+	return cn.gentx(ctx, valKey, genesisSelfDelegation)
 }
 
 // createKey creates a key in the keyring backend test for the given node.
-func (tn *ChainNode) createKey(ctx context.Context, name string) error {
-	tn.lock.Lock()
-	defer tn.lock.Unlock()
+func (cn *ChainNode) createKey(ctx context.Context, name string) error {
+	cn.lock.Lock()
+	defer cn.lock.Unlock()
 
-	_, _, err := tn.execBin(ctx,
+	_, _, err := cn.execBin(ctx,
 		"keys", "add", name,
-		"--coin-type", tn.cfg.ChainConfig.CoinType,
+		"--coin-type", cn.CoinType,
 		"--keyring-backend", keyring.BackendTest,
 	)
 	return err
 }
 
 // Gentx generates the gentx for a given node.
-func (tn *ChainNode) gentx(ctx context.Context, name string, genesisSelfDelegation sdk.Coin) error {
-	tn.lock.Lock()
-	defer tn.lock.Unlock()
+func (cn *ChainNode) gentx(ctx context.Context, name string, genesisSelfDelegation sdk.Coin) error {
+	cn.lock.Lock()
+	defer cn.lock.Unlock()
 
 	// For celestia-appd v3 and earlier, the command is "gentx" without the "genesis" subcommand
 	// For newer versions, it's "genesis gentx"
 	var command []string
 	baseArgs := []string{
 		name, fmt.Sprintf("%s%s", genesisSelfDelegation.Amount.String(), genesisSelfDelegation.Denom),
-		"--gas-prices", tn.cfg.ChainConfig.GasPrices,
-		"--gas-adjustment", fmt.Sprint(tn.cfg.ChainConfig.GasAdjustment),
+		"--gas-prices", cn.GasPrices,
+		"--gas-adjustment", fmt.Sprint(cn.GasAdjustment),
 		"--keyring-backend", keyring.BackendTest,
-		"--chain-id", tn.cfg.ChainConfig.ChainID,
+		"--chain-id", cn.ChainID,
 	}
 
-	version := tn.getImage().Version
+	version := cn.Image.Version
 	if strings.HasPrefix(version, "v3.") || version == "v3" {
 		command = append([]string{"gentx"}, baseArgs...)
 	} else {
 		command = append([]string{"genesis", "gentx"}, baseArgs...)
 	}
 
-	_, _, err := tn.execBin(ctx, command...)
+	_, _, err := cn.execBin(ctx, command...)
 	return err
 }
 
 // accountKeyBech32 retrieves the named key's address in bech32 account format.
-func (tn *ChainNode) accountKeyBech32(ctx context.Context, name string) (string, error) {
-	return tn.keyBech32(ctx, name, "")
+func (cn *ChainNode) accountKeyBech32(ctx context.Context, name string) (string, error) {
+	return cn.keyBech32(ctx, name, "")
 }
 
 // CliContext creates a new Cosmos SDK client context.
-func (tn *ChainNode) CliContext() client.Context {
-	cfg := tn.cfg.ChainConfig
+func (cn *ChainNode) CliContext() client.Context {
 	return client.Context{
-		Client:            tn.Client,
-		GRPCClient:        tn.GrpcConn,
-		ChainID:           cfg.ChainID,
-		InterfaceRegistry: cfg.EncodingConfig.InterfaceRegistry,
+		Client:            cn.Client,
+		GRPCClient:        cn.GrpcConn,
+		ChainID:           cn.ChainID,
+		InterfaceRegistry: cn.EncodingConfig.InterfaceRegistry,
 		Input:             os.Stdin,
 		Output:            os.Stdout,
 		OutputFormat:      "json",
-		LegacyAmino:       cfg.EncodingConfig.Amino,
-		TxConfig:          cfg.EncodingConfig.TxConfig,
+		LegacyAmino:       cn.EncodingConfig.Amino,
+		TxConfig:          cn.EncodingConfig.TxConfig,
 	}
 }
 
 // keyBech32 retrieves the named key's address in bech32 format from the node.
 // bech is the bech32 prefix (acc|val|cons). If empty, defaults to the account key (same as "acc").
-func (tn *ChainNode) keyBech32(ctx context.Context, name string, bech string) (string, error) {
+func (cn *ChainNode) keyBech32(ctx context.Context, name string, bech string) (string, error) {
 	command := []string{
-		tn.cfg.ChainConfig.Bin, "keys", "show", "--address", name,
-		"--home", tn.homeDir,
+		cn.BinaryName, "keys", "show", "--address", name,
+		"--home", cn.homeDir,
 		"--keyring-backend", keyring.BackendTest,
 	}
 
@@ -534,50 +585,12 @@ func (tn *ChainNode) keyBech32(ctx context.Context, name string, bech string) (s
 		command = append(command, "--bech", bech)
 	}
 
-	stdout, stderr, err := tn.exec(ctx, tn.logger(), command, tn.cfg.ChainConfig.Env)
+	stdout, stderr, err := cn.exec(ctx, command...)
 	if err != nil {
 		return "", fmt.Errorf("failed to show key %q (stderr=%q): %w", name, stderr, err)
 	}
 
 	return string(bytes.TrimSuffix(stdout, []byte("\n"))), nil
-}
-
-// getNodeConfig returns the per-node configuration if it exists
-func (tn *ChainNode) getNodeConfig() *ChainNodeConfig {
-	if tn.cfg.ChainConfig.ChainNodeConfigs == nil {
-		return nil
-	}
-
-	cfg, ok := tn.cfg.ChainConfig.ChainNodeConfigs[tn.Index]
-	if !ok {
-		tn.logger().Warn("no node config found for node", zap.Int("index", tn.Index))
-	}
-
-	return cfg
-}
-
-// getAdditionalStartArgs returns the start arguments for this node, preferring per-node config over chain config
-func (tn *ChainNode) getAdditionalStartArgs() []string {
-	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && nodeConfig.AdditionalStartArgs != nil {
-		return nodeConfig.AdditionalStartArgs
-	}
-	return tn.cfg.ChainConfig.AdditionalStartArgs
-}
-
-// getImage returns the Docker image for this node, preferring per-node config over the default image
-func (tn *ChainNode) getImage() DockerImage {
-	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && nodeConfig.Image != nil {
-		return *nodeConfig.Image
-	}
-	return tn.Image
-}
-
-// getEnv returns the environment variables for this node, preferring per-node config over chain config
-func (tn *ChainNode) getEnv() []string {
-	if nodeConfig := tn.getNodeConfig(); nodeConfig != nil && nodeConfig.Env != nil {
-		return nodeConfig.Env
-	}
-	return tn.cfg.ChainConfig.Env
 }
 
 // CondenseMoniker fits a moniker into the cosmos character limit for monikers.
@@ -607,11 +620,11 @@ func CondenseMoniker(m string) string {
 }
 
 // Exec executes a command directly in the running container and returns stdout, stderr, and error.
-func (tn *ChainNode) Exec(ctx context.Context, command ...string) ([]byte, []byte, error) {
-	tn.lock.Lock()
-	defer tn.lock.Unlock()
+func (cn *ChainNode) exec(ctx context.Context, command ...string) ([]byte, []byte, error) {
+	cn.lock.Lock()
+	defer cn.lock.Unlock()
 
-	if tn.containerLifecycle == nil || tn.containerLifecycle.ContainerID() == "" {
+	if cn.containerLifecycle == nil || cn.containerLifecycle.ContainerID() == "" {
 		return nil, nil, fmt.Errorf("container not running")
 	}
 
@@ -620,17 +633,17 @@ func (tn *ChainNode) Exec(ctx context.Context, command ...string) ([]byte, []byt
 		Cmd:          command,
 		AttachStdout: true,
 		AttachStderr: true,
-		Env:          tn.cfg.ChainConfig.Env,
+		Env:          cn.Env,
 	}
 
 	// Create the exec instance
-	execCreateResp, err := tn.DockerClient.ContainerExecCreate(ctx, tn.containerLifecycle.ContainerID(), execConfig)
+	execCreateResp, err := cn.DockerClient.ContainerExecCreate(ctx, cn.containerLifecycle.ContainerID(), execConfig)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create exec: %w", err)
 	}
 
 	// Attach to the exec instance
-	attachResp, err := tn.DockerClient.ContainerExecAttach(ctx, execCreateResp.ID, container.ExecAttachOptions{})
+	attachResp, err := cn.DockerClient.ContainerExecAttach(ctx, execCreateResp.ID, container.ExecAttachOptions{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to attach to exec: %w", err)
 	}
@@ -656,7 +669,7 @@ func (tn *ChainNode) Exec(ctx context.Context, command ...string) ([]byte, []byt
 	}
 
 	// Check the exit code
-	inspectResp, err := tn.DockerClient.ContainerExecInspect(ctx, execCreateResp.ID)
+	inspectResp, err := cn.DockerClient.ContainerExecInspect(ctx, execCreateResp.ID)
 	if err != nil {
 		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("failed to inspect exec: %w", err)
 	}
@@ -671,6 +684,6 @@ func (tn *ChainNode) Exec(ctx context.Context, command ...string) ([]byte, []byt
 // ExecBinInContainer executes a binary command directly in the running container.
 // For celestia-app nodes, this automatically prefixes with the chain binary (e.g., "celestia-appd")
 // and includes necessary flags like --home. Returns stdout, stderr, and error.
-func (tn *ChainNode) ExecBinInContainer(ctx context.Context, command ...string) ([]byte, []byte, error) {
-	return tn.Exec(ctx, tn.binCommand(command...)...)
+func (cn *ChainNode) ExecBinInContainer(ctx context.Context, command ...string) ([]byte, []byte, error) {
+	return cn.Exec(ctx, cn.binCommand(command...)...)
 }
