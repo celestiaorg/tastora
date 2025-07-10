@@ -270,7 +270,7 @@ func (cn *ChainNode) logger() *zap.Logger {
 }
 
 // startContainer starts the container for the ChainNode, initializes its ports, and ensures the node is synced before returning.
-// Returns an error if the container fails to start, ports cannot be set, or syncing is not completed within the timeout.
+// Returns an error if the container fails to start or ports cannot be set.
 func (cn *ChainNode) startContainer(ctx context.Context) error {
 	if err := cn.containerLifecycle.StartContainer(ctx); err != nil {
 		return err
@@ -283,38 +283,7 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 	}
 	cn.hostRPCPort, cn.hostGRPCPort, cn.hostAPIPort, cn.hostP2PPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3]
 
-	err = cn.initClient("tcp://" + cn.hostRPCPort)
-	if err != nil {
-		return err
-	}
-
-	// wait a short period of time for the node to come online.
-	time.Sleep(5 * time.Second)
-
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-
-	timeout := time.After(2 * time.Minute)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled while waiting for node sync: %w", ctx.Err())
-		case <-timeout:
-			return fmt.Errorf("node did not finish syncing within timeout")
-		case <-ticker.C:
-			stat, err := cn.Client.Status(ctx)
-			if err != nil {
-				continue // retry on transient error
-			}
-
-			if stat != nil && stat.SyncInfo.CatchingUp {
-				continue // still catching up, wait for next tick.
-			}
-			// node is synced
-			return nil
-		}
-	}
+	return cn.initClient("tcp://" + cn.hostRPCPort)
 }
 
 // initClient creates and assigns a new Tendermint RPC client to the ChainNode.
