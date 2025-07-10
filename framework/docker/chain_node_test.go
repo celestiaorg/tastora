@@ -5,8 +5,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-	"github.com/cosmos/cosmos-sdk/types/module/testutil"
-	dockerclient "github.com/moby/moby/client"
 )
 
 func TestChainNodeHostName(t *testing.T) {
@@ -16,44 +14,18 @@ func TestChainNodeHostName(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	// Create nodes with different indices
-	chainParams1 := ChainNodeParams{
-		Validator:       true,
-		ChainID:         chainID,
-		BinaryName:      "test-binary",
-		CoinType:        "118",
-		GasPrices:       "0.025utia",
-		GasAdjustment:   1.0,
-		Env:             []string{},
-		AdditionalStartArgs: []string{},
-		EncodingConfig:  &testutil.TestEncodingConfig{},
-	}
-	node1 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 0, chainParams1)
+	node1 := NewChainNode(logger, nil, "", testName, DockerImage{}, "", 0, ChainNodeParams{
+		ChainID: chainID,
+	})
 
-	chainParams2 := ChainNodeParams{
-		Validator:       true,
-		ChainID:         chainID,
-		BinaryName:      "test-binary",
-		CoinType:        "118",
-		GasPrices:       "0.025utia",
-		GasAdjustment:   1.0,
-		Env:             []string{},
-		AdditionalStartArgs: []string{},
-		EncodingConfig:  &testutil.TestEncodingConfig{},
-	}
-	node2 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 1, chainParams2)
+	node2 := NewChainNode(logger, nil, "", testName, DockerImage{}, "", 1, ChainNodeParams{
+		ChainID: chainID,
+	})
 
-	chainParams3 := ChainNodeParams{
-		Validator:       false,
-		ChainID:         chainID,
-		BinaryName:      "test-binary",
-		CoinType:        "118",
-		GasPrices:       "0.025utia",
-		GasAdjustment:   1.0,
-		Env:             []string{},
-		AdditionalStartArgs: []string{},
-		EncodingConfig:  &testutil.TestEncodingConfig{},
-	}
-	node3 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 2, chainParams3)
+	node3 := NewChainNode(logger, nil, "", testName, DockerImage{}, "", 2, ChainNodeParams{
+		Validator: false,
+		ChainID:   chainID,
+	})
 
 	// get hostnames
 	hostname1 := node1.HostName()
@@ -72,12 +44,10 @@ func TestChainNodeBinCommand_Construction(t *testing.T) {
 	chainID := "test-chain"
 	logger := zaptest.NewLogger(t)
 
-	node := NewDockerChainNode(logger, true, Config{
-		ChainConfig: &ChainConfig{
-			ChainID: chainID,
-			Bin:     "celestia-appd",
-		},
-	}, testName, DockerImage{}, 0)
+	node := NewChainNode(logger, nil, "", testName, DockerImage{}, "", 0, ChainNodeParams{
+		ChainID:    chainID,
+		BinaryName: "celestia-appd",
+	})
 
 	// Test binCommand method
 	cmd := node.binCommand("keys", "show", "validator")

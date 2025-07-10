@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -186,8 +185,70 @@ func (cn *ChainNode) Height(ctx context.Context) (int64, error) {
 
 // Exec runs a command in the node's container.
 // returns stdout, stdin, and an error if one occurred.
-func (cn *ChainNode) Exec(ctx context.Context, command ...string) ([]byte, []byte, error) {
-	return cn.exec(ctx, command...)
+func (cn *ChainNode) Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error) {
+	return cn.exec(ctx, cn.logger(), cmd, env)
+}
+
+// ExecInContainer executes a command directly in the running container and returns stdout, stderr, and error.
+func (cn *ChainNode) ExecInContainer(ctx context.Context, command ...string) ([]byte, []byte, error) {
+	cn.lock.Lock()
+	defer cn.lock.Unlock()
+
+	if cn.containerLifecycle == nil || cn.containerLifecycle.ContainerID() == "" {
+		return nil, nil, fmt.Errorf("container not running")
+	}
+
+	// Create the exec configuration
+	execConfig := container.ExecOptions{
+		Cmd:          command,
+		AttachStdout: true,
+		AttachStderr: true,
+		Env:          cn.Env,
+	}
+
+	// Create the exec instance
+	execCreateResp, err := cn.DockerClient.ContainerExecCreate(ctx, cn.containerLifecycle.ContainerID(), execConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	// Attach to the exec instance
+	attachResp, err := cn.DockerClient.ContainerExecAttach(ctx, execCreateResp.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to attach to exec: %w", err)
+	}
+	defer attachResp.Close()
+
+	// Read the output
+	var outBuf, errBuf bytes.Buffer
+	outputDone := make(chan error)
+
+	go func() {
+		// StdCopy demultiplexes the stream into stdout and stderr
+		_, err := stdcopy.StdCopy(&outBuf, &errBuf, attachResp.Reader)
+		outputDone <- err
+	}()
+
+	select {
+	case err := <-outputDone:
+		if err != nil {
+			return nil, nil, err
+		}
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+
+	// Check the exit code
+	inspectResp, err := cn.DockerClient.ContainerExecInspect(ctx, execCreateResp.ID)
+	if err != nil {
+		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("failed to inspect exec: %w", err)
+	}
+
+	if inspectResp.ExitCode != 0 {
+		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("command exited with code %d", inspectResp.ExitCode)
+	}
+
+	return outBuf.Bytes(), errBuf.Bytes(), nil
 }
 
 // initNodeFiles initializes essential file structures for a chain node by creating its home folder and setting configurations.
@@ -215,7 +276,7 @@ func (cn *ChainNode) binCommand(command ...string) []string {
 // pass ("keys", "show", "key1") for command to execute the command against the node.
 // Will include additional flags for home directory and chain ID.
 func (cn *ChainNode) execBin(ctx context.Context, command ...string) ([]byte, []byte, error) {
-	return cn.exec(ctx, cn.binCommand(command...)...)
+	return cn.exec(ctx, cn.logger(), cn.binCommand(command...), cn.Env)
 }
 
 // initHomeFolder initializes a home folder for the given node.
@@ -399,15 +460,9 @@ func (cn *ChainNode) collectGentxs(ctx context.Context) error {
 	cn.lock.Lock()
 	defer cn.lock.Unlock()
 
-	// For celestia-appd v3 and earlier, the command is "collect-gentxs" without the "genesis" subcommand
-	// For newer versions, it's "genesis collect-gentxs"
 	command := []string{cn.BinaryName, "genesis", "collect-gentxs", "--home", cn.homeDir}
-	version := cn.Image.Version
-	if strings.HasPrefix(version, "v3.") || version == "v3" {
-		command = []string{cn.BinaryName, "collect-gentxs", "--home", cn.homeDir}
-	}
 
-	_, _, err := cn.exec(ctx, command...)
+	_, _, err := cn.exec(ctx, cn.logger(), command, cn.Env)
 	return err
 }
 
@@ -479,15 +534,7 @@ func (cn *ChainNode) addGenesisAccount(ctx context.Context, address string, gene
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
-	// For celestia-appd v3 and earlier, the command is "add-genesis-account" without the "genesis" subcommand
-	// For newer versions, it's "genesis add-genesis-account"
-	var command []string
-	version := cn.Image.Version
-	if strings.HasPrefix(version, "v3.") || version == "v3" {
-		command = []string{"add-genesis-account", address, amount}
-	} else {
-		command = []string{"genesis", "add-genesis-account", address, amount}
-	}
+	command := []string{"genesis", "add-genesis-account", address, amount}
 	_, _, err := cn.execBin(ctx, command...)
 
 	return err
@@ -530,22 +577,11 @@ func (cn *ChainNode) gentx(ctx context.Context, name string, genesisSelfDelegati
 	cn.lock.Lock()
 	defer cn.lock.Unlock()
 
-	// For celestia-appd v3 and earlier, the command is "gentx" without the "genesis" subcommand
-	// For newer versions, it's "genesis gentx"
-	var command []string
-	baseArgs := []string{
-		name, fmt.Sprintf("%s%s", genesisSelfDelegation.Amount.String(), genesisSelfDelegation.Denom),
+	command := []string{"genesis", "gentx", name, fmt.Sprintf("%s%s", genesisSelfDelegation.Amount.String(), genesisSelfDelegation.Denom),
 		"--gas-prices", cn.GasPrices,
 		"--gas-adjustment", fmt.Sprint(cn.GasAdjustment),
 		"--keyring-backend", keyring.BackendTest,
 		"--chain-id", cn.ChainID,
-	}
-
-	version := cn.Image.Version
-	if strings.HasPrefix(version, "v3.") || version == "v3" {
-		command = append([]string{"gentx"}, baseArgs...)
-	} else {
-		command = append([]string{"genesis", "gentx"}, baseArgs...)
 	}
 
 	_, _, err := cn.execBin(ctx, command...)
@@ -585,7 +621,7 @@ func (cn *ChainNode) keyBech32(ctx context.Context, name string, bech string) (s
 		command = append(command, "--bech", bech)
 	}
 
-	stdout, stderr, err := cn.exec(ctx, command...)
+	stdout, stderr, err := cn.exec(ctx, cn.logger(), command, cn.Env)
 	if err != nil {
 		return "", fmt.Errorf("failed to show key %q (stderr=%q): %w", name, stderr, err)
 	}
@@ -619,71 +655,9 @@ func CondenseMoniker(m string) string {
 	return m[:keepLen] + "..." + m[len(m)-keepLen:] + suffix
 }
 
-// Exec executes a command directly in the running container and returns stdout, stderr, and error.
-func (cn *ChainNode) exec(ctx context.Context, command ...string) ([]byte, []byte, error) {
-	cn.lock.Lock()
-	defer cn.lock.Unlock()
-
-	if cn.containerLifecycle == nil || cn.containerLifecycle.ContainerID() == "" {
-		return nil, nil, fmt.Errorf("container not running")
-	}
-
-	// Create the exec configuration
-	execConfig := container.ExecOptions{
-		Cmd:          command,
-		AttachStdout: true,
-		AttachStderr: true,
-		Env:          cn.Env,
-	}
-
-	// Create the exec instance
-	execCreateResp, err := cn.DockerClient.ContainerExecCreate(ctx, cn.containerLifecycle.ContainerID(), execConfig)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create exec: %w", err)
-	}
-
-	// Attach to the exec instance
-	attachResp, err := cn.DockerClient.ContainerExecAttach(ctx, execCreateResp.ID, container.ExecAttachOptions{})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to attach to exec: %w", err)
-	}
-	defer attachResp.Close()
-
-	// Read the output
-	var outBuf, errBuf bytes.Buffer
-	outputDone := make(chan error)
-
-	go func() {
-		// StdCopy demultiplexes the stream into stdout and stderr
-		_, err := stdcopy.StdCopy(&outBuf, &errBuf, attachResp.Reader)
-		outputDone <- err
-	}()
-
-	select {
-	case err := <-outputDone:
-		if err != nil {
-			return nil, nil, err
-		}
-	case <-ctx.Done():
-		return nil, nil, ctx.Err()
-	}
-
-	// Check the exit code
-	inspectResp, err := cn.DockerClient.ContainerExecInspect(ctx, execCreateResp.ID)
-	if err != nil {
-		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("failed to inspect exec: %w", err)
-	}
-
-	if inspectResp.ExitCode != 0 {
-		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("command exited with code %d", inspectResp.ExitCode)
-	}
-
-	return outBuf.Bytes(), errBuf.Bytes(), nil
-}
-
 // ExecBinInContainer executes a binary command directly in the running container.
 // For celestia-app nodes, this automatically prefixes with the chain binary (e.g., "celestia-appd")
 // and includes necessary flags like --home. Returns stdout, stderr, and error.
 func (cn *ChainNode) ExecBinInContainer(ctx context.Context, command ...string) ([]byte, []byte, error) {
-	return cn.Exec(ctx, cn.binCommand(command...)...)
+	return cn.ExecInContainer(ctx, cn.binCommand(command...)...)
 }

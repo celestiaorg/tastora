@@ -61,4 +61,6 @@ type ChainNode interface {
 	ExecBinInContainer(ctx context.Context, command ...string) ([]byte, []byte, error)
 	// Exec executes a command in the specified context with the given environment variables, returning stdout, stderr, and an error.
 	Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error)
+	// ExecInContainer executes a command directly in the running container and returns stdout, stderr, and error.
+	ExecInContainer(ctx context.Context, command ...string) ([]byte, []byte, error)
 }
