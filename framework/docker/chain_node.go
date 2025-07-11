@@ -139,11 +139,6 @@ func (cn *ChainNode) HostName() string {
 	return CondenseHostName(cn.Name())
 }
 
-// GetType returns the type of the chain node as a string by invoking the NodeType method.
-func (cn *ChainNode) GetType() string {
-	return cn.NodeType()
-}
-
 // GetRPCClient returns the RPC client associated with the ChainNode instance.
 func (cn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
 	return cn.Client, nil
@@ -309,6 +304,7 @@ func (cn *ChainNode) initClient(addr string) error {
 	}
 	cn.GrpcConn = grpcConn
 
+	time.Sleep(time.Second * 5)
 	return nil
 }
 
