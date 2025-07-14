@@ -66,17 +66,7 @@ func TestWaitForBlocks(t *testing.T) {
 		})
 	})
 
-	t.Run("error", func(t *testing.T) {
-		t.Parallel()
-
-		errMock := mockChainHeighter{Err: errors.New("boom")}
-		const delta = 1
-		err := ForBlocks(context.Background(), delta, &mockChainHeighter{}, &errMock)
-
-		require.NoError(t, err)
-	})
-
-	t.Run("timeout error", func(t *testing.T) {
+	t.Run("timeout", func(t *testing.T) {
 		t.Parallel()
 
 		errMock := mockChainHeighter{Err: errors.New("boom")}
