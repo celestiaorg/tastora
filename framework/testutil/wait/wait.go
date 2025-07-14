@@ -97,17 +97,25 @@ type height struct {
 }
 
 func (h *height) ForDelta(ctx context.Context, delta int) error {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
 	for h.delta() < delta {
-		cur, err := h.Chain.Height(ctx)
-		if err != nil {
-			return err
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			cur, err := h.Chain.Height(ctx)
+			if err != nil {
+				continue
+			}
+			// we assume the chain will eventually return a non-zero height, otherwise
+			// this may block indefinitely.
+			if cur == 0 {
+				continue
+			}
+			h.update(cur)
 		}
-		// We assume the chain will eventually return a non-zero height, otherwise
-		// this may block indefinitely.
-		if cur == 0 {
-			continue
-		}
-		h.update(cur)
 	}
 	return nil
 }
