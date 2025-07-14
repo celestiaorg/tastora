@@ -4,6 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/fnv"
+	"os"
+	"path"
+	"strconv"
+	"sync"
+	"time"
+
 	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/config"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -19,17 +26,13 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"hash/fnv"
-	"os"
-	"path"
-	"strconv"
-	"sync"
-	"time"
 )
 
 var _ types.ChainNode = &ChainNode{}
@@ -179,6 +182,68 @@ func (cn *ChainNode) Height(ctx context.Context) (int64, error) {
 // returns stdout, stdin, and an error if one occurred.
 func (cn *ChainNode) Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error) {
 	return cn.exec(ctx, cn.logger(), cmd, env)
+}
+
+// ExecInContainer executes a command directly in the running container and returns stdout, stderr, and error.
+func (cn *ChainNode) ExecInContainer(ctx context.Context, command ...string) ([]byte, []byte, error) {
+	cn.lock.Lock()
+	defer cn.lock.Unlock()
+
+	if cn.containerLifecycle == nil || cn.containerLifecycle.ContainerID() == "" {
+		return nil, nil, fmt.Errorf("container not running")
+	}
+
+	// Create the exec configuration
+	execConfig := container.ExecOptions{
+		Cmd:          command,
+		AttachStdout: true,
+		AttachStderr: true,
+		Env:          cn.Env,
+	}
+
+	// Create the exec instance
+	execCreateResp, err := cn.DockerClient.ContainerExecCreate(ctx, cn.containerLifecycle.ContainerID(), execConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	// Attach to the exec instance
+	attachResp, err := cn.DockerClient.ContainerExecAttach(ctx, execCreateResp.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to attach to exec: %w", err)
+	}
+	defer attachResp.Close()
+
+	// Read the output
+	var outBuf, errBuf bytes.Buffer
+	outputDone := make(chan error)
+
+	go func() {
+		// StdCopy demultiplexes the stream into stdout and stderr
+		_, err := stdcopy.StdCopy(&outBuf, &errBuf, attachResp.Reader)
+		outputDone <- err
+	}()
+
+	select {
+	case err := <-outputDone:
+		if err != nil {
+			return nil, nil, err
+		}
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+
+	// Check the exit code
+	inspectResp, err := cn.DockerClient.ContainerExecInspect(ctx, execCreateResp.ID)
+	if err != nil {
+		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("failed to inspect exec: %w", err)
+	}
+
+	if inspectResp.ExitCode != 0 {
+		return outBuf.Bytes(), errBuf.Bytes(), fmt.Errorf("command exited with code %d", inspectResp.ExitCode)
+	}
+
+	return outBuf.Bytes(), errBuf.Bytes(), nil
 }
 
 // initNodeFiles initializes essential file structures for a chain node by creating its home folder and setting configurations.
@@ -553,4 +618,11 @@ func CondenseMoniker(m string) string {
 	keepLen := (wantLen / 2) - 2
 
 	return m[:keepLen] + "..." + m[len(m)-keepLen:] + suffix
+}
+
+// ExecBinInContainer executes a binary command directly in the running container.
+// For celestia-app nodes, this automatically prefixes with the chain binary (e.g., "celestia-appd")
+// and includes necessary flags like --home. Returns stdout, stderr, and error.
+func (cn *ChainNode) ExecBinInContainer(ctx context.Context, command ...string) ([]byte, []byte, error) {
+	return cn.ExecInContainer(ctx, cn.binCommand(command...)...)
 }
