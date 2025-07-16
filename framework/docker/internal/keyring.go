@@ -1,4 +1,4 @@
-package docker
+package internal
 
 import (
 	"archive/tar"

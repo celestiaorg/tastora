@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/config"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -124,7 +125,7 @@ func NewChainNode(
 		ContainerNode:   newContainerNode(dockerNetworkID, dockerClient, testName, image, homeDir, index, nodeType, log),
 	}
 
-	tn.containerLifecycle = NewContainerLifecycle(logger, dockerClient, tn.Name())
+	tn.containerLifecycle = container.NewLifecycle(logger, dockerClient, tn.Name())
 
 	return tn
 }

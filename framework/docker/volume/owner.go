@@ -1,4 +1,4 @@
-package docker
+package volume
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 )
 
 // VolumeOwnerOptions contain the configuration for the SetVolumeOwner function.
-type VolumeOwnerOptions struct {
+type OwnerOptions struct {
 	Log *zap.Logger
 
 	Client *client.Client
@@ -26,7 +26,7 @@ type VolumeOwnerOptions struct {
 }
 
 // SetVolumeOwner configures the owner of a volume to match the default user in the supplied image reference.
-func SetVolumeOwner(ctx context.Context, opts VolumeOwnerOptions) error {
+func SetOwner(ctx context.Context, opts OwnerOptions) error {
 	owner := opts.UidGid
 	if owner == "" {
 		owner = consts.UserRootString

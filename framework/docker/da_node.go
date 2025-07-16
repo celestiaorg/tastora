@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"path"
 	"regexp"
 	"strings"
@@ -42,7 +43,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 		ContainerNode: newContainerNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String(), logger),
 	}
 
-	daNode.containerLifecycle = NewContainerLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name())
+	daNode.containerLifecycle = container.NewLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name())
 
 	// image may be overridden by each node, update ContainerNode with the final image
 	daNode.Image = daNode.getImage()

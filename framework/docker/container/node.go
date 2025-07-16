@@ -1,42 +1,42 @@
-package docker
+package container
 
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
-	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
-// ContainerNode contains the fields and shared methods for docker nodes. (app nodes & bridge nodes)
-type ContainerNode struct {
+// Node contains the fields and shared methods for docker nodes. (app nodes & bridge nodes)
+type Node struct {
 	VolumeName         string
 	NetworkID          string
 	DockerClient       *dockerclient.Client
 	TestName           string
-	Image              DockerImage
-	containerLifecycle *container.Lifecycle
+	Image              Image
+	containerLifecycle *Lifecycle
 	homeDir            string
 	nodeType           string
 	Index              int
 	logger             *zap.Logger
 }
 
-// newContainerNode creates a new ContainerNode instance with the required parameters.
-func newContainerNode(
+// NewNode creates a new Node instance with the required parameters.
+func NewNode(
 	networkID string,
 	dockerClient *dockerclient.Client,
 	testName string,
-	image DockerImage,
+	image Image,
 	homeDir string,
 	idx int,
 	nodeType string,
 	logger *zap.Logger,
-) *ContainerNode {
-	return &ContainerNode{
+) *Node {
+	return &Node{
 		NetworkID:    networkID,
 		DockerClient: dockerClient,
 		TestName:     testName,
@@ -48,10 +48,20 @@ func newContainerNode(
 	}
 }
 
-// exec runs a command in the node's container.
-func (n *ContainerNode) exec(ctx context.Context, logger *zap.Logger, cmd []string, env []string) ([]byte, []byte, error) {
-	job := NewImage(logger, n.DockerClient, n.NetworkID, n.TestName, n.Image.Repository, n.Image.Version)
-	opts := ContainerOptions{
+// SetContainerLifecycle sets the container lifecycle for the node
+func (n *Node) SetContainerLifecycle(lifecycle *Lifecycle) {
+	n.containerLifecycle = lifecycle
+}
+
+// HomeDir returns the home directory path
+func (n *Node) HomeDir() string {
+	return n.homeDir
+}
+
+// Exec runs a command in the node's container.
+func (n *Node) Exec(ctx context.Context, logger *zap.Logger, cmd []string, env []string) ([]byte, []byte, error) {
+	job := docker.NewImage(logger, n.DockerClient, n.NetworkID, n.TestName, n.Image.Repository, n.Image.Version)
+	opts := docker.ContainerOptions{
 		Env:   env,
 		Binds: n.bind(),
 	}
@@ -62,33 +72,33 @@ func (n *ContainerNode) exec(ctx context.Context, logger *zap.Logger, cmd []stri
 	return res.Stdout, res.Stderr, res.Err
 }
 
-// bind returns the home folder bind point for running the ContainerNode.
-func (n *ContainerNode) bind() []string {
+// bind returns the home folder bind point for running the Node.
+func (n *Node) bind() []string {
 	return []string{fmt.Sprintf("%s:%s", n.VolumeName, n.homeDir)}
 }
 
-// GetType returns the ContainerNode type as a string.
-func (n *ContainerNode) GetType() string {
+// GetType returns the Node type as a string.
+func (n *Node) GetType() string {
 	return n.nodeType
 }
 
-// removeContainer gracefully stops and removes the container associated with the ContainerNode using the provided context.
-func (n *ContainerNode) removeContainer(ctx context.Context) error {
+// removeContainer gracefully stops and removes the container associated with the Node using the provided context.
+func (n *Node) removeContainer(ctx context.Context) error {
 	return n.containerLifecycle.RemoveContainer(ctx)
 }
 
-// stopContainer gracefully stops the container associated with the ContainerNode using the provided context.
-func (n *ContainerNode) stopContainer(ctx context.Context) error {
+// stopContainer gracefully stops the container associated with the Node using the provided context.
+func (n *Node) stopContainer(ctx context.Context) error {
 	return n.containerLifecycle.StopContainer(ctx)
 }
 
-// startContainer starts the container associated with the ContainerNode using the provided context.
-func (n *ContainerNode) startContainer(ctx context.Context) error {
+// startContainer starts the container associated with the Node using the provided context.
+func (n *Node) startContainer(ctx context.Context) error {
 	return n.containerLifecycle.StartContainer(ctx)
 }
 
-// ReadFile reads a file from the ContainerNode's container volume at the given relative path.
-func (n *ContainerNode) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
+// ReadFile reads a file from the Node's container volume at the given relative path.
+func (n *Node) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
 	fr := file.NewRetriever(n.logger, n.DockerClient, n.TestName)
 	content, err := fr.SingleFileContent(ctx, n.VolumeName, relPath)
 	if err != nil {
@@ -100,16 +110,15 @@ func (n *ContainerNode) ReadFile(ctx context.Context, relPath string) ([]byte, e
 // WriteFile accepts file contents in a byte slice and writes the contents to
 // the docker filesystem. relPath describes the location of the file in the
 // docker volume relative to the home directory.
-func (n *ContainerNode) WriteFile(ctx context.Context, relPath string, content []byte) error {
+func (n *Node) WriteFile(ctx context.Context, relPath string, content []byte) error {
 	fw := file.NewWriter(n.logger, n.DockerClient, n.TestName)
 	return fw.WriteFile(ctx, n.VolumeName, relPath, content)
 }
 
-
-// createAndSetupVolume creates a Docker volume for the node and sets up proper ownership.
+// CreateAndSetupVolume creates a Docker volume for the node and sets up proper ownership.
 // This consolidates the volume creation pattern used across all node types.
 // The nodeName parameter should be the specific name for this node instance.
-func (n *ContainerNode) createAndSetupVolume(ctx context.Context, nodeName string) error {
+func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error {
 	// create volume with appropriate labels
 	v, err := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 		Labels: map[string]string{
@@ -124,7 +133,7 @@ func (n *ContainerNode) createAndSetupVolume(ctx context.Context, nodeName strin
 	n.VolumeName = v.Name
 
 	// configure volume ownership
-	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
+	if err := docker.SetVolumeOwner(ctx, docker.VolumeOwnerOptions{
 		Log:        n.logger,
 		Client:     n.DockerClient,
 		VolumeName: v.Name,

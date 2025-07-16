@@ -1,4 +1,4 @@
-package docker
+package container
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 // Example Go/Cosmos-SDK panic format is `panic: bad Duration: time: invalid duration "bad"\n`.
 var panicRe = regexp.MustCompile(`panic:.*\n`)
 
-type ContainerLifecycle struct {
+type Lifecycle struct {
 	log               *zap.Logger
 	client            *dockerclient.Client
 	containerName     string
@@ -30,15 +30,15 @@ type ContainerLifecycle struct {
 	preStartListeners Listeners
 }
 
-func NewContainerLifecycle(log *zap.Logger, client *dockerclient.Client, containerName string) *ContainerLifecycle {
-	return &ContainerLifecycle{
+func NewLifecycle(log *zap.Logger, client *dockerclient.Client, containerName string) *Lifecycle {
+	return &Lifecycle{
 		log:           log,
 		client:        client,
 		containerName: containerName,
 	}
 }
 
-func (c *ContainerLifecycle) CreateContainer(
+func (c *Lifecycle) CreateContainer(
 	ctx context.Context,
 	testName string,
 	networkID string,
@@ -124,7 +124,7 @@ func (c *ContainerLifecycle) CreateContainer(
 	return nil
 }
 
-func (c *ContainerLifecycle) StartContainer(ctx context.Context) error {
+func (c *Lifecycle) StartContainer(ctx context.Context) error {
 	// lock port allocation for the time between freeing the ports from the
 	// temporary listeners to the consumption of the ports by the container
 	mu.RLock()
@@ -146,7 +146,7 @@ func (c *ContainerLifecycle) StartContainer(ctx context.Context) error {
 }
 
 // checkForFailedStart checks if the container failed to start by analyzing logs and inspecting its state after waiting.
-func (c *ContainerLifecycle) checkForFailedStart(ctx context.Context, wait time.Duration) error {
+func (c *Lifecycle) checkForFailedStart(ctx context.Context, wait time.Duration) error {
 	time.Sleep(wait)
 
 	containerLogs, err := c.client.ContainerLogs(ctx, c.id, container.LogsOptions{
@@ -199,15 +199,15 @@ func parseSDKPanicFromText(text string) error {
 	return nil
 }
 
-func (c *ContainerLifecycle) PauseContainer(ctx context.Context) error {
+func (c *Lifecycle) PauseContainer(ctx context.Context) error {
 	return c.client.ContainerPause(ctx, c.id)
 }
 
-func (c *ContainerLifecycle) UnpauseContainer(ctx context.Context) error {
+func (c *Lifecycle) UnpauseContainer(ctx context.Context) error {
 	return c.client.ContainerUnpause(ctx, c.id)
 }
 
-func (c *ContainerLifecycle) StopContainer(ctx context.Context) error {
+func (c *Lifecycle) StopContainer(ctx context.Context) error {
 	var timeout container.StopOptions
 	timeoutSec := 30
 	timeout.Timeout = &timeoutSec
@@ -215,7 +215,7 @@ func (c *ContainerLifecycle) StopContainer(ctx context.Context) error {
 	return c.client.ContainerStop(ctx, c.id, timeout)
 }
 
-func (c *ContainerLifecycle) RemoveContainer(ctx context.Context) error {
+func (c *Lifecycle) RemoveContainer(ctx context.Context) error {
 	err := c.client.ContainerRemove(ctx, c.id, container.RemoveOptions{
 		Force:         true,
 		RemoveVolumes: true,
@@ -226,11 +226,11 @@ func (c *ContainerLifecycle) RemoveContainer(ctx context.Context) error {
 	return nil
 }
 
-func (c *ContainerLifecycle) ContainerID() string {
+func (c *Lifecycle) ContainerID() string {
 	return c.id
 }
 
-func (c *ContainerLifecycle) GetHostPorts(ctx context.Context, portIDs ...string) ([]string, error) {
+func (c *Lifecycle) GetHostPorts(ctx context.Context, portIDs ...string) ([]string, error) {
 	cjson, err := c.client.ContainerInspect(ctx, c.id)
 	if err != nil {
 		return nil, err
@@ -244,7 +244,7 @@ func (c *ContainerLifecycle) GetHostPorts(ctx context.Context, portIDs ...string
 
 // Running will inspect the container and check its state to determine if it is currently running.
 // If the container is running nil will be returned, otherwise an error is returned.
-func (c *ContainerLifecycle) Running(ctx context.Context) error {
+func (c *Lifecycle) Running(ctx context.Context) error {
 	cjson, err := c.client.ContainerInspect(ctx, c.id)
 	if err != nil {
 		return err
