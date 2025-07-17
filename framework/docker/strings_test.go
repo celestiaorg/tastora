@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/docker/port"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/docker/docker/api/types/container"
 	"math/rand"
@@ -47,7 +49,7 @@ func TestGetHostPort(t *testing.T) {
 		{container.InspectResponse{}, "", ""},
 		{container.InspectResponse{NetworkSettings: &container.NetworkSettings{}}, "does-not-matter", ""},
 	} {
-		require.Equal(t, tt.Want, GetHostPort(tt.Container, tt.PortID), tt)
+		require.Equal(t, tt.Want, port.GetForHost(tt.Container, tt.PortID), tt)
 	}
 }
 
@@ -69,7 +71,7 @@ func TestCondenseHostName(t *testing.T) {
 		{"test", "test"},
 		{"some-really-very-incredibly-long-hostname-that-is-greater-than-64-characters", "some-really-very-incredibly-lo_._-is-greater-than-64-characters"},
 	} {
-		require.Equal(t, tt.Want, CondenseHostName(tt.HostName), tt)
+		require.Equal(t, tt.Want, internal.CondenseHostName(tt.HostName), tt)
 	}
 }
 
@@ -84,6 +86,6 @@ func TestSanitizeContainerName(t *testing.T) {
 		{"?", "_"},
 		{"", ""},
 	} {
-		require.Equal(t, tt.Want, SanitizeContainerName(tt.Name), tt)
+		require.Equal(t, tt.Want, internal.SanitizeContainerName(tt.Name), tt)
 	}
 }

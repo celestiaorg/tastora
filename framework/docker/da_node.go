@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"path"
 	"regexp"
 	"strings"
@@ -40,7 +41,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 	daNode := &DANode{
 		cfg:      cfg,
 		nodeType: nodeType,
-		Node: container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String(), logger),
+		Node:     container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String(), logger),
 	}
 
 	daNode.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name()))
@@ -105,12 +106,12 @@ func (n *DANode) GetType() types.DANodeType {
 
 // Name returns the container name for the DANode.
 func (n *DANode) Name() string {
-	return fmt.Sprintf("da-%s-%d-%s", n.nodeType.String(), n.Index, SanitizeContainerName(n.TestName))
+	return fmt.Sprintf("da-%s-%d-%s", n.nodeType.String(), n.Index, internal.SanitizeContainerName(n.TestName))
 }
 
 // HostName returns the condensed hostname for the DANode.
 func (n *DANode) HostName() string {
-	return CondenseHostName(n.Name())
+	return internal.CondenseHostName(n.Name())
 }
 
 // GetHostRPCAddress returns the externally resolvable RPC address of the bridge node.

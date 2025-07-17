@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
+	internal "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/config"
 	"github.com/celestiaorg/tastora/framework/types"
 	cometcfg "github.com/cometbft/cometbft/config"
@@ -137,7 +137,7 @@ func (cn *ChainNode) GetInternalHostName(ctx context.Context) (string, error) {
 
 // HostName returns the condensed hostname for the ChainNode, truncating if the name is 64 characters or longer.
 func (cn *ChainNode) HostName() string {
-	return CondenseHostName(cn.Name())
+	return internal.CondenseHostName(cn.Name())
 }
 
 // GetRPCClient returns the RPC client associated with the ChainNode instance.
@@ -149,12 +149,12 @@ func (cn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
 // by the host running the test.
 func (cn *ChainNode) GetKeyring() (keyring.Keyring, error) {
 	containerKeyringDir := path.Join(cn.HomeDir(), "keyring-test")
-	return dockerinternal.NewDockerKeyring(cn.DockerClient, cn.ContainerLifecycle.ContainerID(), containerKeyringDir, cn.EncodingConfig.Codec), nil
+	return internal.NewDockerKeyring(cn.DockerClient, cn.ContainerLifecycle.ContainerID(), containerKeyringDir, cn.EncodingConfig.Codec), nil
 }
 
 // Name of the test node container.
 func (cn *ChainNode) Name() string {
-	return fmt.Sprintf("%s-%s-%d-%s", cn.ChainID, cn.NodeType(), cn.Index, SanitizeContainerName(cn.TestName))
+	return fmt.Sprintf("%s-%s-%d-%s", cn.ChainID, cn.NodeType(), cn.Index, internal.SanitizeContainerName(cn.TestName))
 }
 
 // NodeType returns the type of the ChainNode as a string: "fn" for full nodes and "val" for validator nodes.
