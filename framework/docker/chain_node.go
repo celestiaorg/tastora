@@ -67,7 +67,7 @@ type ChainNodes []*ChainNode
 
 type ChainNode struct {
 	ChainNodeParams
-	*ContainerNode
+	*container.Node
 	Client   rpcclient.Client
 	GrpcConn *grpc.ClientConn
 
@@ -122,10 +122,10 @@ func NewChainNode(
 
 	tn := &ChainNode{
 		ChainNodeParams: chainParams,
-		ContainerNode:   newContainerNode(dockerNetworkID, dockerClient, testName, image, homeDir, index, nodeType, log),
+		Node:            container.NewNode(dockerNetworkID, dockerClient, testName, image, homeDir, index, nodeType, log),
 	}
 
-	tn.containerLifecycle = container.NewLifecycle(logger, dockerClient, tn.Name())
+	tn.SetContainerLifecycle(container.NewLifecycle(logger, dockerClient, tn.Name()))
 
 	return tn
 }
@@ -148,8 +148,8 @@ func (cn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
 // GetKeyring retrieves the keyring instance for the ChainNode. The keyring will be usable
 // by the host running the test.
 func (cn *ChainNode) GetKeyring() (keyring.Keyring, error) {
-	containerKeyringDir := path.Join(cn.homeDir, "keyring-test")
-	return dockerinternal.NewDockerKeyring(cn.DockerClient, cn.containerLifecycle.ContainerID(), containerKeyringDir, cn.EncodingConfig.Codec), nil
+	containerKeyringDir := path.Join(cn.HomeDir(), "keyring-test")
+	return dockerinternal.NewDockerKeyring(cn.DockerClient, cn.ContainerLifecycle.ContainerID(), containerKeyringDir, cn.EncodingConfig.Codec), nil
 }
 
 // Name of the test node container.
@@ -179,7 +179,7 @@ func (cn *ChainNode) Height(ctx context.Context) (int64, error) {
 // Exec runs a command in the node's container.
 // returns stdout, stdin, and an error if one occurred.
 func (cn *ChainNode) Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error) {
-	return cn.exec(ctx, cn.logger(), cmd, env)
+	return cn.Node.Exec(ctx, cn.logger(), cmd, env)
 }
 
 // initNodeFiles initializes essential file structures for a chain node by creating its home folder and setting configurations.
@@ -198,7 +198,7 @@ func (cn *ChainNode) initNodeFiles(ctx context.Context) error {
 func (cn *ChainNode) binCommand(command ...string) []string {
 	command = append([]string{cn.BinaryName}, command...)
 	return append(command,
-		"--home", cn.homeDir,
+		"--home", cn.HomeDir(),
 	)
 }
 
@@ -207,7 +207,7 @@ func (cn *ChainNode) binCommand(command ...string) []string {
 // pass ("keys", "show", "key1") for command to execute the command against the node.
 // Will include additional flags for home directory and chain ID.
 func (cn *ChainNode) execBin(ctx context.Context, command ...string) ([]byte, []byte, error) {
-	return cn.exec(ctx, cn.logger(), cn.binCommand(command...), cn.Env)
+	return cn.Node.Exec(ctx, cn.logger(), cn.binCommand(command...), cn.Env)
 }
 
 // initHomeFolder initializes a home folder for the given node.
@@ -259,7 +259,7 @@ func (cn *ChainNode) setTestConfig(ctx context.Context) error {
 }
 
 func (cn *ChainNode) logger() *zap.Logger {
-	return cn.ContainerNode.logger.With(
+	return cn.Logger.With(
 		zap.String("chain_id", cn.ChainID),
 		zap.String("test", cn.TestName),
 	)
@@ -268,12 +268,12 @@ func (cn *ChainNode) logger() *zap.Logger {
 // startContainer starts the container for the ChainNode, initializes its ports, and ensures the node is synced before returning.
 // Returns an error if the container fails to start or ports cannot be set.
 func (cn *ChainNode) startContainer(ctx context.Context) error {
-	if err := cn.containerLifecycle.StartContainer(ctx); err != nil {
+	if err := cn.StartContainer(ctx); err != nil {
 		return err
 	}
 
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := cn.containerLifecycle.GetHostPorts(ctx, rpcPort, grpcPort, apiPort, p2pPort)
+	hostPorts, err := cn.ContainerLifecycle.GetHostPorts(ctx, rpcPort, grpcPort, apiPort, p2pPort)
 	if err != nil {
 		return err
 	}
@@ -311,7 +311,7 @@ func (cn *ChainNode) initClient(addr string) error {
 
 // stop stops the underlying container.
 func (cn *ChainNode) stop(ctx context.Context) error {
-	return cn.containerLifecycle.StopContainer(ctx)
+	return cn.StopContainer(ctx)
 }
 
 // setPeers modifies the config persistent_peers for a node.
@@ -323,7 +323,7 @@ func (cn *ChainNode) setPeers(ctx context.Context, peers string) error {
 
 // createNodeContainer initializes but does not start a container for the ChainNode with the specified configuration and context.
 func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
-	cmd := []string{cn.BinaryName, "start", "--home", cn.homeDir}
+	cmd := []string{cn.BinaryName, "start", "--home", cn.HomeDir()}
 	if len(cn.AdditionalStartArgs) > 0 {
 		cmd = append(cmd, cn.AdditionalStartArgs...)
 	}
@@ -332,7 +332,7 @@ func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 		usingPorts[k] = v
 	}
 
-	return cn.containerLifecycle.CreateContainer(ctx, cn.TestName, cn.NetworkID, cn.Image, usingPorts, "", cn.bind(), nil, cn.HostName(), cmd, cn.Env, []string{})
+	return cn.CreateContainer(ctx, cn.TestName, cn.NetworkID, cn.Image, usingPorts, "", cn.Bind(), nil, cn.HostName(), cmd, cn.Env, []string{})
 }
 
 // overwriteGenesisFile writes the provided content to the genesis.json file in the container's configuration directory.
@@ -361,9 +361,9 @@ func (cn *ChainNode) collectGentxs(ctx context.Context) error {
 	cn.lock.Lock()
 	defer cn.lock.Unlock()
 
-	command := []string{cn.BinaryName, "genesis", "collect-gentxs", "--home", cn.homeDir}
+	command := []string{cn.BinaryName, "genesis", "collect-gentxs", "--home", cn.HomeDir()}
 
-	_, _, err := cn.exec(ctx, cn.logger(), command, cn.Env)
+	_, _, err := cn.Node.Exec(ctx, cn.logger(), command, cn.Env)
 	return err
 }
 
@@ -514,7 +514,7 @@ func (cn *ChainNode) CliContext() client.Context {
 func (cn *ChainNode) keyBech32(ctx context.Context, name string, bech string) (string, error) {
 	command := []string{
 		cn.BinaryName, "keys", "show", "--address", name,
-		"--home", cn.homeDir,
+		"--home", cn.HomeDir(),
 		"--keyring-backend", keyring.BackendTest,
 	}
 
@@ -522,7 +522,7 @@ func (cn *ChainNode) keyBech32(ctx context.Context, name string, bech string) (s
 		command = append(command, "--bech", bech)
 	}
 
-	stdout, stderr, err := cn.exec(ctx, cn.logger(), command, cn.Env)
+	stdout, stderr, err := cn.Node.Exec(ctx, cn.logger(), command, cn.Env)
 	if err != nil {
 		return "", fmt.Errorf("failed to show key %q (stderr=%q): %w", name, stderr, err)
 	}

@@ -26,11 +26,8 @@ import (
 
 // Job is a docker job runner.
 type Job struct {
-	log    *zap.Logger
-	client *client.Client
-
-	// NOTE: it might make sense for Image to have an ibc.DockerImage field,
-	// but for now it is probably better to not have internal/dockerutil depend on ibc.
+	log             *zap.Logger
+	client          *client.Client
 	repository, tag string
 
 	networkID string
@@ -47,7 +44,7 @@ type Job struct {
 // Currently, only public docker images are supported.
 func NewJob(logger *zap.Logger, cli *client.Client, networkID string, testName string, repository, tag string) *Job {
 	if logger == nil {
-		panic(errors.New("nil logger"))
+		panic(errors.New("nil Logger"))
 	}
 	if cli == nil {
 		panic(errors.New("client cannot be nil"))
@@ -82,7 +79,7 @@ func NewJob(logger *zap.Logger, cli *client.Client, networkID string, testName s
 
 // Options optionally configures starting a Container.
 type Options struct {
-	// bind mounts: https://docs.docker.com/storage/bind-mounts/
+	// Bind mounts: https://docs.docker.com/storage/bind-mounts/
 	Binds []string
 
 	// Environment variables

@@ -375,7 +375,7 @@ func (c *Chain) Stop(ctx context.Context) error {
 			if err := n.stop(ctx); err != nil {
 				return err
 			}
-			return n.removeContainer(ctx)
+			return n.RemoveContainer(ctx)
 		})
 	}
 	return eg.Wait()

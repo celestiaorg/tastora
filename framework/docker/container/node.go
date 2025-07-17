@@ -6,7 +6,9 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	"github.com/celestiaorg/tastora/framework/docker/volume"
+	"github.com/docker/docker/api/types/mount"
 	volumetypes "github.com/docker/docker/api/types/volume"
+	"github.com/docker/go-connections/nat"
 	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
@@ -22,7 +24,7 @@ type Node struct {
 	homeDir            string
 	nodeType           string
 	Index              int
-	logger             *zap.Logger
+	Logger             *zap.Logger
 }
 
 // NewNode creates a new Node instance with the required parameters.
@@ -43,7 +45,7 @@ func NewNode(
 		Image:        image,
 		homeDir:      homeDir,
 		Index:        idx,
-		logger:       logger,
+		Logger:       logger,
 		nodeType:     nodeType,
 	}
 }
@@ -63,7 +65,7 @@ func (n *Node) Exec(ctx context.Context, logger *zap.Logger, cmd []string, env [
 	job := NewJob(logger, n.DockerClient, n.NetworkID, n.TestName, n.Image.Repository, n.Image.Version)
 	opts := Options{
 		Env:   env,
-		Binds: n.bind(),
+		Binds: n.Bind(),
 	}
 	res := job.Run(ctx, cmd, opts)
 	if res.Err != nil {
@@ -72,8 +74,8 @@ func (n *Node) Exec(ctx context.Context, logger *zap.Logger, cmd []string, env [
 	return res.Stdout, res.Stderr, res.Err
 }
 
-// bind returns the home folder bind point for running the Node.
-func (n *Node) bind() []string {
+// Bind returns the home folder Bind point for running the Node.
+func (n *Node) Bind() []string {
 	return []string{fmt.Sprintf("%s:%s", n.VolumeName, n.homeDir)}
 }
 
@@ -82,24 +84,39 @@ func (n *Node) GetType() string {
 	return n.nodeType
 }
 
-// removeContainer gracefully stops and removes the container associated with the Node using the provided context.
-func (n *Node) removeContainer(ctx context.Context) error {
+// RemoveContainer gracefully stops and removes the container associated with the Node using the provided context.
+func (n *Node) RemoveContainer(ctx context.Context) error {
 	return n.ContainerLifecycle.RemoveContainer(ctx)
 }
 
-// stopContainer gracefully stops the container associated with the Node using the provided context.
-func (n *Node) stopContainer(ctx context.Context) error {
+// StopContainer gracefully stops the container associated with the Node using the provided context.
+func (n *Node) StopContainer(ctx context.Context) error {
 	return n.ContainerLifecycle.StopContainer(ctx)
 }
 
-// startContainer starts the container associated with the Node using the provided context.
-func (n *Node) startContainer(ctx context.Context) error {
+// StartContainer starts the container associated with the Node using the provided context.
+func (n *Node) StartContainer(ctx context.Context) error {
 	return n.ContainerLifecycle.StartContainer(ctx)
+}
+
+func (n *Node) CreateContainer(ctx context.Context,
+	testName string,
+	networkID string,
+	image Image,
+	ports nat.PortMap,
+	ipAddr string,
+	volumeBinds []string,
+	mounts []mount.Mount,
+	hostName string,
+	cmd []string,
+	env []string,
+	entrypoint []string) error {
+	return n.ContainerLifecycle.CreateContainer(ctx, testName, networkID, image, ports, ipAddr, volumeBinds, mounts, hostName, cmd, env, entrypoint)
 }
 
 // ReadFile reads a file from the Node's container volume at the given relative path.
 func (n *Node) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
-	fr := file.NewRetriever(n.logger, n.DockerClient, n.TestName)
+	fr := file.NewRetriever(n.Logger, n.DockerClient, n.TestName)
 	content, err := fr.SingleFileContent(ctx, n.VolumeName, relPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file at %s: %w", relPath, err)
@@ -111,7 +128,7 @@ func (n *Node) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
 // the docker filesystem. relPath describes the location of the file in the
 // docker volume relative to the home directory.
 func (n *Node) WriteFile(ctx context.Context, relPath string, content []byte) error {
-	fw := file.NewWriter(n.logger, n.DockerClient, n.TestName)
+	fw := file.NewWriter(n.Logger, n.DockerClient, n.TestName)
 	return fw.WriteFile(ctx, n.VolumeName, relPath, content)
 }
 
@@ -134,7 +151,7 @@ func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error 
 
 	// configure volume ownership
 	if err := volume.SetOwner(ctx, volume.OwnerOptions{
-		Log:        n.logger,
+		Log:        n.Logger,
 		Client:     n.DockerClient,
 		VolumeName: v.Name,
 		ImageRef:   n.Image.Ref(),

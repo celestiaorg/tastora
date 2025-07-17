@@ -3,6 +3,7 @@ package docker
 import (
 	"testing"
 
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/require"
@@ -72,7 +73,7 @@ func TestDANodePortConfiguration(t *testing.T) {
 
 		daNode := &DANode{
 			cfg: cfg,
-			ContainerNode: &ContainerNode{
+			Node: &container.Node{
 				Index: 0,
 			},
 		}
@@ -117,7 +118,7 @@ func TestDANodePortConfiguration(t *testing.T) {
 
 		daNode := &DANode{
 			cfg: cfg,
-			ContainerNode: &ContainerNode{
+			Node: &container.Node{
 				TestName: "test",
 				Index:    0,
 			},
