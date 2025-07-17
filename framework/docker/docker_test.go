@@ -88,6 +88,17 @@ func (s *DockerTestSuite) CreateDockerProvider(opts ...ConfigOption) *Provider {
 				UIDGID:     "10001:10001",
 			},
 		},
+		RollkitChainConfig: &RollkitChainConfig{
+			ChainID:              "test",
+			Bin:                  "testapp",
+			AggregatorPassphrase: "12345678",
+			NumNodes:             1,
+			Image: container.Image{
+				Repository: "ghcr.io/rollkit/rollkit",
+				Version:    "main",
+				UIDGID:     "2000",
+			},
+		},
 	}
 
 	for _, opt := range opts {

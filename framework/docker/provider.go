@@ -13,6 +13,9 @@ type Provider struct {
 	cfg Config
 }
 
+func (p *Provider) GetRollkitChain(ctx context.Context) (types.RollkitChain, error) {
+	return newRollkitChain(ctx, p.t.Name(), p.cfg)
+}
 
 // GetDataAvailabilityNetwork returns a new instance of the DataAvailabilityNetwork.
 func (p *Provider) GetDataAvailabilityNetwork(ctx context.Context) (types.DataAvailabilityNetwork, error) {

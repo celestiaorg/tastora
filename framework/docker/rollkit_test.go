@@ -8,8 +8,6 @@ import (
 
 	"cosmossdk.io/math"
 	"github.com/celestiaorg/go-square/v2/share"
-	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/celestiaorg/tastora/framework/docker/rollkit"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -68,25 +66,14 @@ func (s *DockerTestSuite) TestRollkit() {
 	_, err = s.chain.BroadcastMessages(ctx, s.chain.GetFaucetWallet(), bankSend)
 	s.Require().NoError(err)
 
-	// Build rollkit chain using new builder pattern
-	rollkitChain, err := rollkit.NewChainBuilder(s.T()).
-		WithImage(container.Image{
-			Repository: "ghcr.io/rollkit/rollkit",
-			Version:    "main",
-			UIDGID:     "2000",
-		}).
-		WithDockerClient(s.dockerClient).
-		WithDockerNetworkID(s.networkID).
-		WithChainID("test").
-		WithBinaryName("testapp").
-		WithAggregatorPassphrase("12345678").
-		Build(ctx)
+	rollkit, err := s.provider.GetRollkitChain(ctx)
 	s.Require().NoError(err)
 
-	nodes := rollkitChain.GetNodes()
+	nodes := rollkit.GetNodes()
 	s.Require().Len(nodes, 1)
+	aggregatorNode := nodes[0]
 
-	err = rollkitChain.Init(ctx)
+	err = aggregatorNode.Init(ctx)
 	s.Require().NoError(err)
 
 	authToken, err := bridgeNode.GetAuthToken()
@@ -96,7 +83,7 @@ func (s *DockerTestSuite) TestRollkit() {
 	bridgeRPCAddress, err := bridgeNode.GetInternalRPCAddress()
 	s.Require().NoError(err)
 	daAddress := fmt.Sprintf("http://%s", bridgeRPCAddress)
-	err = rollkitChain.Start(ctx,
+	err = aggregatorNode.Start(ctx,
 		"--rollkit.da.address", daAddress,
 		"--rollkit.da.gas_price", "0.025",
 		"--rollkit.da.auth_token", authToken,

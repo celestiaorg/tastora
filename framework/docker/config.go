@@ -18,6 +18,8 @@ type Config struct {
 	ChainConfig *ChainConfig
 	// DataAvailabilityNetworkConfig defines the configuration for the data availability network settings.
 	DataAvailabilityNetworkConfig *DataAvailabilityNetworkConfig
+	// RollkitChainConfig defines configuration settings specific to a Rollkit-based chain.
+	RollkitChainConfig *RollkitChainConfig
 }
 
 type ChainConfig struct {
@@ -90,5 +92,22 @@ type DANodeConfig struct {
 	P2PPort      string // Internal P2P port (overrides default)
 	CoreRPCPort  string // Port to connect to celestia-app RPC (overrides default)
 	CoreGRPCPort string // Port to connect to celestia-app GRPC (overrides default)
+}
+
+// RollkitChainConfig defines the configuration for a Rollkit-based chain
+// including node counts, image settings, and chainID.
+type RollkitChainConfig struct {
+	// ChainID, e.g. test-rollkit
+	ChainID string
+	// Environment variables for chain nodes
+	Env []string
+	// Binary to execute for the rollkit chain.
+	Bin string
+	// AggregatorPassphrase is the passphrase used when a node is an aggregator.
+	AggregatorPassphrase string
+	// NumNodes
+	NumNodes int
+	// Image specifies the Docker image used for the rollkit nodes.
+	Image container.Image
 }
 
