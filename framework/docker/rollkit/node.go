@@ -58,7 +58,7 @@ func NewNode(dockerClient *client.Client, dockerNetworkID string, logger *zap.Lo
 		zap.Int("i", index),
 		zap.Bool("aggregator", index == 0),
 	)
-	
+
 	n := &Node{
 		dockerClient:         dockerClient,
 		dockerNetworkID:      dockerNetworkID,
@@ -148,10 +148,7 @@ func (n *Node) createContainer(ctx context.Context, additionalStartArgs ...strin
 
 	startCmd = append(startCmd, additionalStartArgs...)
 
-	containerLifecycle := container.NewLifecycle(n.log, n.dockerClient, n.Name())
-	n.SetContainerLifecycle(containerLifecycle)
-
-	return containerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.bind(), nil, n.HostName(), startCmd, []string{}, []string{})
+	return n.ContainerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.bind(), nil, n.HostName(), startCmd, []string{}, []string{})
 }
 
 // bind returns the home folder bind point for running the Node.
@@ -161,14 +158,11 @@ func (n *Node) bind() []string {
 
 // startContainer starts the container for the Node, initializes its ports, and ensures the node rpc is responding.
 func (n *Node) startContainer(ctx context.Context) error {
-	containerLifecycle := container.NewLifecycle(n.log, n.dockerClient, n.Name())
-	n.SetContainerLifecycle(containerLifecycle)
-
-	if err := containerLifecycle.StartContainer(ctx); err != nil {
+	if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
 		return err
 	}
 
-	hostPorts, err := containerLifecycle.GetHostPorts(ctx, rpcPort, "9090/tcp", "1317/tcp", "2121/tcp", httpPort)
+	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, rpcPort, "9090/tcp", "1317/tcp", "2121/tcp", httpPort)
 	if err != nil {
 		return err
 	}

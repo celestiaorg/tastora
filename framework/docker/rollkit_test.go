@@ -8,6 +8,7 @@ import (
 
 	"cosmossdk.io/math"
 	"github.com/celestiaorg/go-square/v2/share"
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/rollkit"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -69,7 +70,7 @@ func (s *DockerTestSuite) TestRollkit() {
 
 	// Build rollkit chain using new builder pattern
 	rollkitChain, err := rollkit.NewChainBuilder(s.T()).
-		WithImage(DockerImage{
+		WithImage(container.Image{
 			Repository: "ghcr.io/rollkit/rollkit",
 			Version:    "main",
 			UIDGID:     "2000",

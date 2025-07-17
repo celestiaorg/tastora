@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"io"
@@ -23,8 +24,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Image is a docker image.
-type Image struct {
+// Job is a docker job runner.
+type Job struct {
 	log    *zap.Logger
 	client *client.Client
 
@@ -36,7 +37,7 @@ type Image struct {
 	testName  string
 }
 
-// NewImage returns a valid Image.
+// NewJob returns a valid Job.
 //
 // "pool" and "networkID" are likely from DockerSetup.
 // "testName" is from a (*testing.T).Name() and should match the t.Name() from DockerSetup to ensure proper cleanup.
@@ -44,7 +45,7 @@ type Image struct {
 // Most arguments (except tag) must be non-zero values or this function panics.
 // If tag is absent, defaults to "latest".
 // Currently, only public docker images are supported.
-func NewImage(logger *zap.Logger, cli *client.Client, networkID string, testName string, repository, tag string) *Image {
+func NewJob(logger *zap.Logger, cli *client.Client, networkID string, testName string, repository, tag string) *Job {
 	if logger == nil {
 		panic(errors.New("nil logger"))
 	}
@@ -64,7 +65,7 @@ func NewImage(logger *zap.Logger, cli *client.Client, networkID string, testName
 		tag = "latest"
 	}
 
-	i := &Image{
+	i := &Job{
 		client:     cli,
 		networkID:  networkID,
 		repository: repository,
@@ -79,8 +80,8 @@ func NewImage(logger *zap.Logger, cli *client.Client, networkID string, testName
 	return i
 }
 
-// ContainerOptions optionally configures starting a Container.
-type ContainerOptions struct {
+// Options optionally configures starting a Container.
+type Options struct {
 	// bind mounts: https://docs.docker.com/storage/bind-mounts/
 	Binds []string
 
@@ -100,9 +101,9 @@ type ContainerOptions struct {
 	WorkingDir string
 }
 
-// ContainerExecResult is a wrapper type that wraps an exit code and associated output from stderr & stdout, along with
+// ExecResult is a wrapper type that wraps an exit code and associated output from stderr & stdout, along with
 // an error in the case of some error occurring during container execution.
-type ContainerExecResult struct {
+type ExecResult struct {
 	Err            error // Err is nil, unless some error occurs during the container lifecycle.
 	ExitCode       int
 	Stdout, Stderr []byte
@@ -112,10 +113,10 @@ type ContainerExecResult struct {
 //
 // Run blocks until the command completes. Thus, Run is not suitable for daemons or servers. Use Start instead.
 // A non-zero status code returns an error.
-func (image *Image) Run(ctx context.Context, cmd []string, opts ContainerOptions) ContainerExecResult {
-	c, err := image.Start(ctx, cmd, opts)
+func (job *Job) Run(ctx context.Context, cmd []string, opts Options) ExecResult {
+	c, err := job.Start(ctx, cmd, opts)
 	if err != nil {
-		return ContainerExecResult{
+		return ExecResult{
 			Err:      err,
 			ExitCode: -1,
 			Stdout:   nil,
@@ -125,16 +126,16 @@ func (image *Image) Run(ctx context.Context, cmd []string, opts ContainerOptions
 	return c.Wait(ctx, opts.LogTail)
 }
 
-func (image *Image) imageRef() string {
-	return image.repository + ":" + image.tag
+func (job *Job) imageRef() string {
+	return job.repository + ":" + job.tag
 }
 
 // EnsurePulled can only pull public images.
-func (image *Image) EnsurePulled(ctx context.Context) error {
-	ref := image.imageRef()
-	_, _, err := image.client.ImageInspectWithRaw(ctx, ref)
+func (job *Job) EnsurePulled(ctx context.Context) error {
+	ref := job.imageRef()
+	_, _, err := job.client.ImageInspectWithRaw(ctx, ref)
 	if err != nil {
-		rc, err := image.client.ImagePull(ctx, ref, dockerimagetypes.PullOptions{})
+		rc, err := job.client.ImagePull(ctx, ref, dockerimagetypes.PullOptions{})
 		if err != nil {
 			return fmt.Errorf("pull image %s: %w", ref, err)
 		}
@@ -144,11 +145,11 @@ func (image *Image) EnsurePulled(ctx context.Context) error {
 	return nil
 }
 
-func (image *Image) CreateContainer(ctx context.Context, containerName, hostName string, cmd []string, opts ContainerOptions) (string, error) {
+func (job *Job) CreateContainer(ctx context.Context, containerName, hostName string, cmd []string, opts Options) (string, error) {
 	// Although this shouldn't happen because the name includes randomness, in reality there seems to intermittent
 	// chances of collisions.
 
-	containers, err := image.client.ContainerList(ctx, container.ListOptions{
+	containers, err := job.client.ContainerList(ctx, container.ListOptions{
 		All:     true,
 		Filters: filters.NewArgs(filters.Arg("name", containerName)),
 	})
@@ -157,7 +158,7 @@ func (image *Image) CreateContainer(ctx context.Context, containerName, hostName
 	}
 
 	for _, c := range containers {
-		if err := image.client.ContainerRemove(ctx, c.ID, container.RemoveOptions{
+		if err := job.client.ContainerRemove(ctx, c.ID, container.RemoveOptions{
 			RemoveVolumes: true,
 			Force:         true,
 		}); err != nil {
@@ -165,10 +166,10 @@ func (image *Image) CreateContainer(ctx context.Context, containerName, hostName
 		}
 	}
 
-	cc, err := image.client.ContainerCreate(
+	cc, err := job.client.ContainerCreate(
 		ctx,
 		&container.Config{
-			Image: image.imageRef(),
+			Image: job.imageRef(),
 
 			Entrypoint: []string{},
 			WorkingDir: opts.WorkingDir,
@@ -179,7 +180,7 @@ func (image *Image) CreateContainer(ctx context.Context, containerName, hostName
 			Hostname: hostName,
 			User:     opts.User,
 
-			Labels: map[string]string{consts.CleanupLabel: image.testName},
+			Labels: map[string]string{consts.CleanupLabel: job.testName},
 		},
 		&container.HostConfig{
 			Binds:           opts.Binds,
@@ -189,7 +190,7 @@ func (image *Image) CreateContainer(ctx context.Context, containerName, hostName
 		},
 		&network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{
-				image.networkID: {},
+				job.networkID: {},
 			},
 		},
 		nil,
@@ -202,19 +203,19 @@ func (image *Image) CreateContainer(ctx context.Context, containerName, hostName
 }
 
 // Start pulls the image if not present, creates a container, and runs it.
-func (image *Image) Start(ctx context.Context, cmd []string, opts ContainerOptions) (*Container, error) {
+func (job *Job) Start(ctx context.Context, cmd []string, opts Options) (*Container, error) {
 	if len(cmd) == 0 {
 		panic(errors.New("cmd cannot be empty"))
 	}
 
-	if err := image.EnsurePulled(ctx); err != nil {
-		return nil, image.WrapErr(err)
+	if err := job.EnsurePulled(ctx); err != nil {
+		return nil, job.WrapErr(err)
 	}
 
 	var (
-		containerName = SanitizeContainerName(image.testName + "-" + random.LowerCaseLetterString(6))
-		hostName      = CondenseHostName(containerName)
-		logger        = image.log.With(
+		containerName = internal.SanitizeContainerName(job.testName + "-" + random.LowerCaseLetterString(6))
+		hostName      = internal.CondenseHostName(containerName)
+		logger        = job.log.With(
 			zap.String("command", strings.Join(cmd, " ")), //nolint:gosec // testing only so safe to expose credentials in cli
 			zap.Strings("env,", opts.Env),
 			zap.String("hostname", hostName),
@@ -222,29 +223,29 @@ func (image *Image) Start(ctx context.Context, cmd []string, opts ContainerOptio
 		)
 	)
 
-	cID, err := image.CreateContainer(ctx, containerName, hostName, cmd, opts)
+	cID, err := job.CreateContainer(ctx, containerName, hostName, cmd, opts)
 	if err != nil {
-		return nil, image.WrapErr(fmt.Errorf("create container %s: %w", containerName, err))
+		return nil, job.WrapErr(fmt.Errorf("create container %s: %w", containerName, err))
 	}
 
 	logger.Info("Exec")
 
-	err = StartContainer(ctx, image.client, cID)
+	err = internal.StartContainer(ctx, job.client, cID)
 	if err != nil {
-		return nil, image.WrapErr(fmt.Errorf("start container %s: %w", containerName, err))
+		return nil, job.WrapErr(fmt.Errorf("start container %s: %w", containerName, err))
 	}
 
 	return &Container{
 		Name:        containerName,
 		Hostname:    hostName,
 		log:         logger,
-		image:       image,
+		job:         job,
 		containerID: cID,
 	}, nil
 }
 
-func (image *Image) WrapErr(err error) error {
-	return fmt.Errorf("image %s:%s: %w", image.repository, image.tag, err)
+func (job *Job) WrapErr(err error) error {
+	return fmt.Errorf("job %s:%s: %w", job.repository, job.tag, err)
 }
 
 // Container is a docker container. Use (*Image).Start to create a new container.
@@ -253,7 +254,7 @@ type Container struct {
 	Hostname string
 
 	log         *zap.Logger
-	image       *Image
+	job         *Job
 	containerID string
 }
 
@@ -262,19 +263,19 @@ type Container struct {
 //
 // Wait implicitly calls Stop.
 // If logTail is non-zero, the stdout and stderr logs will be truncated at the end to that number of lines.
-func (c *Container) Wait(ctx context.Context, logTail uint64) ContainerExecResult {
-	waitCh, errCh := c.image.client.ContainerWait(ctx, c.containerID, container.WaitConditionNotRunning)
+func (c *Container) Wait(ctx context.Context, logTail uint64) ExecResult {
+	waitCh, errCh := c.job.client.ContainerWait(ctx, c.containerID, container.WaitConditionNotRunning)
 	var exitCode int
 	select {
 	case <-ctx.Done():
-		return ContainerExecResult{
+		return ExecResult{
 			Err:      ctx.Err(),
 			ExitCode: 1,
 			Stdout:   nil,
 			Stderr:   nil,
 		}
 	case err := <-errCh:
-		return ContainerExecResult{
+		return ExecResult{
 			Err:      err,
 			ExitCode: 1,
 			Stdout:   nil,
@@ -283,7 +284,7 @@ func (c *Container) Wait(ctx context.Context, logTail uint64) ContainerExecResul
 	case res := <-waitCh:
 		exitCode = int(res.StatusCode)
 		if res.Error != nil {
-			return ContainerExecResult{
+			return ExecResult{
 				Err:      errors.New(res.Error.Message),
 				ExitCode: exitCode,
 				Stdout:   nil,
@@ -305,9 +306,9 @@ func (c *Container) Wait(ctx context.Context, logTail uint64) ContainerExecResul
 		logOpts.Tail = strconv.FormatUint(logTail, 10)
 	}
 
-	rc, err := c.image.client.ContainerLogs(ctx, c.containerID, logOpts)
+	rc, err := c.job.client.ContainerLogs(ctx, c.containerID, logOpts)
 	if err != nil {
-		return ContainerExecResult{
+		return ExecResult{
 			Err:      err,
 			ExitCode: exitCode,
 			Stdout:   nil,
@@ -319,7 +320,7 @@ func (c *Container) Wait(ctx context.Context, logTail uint64) ContainerExecResul
 	// Logs are multiplexed into one stream; see docs for ContainerLogs.
 	_, err = stdcopy.StdCopy(stdoutBuf, stderrBuf, rc)
 	if err != nil {
-		return ContainerExecResult{
+		return ExecResult{
 			Err:      err,
 			ExitCode: exitCode,
 			Stdout:   nil,
@@ -335,7 +336,7 @@ func (c *Container) Wait(ctx context.Context, logTail uint64) ContainerExecResul
 
 	if exitCode != 0 {
 		out := strings.Join([]string{stdoutBuf.String(), stderrBuf.String()}, " ")
-		return ContainerExecResult{
+		return ExecResult{
 			Err:      fmt.Errorf("exit code %d: %s", exitCode, out),
 			ExitCode: exitCode,
 			Stdout:   nil,
@@ -343,7 +344,7 @@ func (c *Container) Wait(ctx context.Context, logTail uint64) ContainerExecResul
 		}
 	}
 
-	return ContainerExecResult{
+	return ExecResult{
 		Err:      nil,
 		ExitCode: exitCode,
 		Stdout:   stdoutBuf.Bytes(),
@@ -360,21 +361,21 @@ func (c *Container) Stop(timeout time.Duration) error {
 	var stopOptions container.StopOptions
 	timeoutRound := int(timeout.Round(time.Second))
 	stopOptions.Timeout = &timeoutRound
-	err := c.image.client.ContainerStop(ctx, c.containerID, stopOptions)
+	err := c.job.client.ContainerStop(ctx, c.containerID, stopOptions)
 	if err != nil {
 		// Only return the error if it didn't match an already stopped, or a missing container.
 		if !errdefs.IsNotModified(err) && !errdefs.IsNotFound(err) {
-			return c.image.WrapErr(fmt.Errorf("stop container %s: %w", c.Name, err))
+			return c.job.WrapErr(fmt.Errorf("stop container %s: %w", c.Name, err))
 		}
 	}
 
 	// RemoveContainerOptions duplicates (*dockertest.Resource).Prune.
-	err = c.image.client.ContainerRemove(ctx, c.containerID, container.RemoveOptions{
+	err = c.job.client.ContainerRemove(ctx, c.containerID, container.RemoveOptions{
 		Force:         true,
 		RemoveVolumes: true,
 	})
 	if err != nil && !errdefs.IsNotFound(err) {
-		return c.image.WrapErr(fmt.Errorf("remove container %s: %w", c.Name, err))
+		return c.job.WrapErr(fmt.Errorf("remove container %s: %w", c.Name, err))
 	}
 
 	return nil

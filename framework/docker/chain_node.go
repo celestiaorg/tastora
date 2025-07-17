@@ -105,7 +105,7 @@ func NewChainNode(
 	dockerClient *dockerclient.Client,
 	dockerNetworkID string,
 	testName string,
-	image DockerImage,
+	image container.Image,
 	homeDir string,
 	index int,
 	chainParams ChainNodeParams,

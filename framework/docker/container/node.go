@@ -3,9 +3,9 @@ package container
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/file"
+	"github.com/celestiaorg/tastora/framework/docker/volume"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
@@ -18,7 +18,7 @@ type Node struct {
 	DockerClient       *dockerclient.Client
 	TestName           string
 	Image              Image
-	containerLifecycle *Lifecycle
+	ContainerLifecycle *Lifecycle
 	homeDir            string
 	nodeType           string
 	Index              int
@@ -50,7 +50,7 @@ func NewNode(
 
 // SetContainerLifecycle sets the container lifecycle for the node
 func (n *Node) SetContainerLifecycle(lifecycle *Lifecycle) {
-	n.containerLifecycle = lifecycle
+	n.ContainerLifecycle = lifecycle
 }
 
 // HomeDir returns the home directory path
@@ -60,8 +60,8 @@ func (n *Node) HomeDir() string {
 
 // Exec runs a command in the node's container.
 func (n *Node) Exec(ctx context.Context, logger *zap.Logger, cmd []string, env []string) ([]byte, []byte, error) {
-	job := docker.NewImage(logger, n.DockerClient, n.NetworkID, n.TestName, n.Image.Repository, n.Image.Version)
-	opts := docker.ContainerOptions{
+	job := NewJob(logger, n.DockerClient, n.NetworkID, n.TestName, n.Image.Repository, n.Image.Version)
+	opts := Options{
 		Env:   env,
 		Binds: n.bind(),
 	}
@@ -84,17 +84,17 @@ func (n *Node) GetType() string {
 
 // removeContainer gracefully stops and removes the container associated with the Node using the provided context.
 func (n *Node) removeContainer(ctx context.Context) error {
-	return n.containerLifecycle.RemoveContainer(ctx)
+	return n.ContainerLifecycle.RemoveContainer(ctx)
 }
 
 // stopContainer gracefully stops the container associated with the Node using the provided context.
 func (n *Node) stopContainer(ctx context.Context) error {
-	return n.containerLifecycle.StopContainer(ctx)
+	return n.ContainerLifecycle.StopContainer(ctx)
 }
 
 // startContainer starts the container associated with the Node using the provided context.
 func (n *Node) startContainer(ctx context.Context) error {
-	return n.containerLifecycle.StartContainer(ctx)
+	return n.ContainerLifecycle.StartContainer(ctx)
 }
 
 // ReadFile reads a file from the Node's container volume at the given relative path.
@@ -133,7 +133,7 @@ func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error 
 	n.VolumeName = v.Name
 
 	// configure volume ownership
-	if err := docker.SetVolumeOwner(ctx, docker.VolumeOwnerOptions{
+	if err := volume.SetOwner(ctx, volume.OwnerOptions{
 		Log:        n.logger,
 		Client:     n.DockerClient,
 		VolumeName: v.Name,

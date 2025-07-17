@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/docker/port"
 	"io"
-	"net"
 	"regexp"
 	"strings"
 	"time"
@@ -27,7 +28,7 @@ type Lifecycle struct {
 	client            *dockerclient.Client
 	containerName     string
 	id                string
-	preStartListeners Listeners
+	preStartListeners port.Listeners
 }
 
 func NewLifecycle(log *zap.Logger, client *dockerclient.Client, containerName string) *Lifecycle {
@@ -42,7 +43,7 @@ func (c *Lifecycle) CreateContainer(
 	ctx context.Context,
 	testName string,
 	networkID string,
-	image DockerImage,
+	image Image,
 	ports nat.PortMap,
 	ipAddr string,
 	volumeBinds []string,
@@ -69,7 +70,7 @@ func (c *Lifecycle) CreateContainer(
 		pS[k] = struct{}{}
 	}
 
-	pb, listeners, err := GeneratePortBindings(ports)
+	pb, listeners, err := port.GenerateBindings(ports)
 	if err != nil {
 		return fmt.Errorf("failed to generate port bindings: %w", err)
 	}
@@ -117,7 +118,7 @@ func (c *Lifecycle) CreateContainer(
 	)
 	if err != nil {
 		listeners.CloseAll()
-		c.preStartListeners = []net.Listener{}
+		c.preStartListeners = port.Listeners{}
 		return err
 	}
 	c.id = cc.ID
@@ -127,13 +128,13 @@ func (c *Lifecycle) CreateContainer(
 func (c *Lifecycle) StartContainer(ctx context.Context) error {
 	// lock port allocation for the time between freeing the ports from the
 	// temporary listeners to the consumption of the ports by the container
-	mu.RLock()
-	defer mu.RUnlock()
+	// Note: mu is handled internally by port package
+	// Note: mu is handled internally by port package
 
 	c.preStartListeners.CloseAll()
-	c.preStartListeners = []net.Listener{}
+	c.preStartListeners = port.Listeners{}
 
-	if err := StartContainer(ctx, c.client, c.id); err != nil {
+	if err := internal.StartContainer(ctx, c.client, c.id); err != nil {
 		return err
 	}
 
@@ -237,7 +238,7 @@ func (c *Lifecycle) GetHostPorts(ctx context.Context, portIDs ...string) ([]stri
 	}
 	ports := make([]string, len(portIDs))
 	for i, p := range portIDs {
-		ports[i] = GetHostPort(cjson, p)
+		ports[i] = port.GetForHost(cjson, p)
 	}
 	return ports, nil
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"go.uber.org/zap/zaptest"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	dockerclient "github.com/moby/moby/client"
@@ -27,7 +28,7 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
 	}
-	node1 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 0, chainParams1)
+	node1 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 0, chainParams1)
 
 	chainParams2 := ChainNodeParams{
 		Validator:       true,
@@ -40,7 +41,7 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
 	}
-	node2 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 1, chainParams2)
+	node2 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 1, chainParams2)
 
 	chainParams3 := ChainNodeParams{
 		Validator:       false,
@@ -53,7 +54,7 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
 	}
-	node3 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, DockerImage{}, "/test/home", 2, chainParams3)
+	node3 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 2, chainParams3)
 
 	// get hostnames
 	hostname1 := node1.HostName()

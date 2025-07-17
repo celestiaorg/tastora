@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
 )
@@ -19,7 +20,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 	// configure different images for different DA node types
 	bridgeNodeConfigs := map[int]*DANodeConfig{
 		0: {
-			Image: &DockerImage{
+			Image: &container.Image{
 				Repository: "ghcr.io/celestiaorg/celestia-node",
 				Version:    "pr-4283",
 				UIDGID:     "10001:10001",
@@ -29,7 +30,7 @@ func (s *DockerTestSuite) TestDANetworkCreation() {
 
 	fullNodeConfigs := map[int]*DANodeConfig{
 		0: {
-			Image: &DockerImage{
+			Image: &container.Image{
 				Repository: "ghcr.io/celestiaorg/celestia-node",
 				Version:    "pr-4283",
 				UIDGID:     "10001:10001",

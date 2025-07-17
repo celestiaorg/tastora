@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/moby/moby/client"
 	"testing"
@@ -44,7 +45,7 @@ func (s *DockerTestSuite) SetupSuite() {
 func (s *DockerTestSuite) SetupTest() {
 	s.dockerClient, s.networkID = DockerSetup(s.T())
 
-	defaultImage := DockerImage{
+	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
 		Version:    "v4.0.0-rc6",
 		UIDGID:     "10001:10001",
@@ -81,21 +82,10 @@ func (s *DockerTestSuite) CreateDockerProvider(opts ...ConfigOption) *Provider {
 			FullNodeCount:   1,
 			BridgeNodeCount: 1,
 			LightNodeCount:  1,
-			Image: DockerImage{
+			Image: container.Image{
 				Repository: "ghcr.io/celestiaorg/celestia-node",
 				Version:    "pr-4283", // TODO: use tag that includes changes from https://github.com/celestiaorg/celestia-node/pull/4283.
 				UIDGID:     "10001:10001",
-			},
-		},
-		RollkitChainConfig: &RollkitChainConfig{
-			ChainID:              "test",
-			Bin:                  "testapp",
-			AggregatorPassphrase: "12345678",
-			NumNodes:             1,
-			Image: DockerImage{
-				Repository: "ghcr.io/rollkit/rollkit",
-				Version:    "main",
-				UIDGID:     "2000",
 			},
 		},
 	}
@@ -124,7 +114,7 @@ func (s *DockerTestSuite) getGenesisHash(ctx context.Context) string {
 
 // TestPerNodeDifferentImages tests that nodes can be deployed with different Docker images
 func (s *DockerTestSuite) TestPerNodeDifferentImages() {
-	alternativeImage := DockerImage{
+	alternativeImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
 		Version:    "v4.0.0-rc5", // different version from default
 		UIDGID:     "10001:10001",

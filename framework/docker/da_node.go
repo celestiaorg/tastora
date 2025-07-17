@@ -313,7 +313,7 @@ func (n *DANode) getNodeConfig() *DANodeConfig {
 }
 
 // getImage returns the Docker image for this node, preferring per-node config over the default image
-func (n *DANode) getImage() DockerImage {
+func (n *DANode) getImage() container.Image {
 	if nodeConfig := n.getNodeConfig(); nodeConfig != nil && nodeConfig.Image != nil {
 		return *nodeConfig.Image
 	}

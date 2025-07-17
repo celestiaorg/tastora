@@ -6,6 +6,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/file"
+	"github.com/celestiaorg/tastora/framework/docker/volume"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
@@ -17,7 +18,7 @@ type ContainerNode struct {
 	NetworkID          string
 	DockerClient       *dockerclient.Client
 	TestName           string
-	Image              DockerImage
+	Image              container.Image
 	containerLifecycle *container.Lifecycle
 	homeDir            string
 	nodeType           string
@@ -30,7 +31,7 @@ func newContainerNode(
 	networkID string,
 	dockerClient *dockerclient.Client,
 	testName string,
-	image DockerImage,
+	image container.Image,
 	homeDir string,
 	idx int,
 	nodeType string,
@@ -50,8 +51,8 @@ func newContainerNode(
 
 // exec runs a command in the node's container.
 func (n *ContainerNode) exec(ctx context.Context, logger *zap.Logger, cmd []string, env []string) ([]byte, []byte, error) {
-	job := NewImage(logger, n.DockerClient, n.NetworkID, n.TestName, n.Image.Repository, n.Image.Version)
-	opts := ContainerOptions{
+	job := container.NewJob(logger, n.DockerClient, n.NetworkID, n.TestName, n.Image.Repository, n.Image.Version)
+	opts := container.Options{
 		Env:   env,
 		Binds: n.bind(),
 	}
@@ -124,7 +125,7 @@ func (n *ContainerNode) createAndSetupVolume(ctx context.Context, nodeName strin
 	n.VolumeName = v.Name
 
 	// configure volume ownership
-	if err := SetVolumeOwner(ctx, VolumeOwnerOptions{
+	if err := volume.SetOwner(ctx, volume.OwnerOptions{
 		Log:        n.logger,
 		Client:     n.DockerClient,
 		VolumeName: v.Name,

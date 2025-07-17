@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
@@ -20,7 +21,7 @@ type ChainNodeConfig struct {
 	// nodeType specifies which type of node should be built.
 	nodeType NodeType
 	// Image overrides the chain's default image for this specific node (optional)
-	Image *DockerImage
+	Image *container.Image
 	// AdditionalStartArgs overrides the chain-level AdditionalStartArgs for this specific node
 	AdditionalStartArgs []string
 	// Env overrides the chain-level Env for this specific node
@@ -57,7 +58,7 @@ func (b *ChainNodeConfigBuilder) WithKeyring(kr keyring.Keyring) *ChainNodeConfi
 }
 
 // WithImage sets the Docker image for the node (overrides chain default)
-func (b *ChainNodeConfigBuilder) WithImage(image DockerImage) *ChainNodeConfigBuilder {
+func (b *ChainNodeConfigBuilder) WithImage(image container.Image) *ChainNodeConfigBuilder {
 	b.config.Image = &image
 	return b
 }
@@ -136,7 +137,7 @@ type ChainBuilder struct {
 	// logger is the structured logger for chain operations and debugging. Defaults to test logger.
 	logger *zap.Logger
 	// dockerImage is the default Docker image configuration for all nodes in the chain (can be overridden per node)
-	dockerImage *DockerImage
+	dockerImage *container.Image
 	// additionalStartArgs are the default additional command-line arguments for all nodes in the chain (can be overridden per node)
 	additionalStartArgs []string
 	// postInit are the default post-initialization functions for all nodes in the chain (can be overridden per node)
@@ -280,7 +281,7 @@ func (b *ChainBuilder) WithDenom(denom string) *ChainBuilder {
 }
 
 // WithImage sets the default Docker image for all nodes in the chain
-func (b *ChainBuilder) WithImage(image DockerImage) *ChainBuilder {
+func (b *ChainBuilder) WithImage(image container.Image) *ChainBuilder {
 	b.dockerImage = &image
 	return b
 }
@@ -305,7 +306,7 @@ func (b *ChainBuilder) WithEnv(env ...string) *ChainBuilder {
 
 // getImage returns the appropriate Docker image for a node, using node-specific override if available,
 // otherwise falling back to the chain's default image
-func (b *ChainBuilder) getImage(nodeConfig ChainNodeConfig) DockerImage {
+func (b *ChainBuilder) getImage(nodeConfig ChainNodeConfig) container.Image {
 	if nodeConfig.Image != nil {
 		// Use node-specific image override
 		return *nodeConfig.Image

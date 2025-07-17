@@ -3,6 +3,7 @@ package file_test
 import (
 	"context"
 	"github.com/celestiaorg/tastora/framework/docker"
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	volumetypes "github.com/docker/docker/api/types/volume"
@@ -26,7 +27,7 @@ func TestFileWriter(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	img := docker.NewImage(
+	img := container.NewJob(
 		zaptest.NewLogger(t),
 		cli,
 		network,
@@ -41,7 +42,7 @@ func TestFileWriter(t *testing.T) {
 		res := img.Run(
 			ctx,
 			[]string{"sh", "-c", "cat /mnt/test/hello.txt"},
-			docker.ContainerOptions{
+			container.Options{
 				Binds: []string{v.Name + ":/mnt/test"},
 				User:  consts.UserRootString,
 			},
@@ -56,7 +57,7 @@ func TestFileWriter(t *testing.T) {
 		res := img.Run(
 			ctx,
 			[]string{"sh", "-c", "cat /mnt/test/a/b/c/d.txt"},
-			docker.ContainerOptions{
+			container.Options{
 				Binds: []string{v.Name + ":/mnt/test"},
 				User:  consts.UserRootString,
 			},

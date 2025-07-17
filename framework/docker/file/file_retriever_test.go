@@ -3,6 +3,7 @@ package file_test
 import (
 	"context"
 	"github.com/celestiaorg/tastora/framework/docker"
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	volumetypes "github.com/docker/docker/api/types/volume"
@@ -26,7 +27,7 @@ func TestFileRetriever(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	img := docker.NewImage(
+	img := container.NewJob(
 		zaptest.NewLogger(t),
 		cli,
 		network,
@@ -37,7 +38,7 @@ func TestFileRetriever(t *testing.T) {
 	res := img.Run(
 		ctx,
 		[]string{"sh", "-c", "chmod 0700 /mnt/test && printf 'hello world' > /mnt/test/hello.txt"},
-		docker.ContainerOptions{
+		container.Options{
 			Binds: []string{v.Name + ":/mnt/test"},
 			User:  consts.UserRootString,
 		},
@@ -46,7 +47,7 @@ func TestFileRetriever(t *testing.T) {
 	res = img.Run(
 		ctx,
 		[]string{"sh", "-c", "mkdir -p /mnt/test/foo/bar/ && printf 'test' > /mnt/test/foo/bar/baz.txt"},
-		docker.ContainerOptions{
+		container.Options{
 			Binds: []string{v.Name + ":/mnt/test"},
 			User:  consts.UserRootString,
 		},
