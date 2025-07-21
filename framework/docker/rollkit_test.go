@@ -106,7 +106,7 @@ func (s *DockerTestSuite) TestRollkit() {
 			WithPostInit(func(ctx context.Context, node *ChainNode) error {
 				// Rollkit needs validators in the genesis validators array
 				// Let's create the simplest possible validator to match what staking produces
-				
+
 				// Read current genesis.json
 				genesisBz, err := node.ReadFile(ctx, "config/genesis.json")
 				if err != nil {
@@ -123,36 +123,34 @@ func (s *DockerTestSuite) TestRollkit() {
 				appState := genDoc["app_state"].(map[string]interface{})
 				genutil := appState["genutil"].(map[string]interface{})
 				genTxs := genutil["gen_txs"].([]interface{})
-				
-				if len(genTxs) > 0 {
-					gentx := genTxs[0].(map[string]interface{})
-					body := gentx["body"].(map[string]interface{})
-					messages := body["messages"].([]interface{})
-					createValMsg := messages[0].(map[string]interface{})
-					
-					// Get pubkey from gentx
-					gentxPubkey := createValMsg["pubkey"].(map[string]interface{})
-					pubkeyValue := gentxPubkey["key"].(string)
-					
-					// Decode to calculate address using CometBFT method
-					pubkeyBytes, _ := base64.StdEncoding.DecodeString(pubkeyValue)
-					// In CometBFT, validator address is first 20 bytes of SHA256(pubkey) 
-					hash := sha256.Sum256(pubkeyBytes)
-					address := strings.ToUpper(hex.EncodeToString(hash[:20]))
-					
-					// Try putting validators in consensus.validators as the bash script shows
-					consensus := genDoc["consensus"].(map[string]interface{})
-					consensus["validators"] = []map[string]interface{}{
-						{
-							"address": address,
-							"pub_key": map[string]interface{}{
-								"type":  "tendermint/PubKeyEd25519",
-								"value": pubkeyValue,
-							},
-							"power": "1",
-							"name":  "rollkit-validator",
+
+				gentx := genTxs[0].(map[string]interface{})
+				body := gentx["body"].(map[string]interface{})
+				messages := body["messages"].([]interface{})
+				createValMsg := messages[0].(map[string]interface{})
+
+				// Get pubkey from gentx
+				gentxPubkey := createValMsg["pubkey"].(map[string]interface{})
+				pubkeyValue := gentxPubkey["key"].(string)
+
+				// Decode to calculate address using CometBFT method
+				pubkeyBytes, _ := base64.StdEncoding.DecodeString(pubkeyValue)
+				// In CometBFT, validator address is first 20 bytes of SHA256(pubkey)
+				hash := sha256.Sum256(pubkeyBytes)
+				address := strings.ToUpper(hex.EncodeToString(hash[:20]))
+
+				// Try putting validators in consensus.validators as the bash script shows
+				consensus := genDoc["consensus"].(map[string]interface{})
+				consensus["validators"] = []map[string]interface{}{
+					{
+						"address": address,
+						"pub_key": map[string]interface{}{
+							"type":  "tendermint/PubKeyEd25519",
+							"value": pubkeyValue,
 						},
-					}
+						"power": "1",
+						"name":  "rollkit-validator",
+					},
 				}
 
 				// Marshal and write back
