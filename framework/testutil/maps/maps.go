@@ -43,9 +43,9 @@ func setOrDeleteNestedField(doc map[string]interface{}, path string, value inter
 			return nil
 		}
 
-		_, ok := current[key]
-		if !ok {
-			// if the key doesn't exist, we make a new map and set it.
+		val, ok := current[key]
+		if !ok || val == nil {
+			// if the key doesn't exist, or is a nil value we make a new map and set it.
 			// this enables the ability to set a value at a path that doesn't exist and
 			// instantiate all intermediate empty maps.
 			emptyMap := make(map[string]interface{})

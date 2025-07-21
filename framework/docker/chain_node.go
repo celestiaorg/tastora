@@ -26,14 +26,31 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"hash/fnv"
+	"net/http"
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 var _ types.ChainNode = &ChainNode{}
+
+// ChainStrategy defines chain-specific behavior for different chain types
+type ChainStrategy interface {
+	// Port configuration
+	GetPortMappings() nat.PortMap
+	GetPortNameMapping() map[string]string // maps logical names to container ports
+
+	// Command configuration - strategies decide how to use the index
+	GetInitFlags(index int, homeDir string) []string
+	GetStartFlags(index int, homeDir string) []string
+
+	// Health check
+	GetHealthEndpoint(hostRPCPort string) string
+	IsNodeHealthy(client *http.Client, healthURL string, logger *zap.Logger) bool
+}
 
 const (
 	valKey      = "validator"
@@ -74,10 +91,12 @@ type ChainNode struct {
 	lock sync.Mutex
 
 	// Ports set during startContainer.
-	hostRPCPort  string
-	hostAPIPort  string
-	hostGRPCPort string
-	hostP2PPort  string
+	//hostRPCPort  string
+	//hostAPIPort  string
+	//hostGRPCPort string
+	//hostP2PPort  string
+	//hostHTTPPort string
+	hostPorts map[string]string // generic port mapping
 }
 
 // ChainNodeParams contains the chain-specific parameters needed to create a ChainNode
@@ -97,6 +116,8 @@ type ChainNodeParams struct {
 	PrivValidatorKey []byte
 	// PostInit functions are executed sequentially after the node is initialized.
 	PostInit []func(ctx context.Context, node *ChainNode) error
+	// Chain strategy for chain-specific behavior
+	ChainStrategy ChainStrategy
 }
 
 // NewChainNode creates a new ChainNode with injected dependencies
@@ -110,6 +131,10 @@ func NewChainNode(
 	index int,
 	chainParams ChainNodeParams,
 ) *ChainNode {
+	if chainParams.ChainStrategy == nil {
+		panic("ChainStrategy must be provided")
+	}
+
 	nodeType := "fn"
 	if chainParams.Validator {
 		nodeType = "val"
@@ -123,6 +148,7 @@ func NewChainNode(
 	tn := &ChainNode{
 		ChainNodeParams: chainParams,
 		Node:            container.NewNode(dockerNetworkID, dockerClient, testName, image, homeDir, index, nodeType, log),
+		hostPorts:       make(map[string]string),
 	}
 
 	tn.SetContainerLifecycle(container.NewLifecycle(logger, dockerClient, tn.Name()))
@@ -215,10 +241,13 @@ func (cn *ChainNode) initHomeFolder(ctx context.Context) error {
 	cn.lock.Lock()
 	defer cn.lock.Unlock()
 
-	_, _, err := cn.execBin(ctx,
-		"init", CondenseMoniker(cn.Name()),
-		"--chain-id", cn.ChainID,
-	)
+	initCmd := []string{"init", CondenseMoniker(cn.Name()), "--chain-id", cn.ChainID}
+
+	// Add strategy-specific flags
+	strategyFlags := cn.ChainStrategy.GetInitFlags(cn.Index, cn.HomeDir())
+	initCmd = append(initCmd, strategyFlags...)
+
+	_, _, err := cn.execBin(ctx, initCmd...)
 	return err
 }
 
@@ -272,14 +301,41 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 		return err
 	}
 
-	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := cn.ContainerLifecycle.GetHostPorts(ctx, rpcPort, grpcPort, apiPort, p2pPort)
+	// Get port name mapping from strategy
+	portNameMapping := cn.ChainStrategy.GetPortNameMapping()
+
+	// Get all container ports that need to be mapped
+	var containerPorts []string
+	for _, containerPort := range portNameMapping {
+		containerPorts = append(containerPorts, containerPort)
+	}
+
+	// Get host ports from container lifecycle
+	hostPorts, err := cn.ContainerLifecycle.GetHostPorts(ctx, containerPorts...)
 	if err != nil {
 		return err
 	}
-	cn.hostRPCPort, cn.hostGRPCPort, cn.hostAPIPort, cn.hostP2PPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3]
 
-	return cn.initClient("tcp://" + cn.hostRPCPort)
+	// Map host ports back to logical names
+	for i, containerPort := range containerPorts {
+		for portName, mappedContainerPort := range portNameMapping {
+			if mappedContainerPort == containerPort && i < len(hostPorts) {
+				cn.hostPorts[portName] = hostPorts[i]
+				break
+			}
+		}
+	}
+
+	// Set legacy fields for backward compatibility
+	//cn.hostRPCPort = cn.hostPorts["rpc"]
+	//cn.hostGRPCPort = cn.hostPorts["grpc"]
+	//cn.hostAPIPort = cn.hostPorts["api"]
+	//cn.hostP2PPort = cn.hostPorts["p2p"]
+	//if httpPort, exists := cn.hostPorts["http"]; exists {
+	//	cn.hostHTTPPort = httpPort
+	//}
+
+	return cn.initClient("tcp://" + cn.GetHostRPCPort())
 }
 
 // initClient creates and assigns a new Tendermint RPC client to the ChainNode.
@@ -298,7 +354,7 @@ func (cn *ChainNode) initClient(addr string) error {
 	cn.Client = rpcClient
 
 	grpcConn, err := grpc.NewClient(
-		cn.hostGRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		cn.GetHostGRPCPort(), grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return fmt.Errorf("grpc dial: %w", err)
@@ -324,13 +380,17 @@ func (cn *ChainNode) setPeers(ctx context.Context, peers string) error {
 // createNodeContainer initializes but does not start a container for the ChainNode with the specified configuration and context.
 func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 	cmd := []string{cn.BinaryName, "start", "--home", cn.HomeDir()}
+
+	// Add strategy-specific flags
+	strategyFlags := cn.ChainStrategy.GetStartFlags(cn.Index, cn.HomeDir())
+	cmd = append(cmd, strategyFlags...)
+
 	if len(cn.AdditionalStartArgs) > 0 {
 		cmd = append(cmd, cn.AdditionalStartArgs...)
 	}
-	usingPorts := nat.PortMap{}
-	for k, v := range sentryPorts {
-		usingPorts[k] = v
-	}
+
+	// Use strategy-specific ports
+	usingPorts := cn.ChainStrategy.GetPortMappings()
 
 	return cn.CreateContainer(ctx, cn.TestName, cn.NetworkID, cn.Image, usingPorts, "", cn.Bind(), nil, cn.HostName(), cmd, cn.Env, []string{})
 }
@@ -554,4 +614,38 @@ func CondenseMoniker(m string) string {
 	keepLen := (wantLen / 2) - 2
 
 	return m[:keepLen] + "..." + m[len(m)-keepLen:] + suffix
+}
+
+// getHostPort returns the host port for a given port name
+func (cn *ChainNode) getHostPort(portName string) string {
+	port, exists := cn.hostPorts[portName]
+	if !exists {
+		panic(fmt.Sprintf("port %s not found in hostPorts map", portName))
+	}
+	return port
+}
+
+// GetHostRPCPort returns the host RPC port
+func (cn *ChainNode) GetHostRPCPort() string {
+	return strings.ReplaceAll(cn.getHostPort("rpc"), "0.0.0.0:", "")
+}
+
+// GetHostAPIPort returns the host API port
+func (cn *ChainNode) GetHostAPIPort() string {
+	return strings.ReplaceAll(cn.getHostPort("api"), "0.0.0.0:", "")
+}
+
+// GetHostGRPCPort returns the host GRPC port
+func (cn *ChainNode) GetHostGRPCPort() string {
+	return strings.ReplaceAll(cn.getHostPort("grpc"), "0.0.0.0:", "")
+}
+
+// GetHostP2PPort returns the host P2P port
+func (cn *ChainNode) GetHostP2PPort() string {
+	return strings.ReplaceAll(cn.getHostPort("p2p"), "0.0.0.0:", "")
+}
+
+// GetHostHTTPPort returns the host HTTP port
+func (cn *ChainNode) GetHostHTTPPort() string {
+	return strings.ReplaceAll(cn.getHostPort("http"), "0.0.0.0:", "")
 }

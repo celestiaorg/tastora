@@ -1,13 +1,14 @@
 package docker
 
 import (
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	"go.uber.org/zap/zaptest"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	dockerclient "github.com/moby/moby/client"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestChainNodeHostName(t *testing.T) {
@@ -18,41 +19,44 @@ func TestChainNodeHostName(t *testing.T) {
 
 	// Create nodes with different indices
 	chainParams1 := ChainNodeParams{
-		Validator:       true,
-		ChainID:         chainID,
-		BinaryName:      "test-binary",
-		CoinType:        "118",
-		GasPrices:       "0.025utia",
-		GasAdjustment:   1.0,
-		Env:             []string{},
+		Validator:           true,
+		ChainID:             chainID,
+		BinaryName:          "test-binary",
+		CoinType:            "118",
+		GasPrices:           "0.025utia",
+		GasAdjustment:       1.0,
+		Env:                 []string{},
 		AdditionalStartArgs: []string{},
-		EncodingConfig:  &testutil.TestEncodingConfig{},
+		EncodingConfig:      &testutil.TestEncodingConfig{},
+		ChainStrategy:       cosmos.NewStrategy(),
 	}
 	node1 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 0, chainParams1)
 
 	chainParams2 := ChainNodeParams{
-		Validator:       true,
-		ChainID:         chainID,
-		BinaryName:      "test-binary",
-		CoinType:        "118",
-		GasPrices:       "0.025utia",
-		GasAdjustment:   1.0,
-		Env:             []string{},
+		Validator:           true,
+		ChainID:             chainID,
+		BinaryName:          "test-binary",
+		CoinType:            "118",
+		GasPrices:           "0.025utia",
+		GasAdjustment:       1.0,
+		Env:                 []string{},
 		AdditionalStartArgs: []string{},
-		EncodingConfig:  &testutil.TestEncodingConfig{},
+		EncodingConfig:      &testutil.TestEncodingConfig{},
+		ChainStrategy:       cosmos.NewStrategy(),
 	}
 	node2 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 1, chainParams2)
 
 	chainParams3 := ChainNodeParams{
-		Validator:       false,
-		ChainID:         chainID,
-		BinaryName:      "test-binary",
-		CoinType:        "118",
-		GasPrices:       "0.025utia",
-		GasAdjustment:   1.0,
-		Env:             []string{},
+		Validator:           false,
+		ChainID:             chainID,
+		BinaryName:          "test-binary",
+		CoinType:            "118",
+		GasPrices:           "0.025utia",
+		GasAdjustment:       1.0,
+		Env:                 []string{},
 		AdditionalStartArgs: []string{},
-		EncodingConfig:  &testutil.TestEncodingConfig{},
+		EncodingConfig:      &testutil.TestEncodingConfig{},
+		ChainStrategy:       cosmos.NewStrategy(),
 	}
 	node3 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 2, chainParams3)
 

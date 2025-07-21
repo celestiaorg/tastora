@@ -93,7 +93,7 @@ func (n *Node) Init(ctx context.Context, initArguments ...string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	cmd := []string{n.binaryName, "--home", n.HomeDir(), "--chain_id", n.chainID, "init"}
+	cmd := []string{n.binaryName, "--home", n.HomeDir(), "--chain_id", n.chainID, "init", "foo"}
 	if n.isAggregator() {
 		signerPath := filepath.Join(n.HomeDir(), "config")
 		cmd = append(cmd,

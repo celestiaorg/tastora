@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/celestiaorg/go-square/v2/share"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	addressutil "github.com/celestiaorg/tastora/framework/testutil/address"
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -109,7 +110,7 @@ func (c *Chain) AddNode(ctx context.Context, nodeConfig ChainNodeConfig) error {
 	existingNodeCount := len(c.Nodes())
 
 	// create the node directly using builder's newChainNode method
-	node, err := builder.newChainNode(ctx, nodeConfig, existingNodeCount)
+	node, err := builder.newChainNode(ctx, nodeConfig, existingNodeCount, cosmos.NewStrategy())
 	if err != nil {
 		return err
 	}
@@ -163,7 +164,7 @@ func (c *Chain) GetNodes() []types.ChainNode {
 }
 
 func (c *Chain) GetGRPCAddress() string {
-	return c.GetNode().hostGRPCPort
+	return c.GetHostRPCAddress()
 }
 
 func (c *Chain) GetVolumeName() string {
@@ -173,7 +174,7 @@ func (c *Chain) GetVolumeName() string {
 // GetHostRPCAddress returns the address of the RPC server accessible by the host.
 // This will not return a valid address until the chain has been started.
 func (c *Chain) GetHostRPCAddress() string {
-	return "http://" + c.GetNode().hostRPCPort
+	return "http://" + c.GetNode().HostName() + ":" + c.GetNode().GetHostRPCPort()
 }
 
 func (c *Chain) Height(ctx context.Context) (int64, error) {
@@ -207,6 +208,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 			if v.GenesisKeyring != nil {
 				return nil
 			}
+
 
 			return v.initValidatorGenTx(ctx, defaultGenesisAmount, defaultGenesisSelfDelegation)
 		})

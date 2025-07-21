@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
@@ -143,7 +144,8 @@ type ChainBuilder struct {
 	// postInit are the default post-initialization functions for all nodes in the chain (can be overridden per node)
 	postInit []func(ctx context.Context, node *ChainNode) error
 	// env are the default environment variables for all nodes in the chain (can be overridden per node)
-	env []string
+	env      []string
+	strategy ChainStrategy
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -160,7 +162,8 @@ func NewChainBuilder(t *testing.T) *ChainBuilder {
 		WithDenom("utia").
 		WithChainID("test").
 		WithLogger(zaptest.NewLogger(t)).
-		WithName("celestia")
+		WithName("celestia").
+		WithStrategy(cosmos.NewStrategy())
 }
 
 // NewChainBuilderFromChain initializes and returns a new ChainBuilder that copies the values from the given chain.
@@ -397,7 +400,7 @@ func (b *ChainBuilder) initializeChainNodes(ctx context.Context) ([]*ChainNode, 
 	var nodes []*ChainNode
 
 	for i, nodeConfig := range b.nodes {
-		n, err := b.newChainNode(ctx, nodeConfig, i)
+		n, err := b.newChainNode(ctx, nodeConfig, i, b.strategy)
 		if err != nil {
 			return nil, err
 		}
@@ -412,10 +415,11 @@ func (b *ChainBuilder) newChainNode(
 	ctx context.Context,
 	nodeConfig ChainNodeConfig,
 	index int,
+	strategy ChainStrategy,
 ) (*ChainNode, error) {
 	// Construct the ChainNode first so we can access its name.
 	// The ChainNode's VolumeName cannot be set until after we create the volume.
-	tn := b.newDockerChainNode(b.logger, nodeConfig, index)
+	tn := b.newDockerChainNode(b.logger, nodeConfig, index, strategy)
 
 	// create and setup volume using shared logic
 	if err := tn.CreateAndSetupVolume(ctx, tn.Name()); err != nil {
@@ -432,7 +436,7 @@ func (b *ChainBuilder) newChainNode(
 	return tn, nil
 }
 
-func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeConfig, index int) *ChainNode {
+func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeConfig, index int, strategy ChainStrategy) *ChainNode {
 	// use a default home directory if name is not set
 	homeDir := "/var/cosmos-chain"
 	if b.name != "" {
@@ -453,12 +457,18 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 		ValidatorIndex:      index,
 		PrivValidatorKey:    nodeConfig.privValidatorKey,
 		PostInit:            b.getPostInit(nodeConfig),
+		ChainStrategy:       strategy,
 	}
 
 	// Get the appropriate image using fallback logic
 	imageToUse := b.getImage(nodeConfig)
 
 	return NewChainNode(log, b.dockerClient, b.dockerNetworkID, b.t.Name(), imageToUse, homeDir, index, chainParams)
+}
+
+func (b *ChainBuilder) WithStrategy(strategy ChainStrategy) *ChainBuilder {
+	b.strategy = strategy
+	return b
 }
 
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume
@@ -517,7 +527,7 @@ func copyKeyringFilesToVolume(ctx context.Context, node *ChainNode, hostKeyringD
 		return fmt.Errorf("failed to read keyring directory: %w", err)
 	}
 
-	// Copy each keyring file to the volume
+	// copy each keyring file to the volume
 	for _, file := range files {
 		if file.IsDir() {
 			continue
