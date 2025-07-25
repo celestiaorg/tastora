@@ -2,9 +2,9 @@
 
 - An E2E framework to allow testing celestia ecosystem projects in docker environments.
   - specifically to these repos
-    - https://github.com/celestiaorg/celestia-app
-    - https://github.com/celestiaorg/celestia-node
-    - https://github.com/rollkit/rollkit
+    - <https://github.com/celestiaorg/celestia-app>
+    - <https://github.com/celestiaorg/celestia-node>
+    - <https://github.com/evstack/rollkit>
 
 ### Project Structure
 
