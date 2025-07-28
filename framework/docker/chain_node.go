@@ -97,6 +97,7 @@ type ChainNodeParams struct {
 	PrivValidatorKey []byte
 	// PostInit functions are executed sequentially after the node is initialized.
 	PostInit []func(ctx context.Context, node *ChainNode) error
+	GenTX    bool
 }
 
 // NewChainNode creates a new ChainNode with injected dependencies
@@ -457,6 +458,12 @@ func (cn *ChainNode) initValidatorGenTx(
 	if err := cn.addGenesisAccount(ctx, bech32, genesisAmounts); err != nil {
 		return err
 	}
+
+	// specified to skip gen tx for this node.
+	if !cn.GenTX {
+		return nil
+	}
+
 	return cn.gentx(ctx, valKey, genesisSelfDelegation)
 }
 

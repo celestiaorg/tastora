@@ -72,7 +72,7 @@ func (c *Chain) getBroadcaster() types.Broadcaster {
 	if c.broadcaster != nil {
 		return c.broadcaster
 	}
-	c.broadcaster = newBroadcaster(c.t, c)
+	c.broadcaster = newBroadcaster(c)
 	return c.broadcaster
 }
 
@@ -313,8 +313,10 @@ func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdk
 			return nil, err
 		}
 
-		if err := validatorN.copyGentx(ctx, validator0); err != nil {
-			return nil, err
+		if validatorN.GenTX {
+			if err := validatorN.copyGentx(ctx, validator0); err != nil {
+				return nil, err
+			}
 		}
 	}
 
