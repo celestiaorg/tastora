@@ -297,9 +297,10 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	// copy faucet key to all other validators now that containers are running
+	// copy faucet key to all other validators now that containers are running.
+	// this ensures the faucet wallet can be used on all nodes.
 	for i := 1; i < len(c.Validators); i++ {
-		if err := c.copyFaucetKeyToValidator(ctx, c.Validators[i]); err != nil {
+		if err := c.copyFaucetKeyToValidator(c.Validators[i]); err != nil {
 			return fmt.Errorf("failed to copy faucet key to validator %d: %w", i, err)
 		}
 		c.Validators[i].faucetWallet = c.Validators[0].faucetWallet
@@ -438,10 +439,10 @@ func (c *Chain) CreateWallet(ctx context.Context, keyName string) (types.Wallet,
 }
 
 // copyFaucetKeyToValidator copies the faucet key from validator[0] to the specified validator.
-func (c *Chain) copyFaucetKeyToValidator(ctx context.Context, targetValidator *ChainNode) error {
+func (c *Chain) copyFaucetKeyToValidator(targetValidator *ChainNode) error {
 	faucetKeyName := consts.FaucetAccountKeyName
 
-	// get the keyring from validator[0] (source)
+	// as part of setup, the faucet wallet was created on Validators[0]
 	sourceKeyring, err := c.Validators[0].GetKeyring()
 	if err != nil {
 		return fmt.Errorf("failed to get source keyring: %w", err)
