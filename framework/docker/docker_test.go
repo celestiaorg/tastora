@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/moby/moby/client"
 	"testing"
 
@@ -25,7 +24,7 @@ type DockerTestSuite struct {
 	logger       *zap.Logger
 	encConfig    testutil.TestEncodingConfig
 	provider     *Provider
-	chain        types.Chain
+	chain        *Chain
 	builder      *ChainBuilder
 }
 
