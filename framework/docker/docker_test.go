@@ -93,7 +93,7 @@ func (s *DockerTestSuite) CreateDockerProvider(opts ...ConfigOption) *Provider {
 			AggregatorPassphrase: "12345678",
 			NumNodes:             1,
 			Image: container.Image{
-				Repository: "ghcr.io/rollkit/rollkit",
+				Repository: "ghcr.io/evstack/rollkit",
 				Version:    "main",
 				UIDGID:     "2000",
 			},
