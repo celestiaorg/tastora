@@ -362,6 +362,16 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 		return nil, fmt.Errorf("failed to initialize chain nodes: %w", err)
 	}
 
+	// separate validators and full nodes
+	var validators, fullNodes []*ChainNode
+	for _, node := range nodes {
+		if node.Validator {
+			validators = append(validators, node)
+		} else {
+			fullNodes = append(fullNodes, node)
+		}
+	}
+
 	chain := &Chain{
 		cfg: Config{
 			Logger:          b.logger,
@@ -385,7 +395,8 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 			},
 		},
 		t:          b.t,
-		Validators: nodes,
+		Validators: validators,
+		FullNodes:  fullNodes,
 		cdc:        cdc,
 		log:        b.logger,
 	}

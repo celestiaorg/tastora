@@ -11,9 +11,9 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdktx "github.com/cosmos/cosmos-sdk/client/tx"
+	"go.uber.org/zap"
 	"path"
 	"reflect"
-	"testing"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -38,8 +38,8 @@ type broadcaster struct {
 
 	// chain is a reference to the Chain instance which will be the target of the messages.
 	chain *Chain
-	// t is the testing.T for the current test.
-	t *testing.T
+	// node is the specific node to broadcast through (defaults to chain.GetNode() if nil)
+	node *ChainNode
 
 	// factoryOptions is a slice of broadcast.FactoryOpt which enables arbitrary configuration of the tx.Factory.
 	factoryOptions []FactoryOpt
@@ -49,12 +49,15 @@ type broadcaster struct {
 
 // newBroadcaster returns an instance of Broadcaster which can be used with broadcast.Tx to
 // broadcast messages sdk messages.
-func newBroadcaster(t *testing.T, chain *Chain) types.Broadcaster {
-	t.Helper()
+func newBroadcaster(chain *Chain) types.Broadcaster {
+	return newBroadcasterForNode(chain, nil)
+}
 
+// newBroadcasterForNode returns an instance of Broadcaster that broadcasts through a specific node.
+func newBroadcasterForNode(chain *Chain, node *ChainNode) types.Broadcaster {
 	return &broadcaster{
-		t:        t,
 		chain:    chain,
+		node:     node,
 		buf:      &bytes.Buffer{},
 		keyrings: map[types.Wallet]keyring.Keyring{},
 	}
@@ -102,8 +105,7 @@ func (b *broadcaster) GetFactory(ctx context.Context, wallet types.Wallet) (sdkt
 // the provided wallet. ConfigureClientContextOptions can be used to configure arbitrary options to configure the returned
 // client.Context.
 func (b *broadcaster) GetClientContext(ctx context.Context, wallet types.Wallet) (client.Context, error) {
-	chain := b.chain
-	cn := chain.GetNode()
+	cn := b.getNode()
 
 	_, ok := b.keyrings[wallet]
 	if !ok {
@@ -151,12 +153,20 @@ func (b *broadcaster) UnmarshalTxResponseBytes(ctx context.Context, bytes []byte
 	return resp, nil
 }
 
+// getNode returns the node to use for broadcasting (specific node or chain default).
+func (b *broadcaster) getNode() *ChainNode {
+	if b.node != nil {
+		return b.node
+	}
+	return b.chain.GetNode()
+}
+
 // defaultClientContext returns a default client context configured with the wallet as the sender.
 func (b *broadcaster) defaultClientContext(fromWallet types.Wallet, sdkAdd sdk.AccAddress) client.Context {
 	// initialize a clean buffer each time
 	b.buf.Reset()
 	kr := b.keyrings[fromWallet]
-	cn := b.chain.GetNode()
+	cn := b.getNode()
 	return cn.CliContext().
 		WithOutput(b.buf).
 		WithFrom(fromWallet.GetFormattedAddress()).
@@ -276,7 +286,11 @@ func (b *broadcaster) BroadcastMessages(ctx context.Context, signingWallet types
 		msgType := reflect.TypeOf(msg).Elem().Name()
 		msgTypes = append(msgTypes, msgType)
 	}
-	b.t.Logf("broadcasted msg from wallet address %s; message types: %s; tx hash: %s", signingWallet.GetFormattedAddress(), msgTypes, respWithTxHash.TxHash)
+
+	b.chain.log.Info("broadcasted message",
+		zap.String("wallet_address", signingWallet.GetFormattedAddress()),
+		zap.Strings("message_types", msgTypes),
+		zap.String("tx_hash", respWithTxHash.TxHash))
 
 	return getFullyPopulatedResponse(ctx, cc, respWithTxHash.TxHash)
 }

@@ -107,6 +107,58 @@ Tastora supports configurable internal ports for DA nodes, solving connectivity 
 
 This addresses the issue where celestia bridge nodes fail to start when trying to connect to hardcoded `localhost:26657` in multi-server setups.
 
+## Fine-Grained Wallet Control
+
+Tastora supports creating wallets on specific chain nodes, providing flexibility for testing scenarios that require granular control over wallet placement and key management.
+
+### Node-Specific Wallet Creation
+
+Create wallets on specific validators or full nodes:
+
+```go
+// Create wallet on a specific validator
+wallet1, err := chain.Validators[0].CreateWallet(ctx, "test-key-1", "celestia")
+if err != nil {
+    t.Fatal(err)
+}
+
+// Create wallet on a different validator
+wallet2, err := chain.Validators[1].CreateWallet(ctx, "test-key-2", "celestia") 
+if err != nil {
+    t.Fatal(err)
+}
+
+// Create wallet on a full node
+wallet3, err := chain.FullNodes[0].CreateWallet(ctx, "test-key-3", "celestia")
+if err != nil {
+    t.Fatal(err)
+}
+```
+
+### Faucet Wallet Access
+
+The faucet wallet is accessible on all validator nodes with automatically synchronized keys:
+
+```go
+// Access faucet wallet from any validator
+faucetWallet := chain.Validators[0].GetFaucetWallet()
+
+// Or from another validator - same wallet, synchronized keys
+faucetWallet2 := chain.Validators[1].GetFaucetWallet()
+
+// Chain-level access works (delegates to Validator[0])
+chainFaucetWallet := chain.GetFaucetWallet()
+```
+
+### Backward Compatibility
+
+Existing `chain.CreateWallet()` calls continue to work unchanged:
+
+```go
+// This works exactly as before
+wallet, err := chain.CreateWallet(ctx, "my-wallet")
+```
+
 ## Project Structure
 
 - `framework/` - Core framework code
