@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"github.com/celestiaorg/tastora/framework/docker/ibc"
 	"github.com/celestiaorg/tastora/framework/docker/ibc/relayer"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/sync/errgroup"
@@ -34,11 +33,13 @@ func (s *DockerTestSuite) TestIBC() {
 	r, err := relayer.NewHermes(ctx, s.dockerClient, s.T().Name(), s.networkID, zaptest.NewLogger(s.T()))
 	s.Require().NoError(err)
 
-	connector := ibc.NewConnector(s.chain, chainB, r)
-	err = connector.SetupRelayerWallets(ctx)
+	err = r.SetupWallets(ctx, s.chain, chainB)
 	s.Require().NoError(err)
 
-	err = connector.Connect(ctx)
+	err = r.Init(ctx)
+	s.Require().NoError(err)
+
+	err = r.Connect(ctx, s.chain, chainB)
 	s.Require().NoError(err)
 
 }

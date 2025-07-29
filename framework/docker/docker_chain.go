@@ -62,8 +62,8 @@ func (c *Chain) GetChainConfig() types.ChainConfig {
 		Denom:        c.cfg.ChainConfig.Denom,
 		GasPrices:    c.cfg.ChainConfig.GasPrices,
 		Bech32Prefix: c.cfg.ChainConfig.Bech32Prefix,
-		RPCAddress:   c.GetHostRPCAddress(),
-		GRPCAddress:  c.GetGRPCAddress(),
+		RPCAddress:   "http://" + c.GetNode().Name() + ":26657",
+		GRPCAddress:  "http://" + c.GetNode().Name() + ":9090",
 	}
 }
 

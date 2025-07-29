@@ -4,13 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/celestiaorg/tastora/framework/docker/ibc"
-	"github.com/celestiaorg/tastora/framework/types"
-	dockerclient "github.com/moby/moby/client"
-	"go.uber.org/zap"
 	"path"
 	"strings"
+
+	sdkmath "cosmossdk.io/math"
+	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/ibc"
+	"github.com/celestiaorg/tastora/framework/testutil/sdkacc"
+	"github.com/celestiaorg/tastora/framework/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	dockerclient "github.com/moby/moby/client"
+	"go.uber.org/zap"
 )
 
 const (
@@ -114,13 +119,75 @@ func (h *Hermes) Stop(ctx context.Context) error {
 	return nil
 }
 
-// CreateClients creates IBC clients on both chains.
-func (h *Hermes) CreateClients(ctx context.Context, chainA, chainB types.Chain) error {
-	// generate Hermes configuration
-	if err := h.generateConfig(ctx); err != nil {
-		return fmt.Errorf("failed to generate hermes config: %w", err)
+// Init initializes the relayer configuration
+func (h *Hermes) Init(ctx context.Context) error {
+	return h.generateConfig(ctx)
+}
+
+// SetupWallets creates and funds relayer wallets on both chains
+func (h *Hermes) SetupWallets(ctx context.Context, chainA, chainB types.Chain) error {
+	// Create relayer wallet on chain A
+	walletNameA := fmt.Sprintf("relayer-%s", chainA.GetChainID())
+	relayerWalletA, err := chainA.CreateWallet(ctx, walletNameA)
+	if err != nil {
+		return fmt.Errorf("failed to create relayer wallet on chain A: %w", err)
 	}
 
+	// Create relayer wallet on chain B
+	walletNameB := fmt.Sprintf("relayer-%s", chainB.GetChainID())
+	relayerWalletB, err := chainB.CreateWallet(ctx, walletNameB)
+	if err != nil {
+		return fmt.Errorf("failed to create relayer wallet on chain B: %w", err)
+	}
+
+	// Fund both wallets from faucets
+	err = h.fundRelayerWallet(ctx, chainA, relayerWalletA)
+	if err != nil {
+		return fmt.Errorf("failed to fund relayer wallet on chain A: %w", err)
+	}
+
+	err = h.fundRelayerWallet(ctx, chainB, relayerWalletB)
+	if err != nil {
+		return fmt.Errorf("failed to fund relayer wallet on chain B: %w", err)
+	}
+
+	// Configure relayer with wallets and chains
+	if err := h.AddChain(chainA); err != nil {
+		return fmt.Errorf("failed to add chain A to relayer: %w", err)
+	}
+
+	if err := h.AddChain(chainB); err != nil {
+		return fmt.Errorf("failed to add chain B to relayer: %w", err)
+	}
+
+	if err := h.AddWallet(chainA.GetChainID(), relayerWalletA); err != nil {
+		return fmt.Errorf("failed to add chain A wallet to relayer: %w", err)
+	}
+
+	if err := h.AddWallet(chainB.GetChainID(), relayerWalletB); err != nil {
+		return fmt.Errorf("failed to add chain B wallet to relayer: %w", err)
+	}
+
+	return nil
+}
+
+// Connect establishes IBC connection between the two chains
+func (h *Hermes) Connect(ctx context.Context, chainA, chainB types.Chain) error {
+	// Create clients
+	if err := h.CreateClients(ctx, chainA, chainB); err != nil {
+		return fmt.Errorf("failed to create IBC clients: %w", err)
+	}
+
+	// Create connections
+	if err := h.CreateConnections(ctx, chainA, chainB); err != nil {
+		return fmt.Errorf("failed to create IBC connections: %w", err)
+	}
+
+	return nil
+}
+
+// CreateClients creates IBC clients on both chains.
+func (h *Hermes) CreateClients(ctx context.Context, chainA, chainB types.Chain) error {
 	cmd := []string{"hermes", "--json", "create", "client", "--host-chain", chainA.GetChainID(), "--reference-chain", chainB.GetChainID()}
 	_, _, err := h.Exec(ctx, h.Logger, cmd, nil)
 	if err != nil {
@@ -251,13 +318,48 @@ func (h *Hermes) generateConfig(ctx context.Context) error {
 		zap.Int("config_size", len(configTOML)),
 		zap.Int("chains_count", len(h.chains)),
 		zap.String("file_path", path.Join(h.HomeDir(), configPath)),
+		zap.String("config_content", string(configTOML)),
 	)
 	for chainID := range h.chains {
 		h.Logger.Info("Chain configured", zap.String("chain_id", chainID))
 	}
 
-	//fileBz, err := h.ReadFile(ctx, configPath)
-	//h.Logger.Info("Hermes config read", zap.String("file", string(fileBz)))
+	return nil
+}
+
+// fundRelayerWallet funds a relayer wallet from a faucet wallet.
+func (h *Hermes) fundRelayerWallet(ctx context.Context, chain types.Chain, relayerWallet types.Wallet) error {
+	// Get the chain's faucet wallet and config
+	faucet := chain.GetFaucetWallet()
+	chainConfig := chain.GetChainConfig()
+
+	// Get addresses from wallets
+	fromAddr, err := sdkacc.AddressFromWallet(faucet)
+	if err != nil {
+		return fmt.Errorf("failed to get faucet address: %w", err)
+	}
+
+	toAddr, err := sdkacc.AddressFromWallet(relayerWallet)
+	if err != nil {
+		return fmt.Errorf("failed to get relayer wallet address: %w", err)
+	}
+
+	// Define amount to fund the relayer wallet (enough for relayer operations)
+	// Use the chain's native denom from the config
+	fundAmount := sdk.NewCoins(sdk.NewCoin(chainConfig.Denom, sdkmath.NewInt(10000000))) // 10 tokens
+
+	// Create bank send message
+	bankSend := banktypes.NewMsgSend(fromAddr, toAddr, fundAmount)
+
+	// Broadcast the funding transaction
+	resp, err := chain.BroadcastMessages(ctx, faucet, bankSend)
+	if err != nil {
+		return fmt.Errorf("failed to broadcast funding transaction: %w", err)
+	}
+
+	if resp.Code != 0 {
+		return fmt.Errorf("funding transaction failed: %s", resp.RawLog)
+	}
 
 	return nil
 }

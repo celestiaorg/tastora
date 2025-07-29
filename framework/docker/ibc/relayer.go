@@ -14,6 +14,15 @@ type Relayer interface {
 	// Stop stops the relayer.
 	Stop(ctx context.Context) error
 
+	// Init initializes the relayer configuration
+	Init(ctx context.Context) error
+
+	// SetupWallets creates and funds relayer wallets on both chains
+	SetupWallets(ctx context.Context, chainA, chainB types.Chain) error
+
+	// Connect establishes IBC connection between the two chains
+	Connect(ctx context.Context, chainA, chainB types.Chain) error
+
 	// CreateClients creates IBC clients on both chains.
 	CreateClients(ctx context.Context, chainA, chainB types.Chain) error
 
