@@ -4,19 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
-
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/ibc"
 	"github.com/celestiaorg/tastora/framework/types"
 	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
+	"path"
+	"strings"
 )
 
 const (
 	hermesDefaultImage   = "ghcr.io/informalsystems/hermes"
 	hermesDefaultVersion = "1.13.1"
-	hermesDefaultUIDGID  = "1000:1000"
+	hermesDefaultUIDGID  = "2000:2000"
 	hermesHomeDir        = "/home/hermes"
 )
 
@@ -78,6 +78,9 @@ func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName,
 		wallets: make(map[string]types.Wallet),
 	}
 
+	// Set the user for Hermes execution
+	//hermes.SetUser(hermesDefaultUIDGID)
+
 	// Create and setup volume for Hermes
 	if err := hermes.CreateAndSetupVolume(ctx, "hermes"); err != nil {
 		return nil, err
@@ -118,13 +121,13 @@ func (h *Hermes) CreateClients(ctx context.Context, chainA, chainB types.Chain) 
 		return fmt.Errorf("failed to generate hermes config: %w", err)
 	}
 
-	cmd := []string{"hermes", "create", "client", "--host-chain", chainA.GetChainID(), "--reference-chain", chainB.GetChainID()}
+	cmd := []string{"hermes", "--json", "create", "client", "--host-chain", chainA.GetChainID(), "--reference-chain", chainB.GetChainID()}
 	_, _, err := h.Exec(ctx, h.Logger, cmd, nil)
 	if err != nil {
 		return err
 	}
 
-	cmd = []string{"hermes", "create", "client", "--host-chain", chainB.GetChainID(), "--reference-chain", chainA.GetChainID()}
+	cmd = []string{"hermes", "--json", "create", "client", "--host-chain", chainB.GetChainID(), "--reference-chain", chainA.GetChainID()}
 	_, _, err = h.Exec(ctx, h.Logger, cmd, nil)
 	return err
 }
@@ -208,7 +211,6 @@ func (h *Hermes) extractJSONResult(stdout []byte) []byte {
 // AddWallet adds a wallet for the specified chain ID to the relayer configuration.
 func (h *Hermes) AddWallet(chainID string, wallet types.Wallet) error {
 	h.wallets[chainID] = wallet
-	// TODO: Add wallet to Hermes config
 	return nil
 }
 
@@ -244,6 +246,18 @@ func (h *Hermes) generateConfig(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to write hermes config: %w", err)
 	}
+
+	h.Logger.Info("Hermes config written",
+		zap.Int("config_size", len(configTOML)),
+		zap.Int("chains_count", len(h.chains)),
+		zap.String("file_path", path.Join(h.HomeDir(), configPath)),
+	)
+	for chainID := range h.chains {
+		h.Logger.Info("Chain configured", zap.String("chain_id", chainID))
+	}
+
+	//fileBz, err := h.ReadFile(ctx, configPath)
+	//h.Logger.Info("Hermes config read", zap.String("file", string(fileBz)))
 
 	return nil
 }

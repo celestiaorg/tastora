@@ -25,6 +25,7 @@ type Node struct {
 	nodeType           string
 	Index              int
 	Logger             *zap.Logger
+	user               string
 }
 
 // NewNode creates a new Node instance with the required parameters.
@@ -66,6 +67,7 @@ func (n *Node) Exec(ctx context.Context, logger *zap.Logger, cmd []string, env [
 	opts := Options{
 		Env:   env,
 		Binds: n.Bind(),
+		//User:  n.user,
 	}
 	res := job.Run(ctx, cmd, opts)
 	if res.Err != nil {
@@ -82,6 +84,11 @@ func (n *Node) Bind() []string {
 // GetType returns the Node type as a string.
 func (n *Node) GetType() string {
 	return n.nodeType
+}
+
+// SetUser sets the user for container execution.
+func (n *Node) SetUser(user string) {
+	n.user = user
 }
 
 // RemoveContainer gracefully stops and removes the container associated with the Node using the provided context.
