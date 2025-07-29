@@ -92,7 +92,11 @@ func (h *Hermes) Start(ctx context.Context) error {
 		return nil
 	}
 	
-	// TODO: Generate Hermes configuration
+	// Generate Hermes configuration
+	if err := h.generateConfig(ctx); err != nil {
+		return fmt.Errorf("failed to generate hermes config: %w", err)
+	}
+	
 	// TODO: Start Hermes Docker container as daemon
 	h.started = true
 	return nil
@@ -238,6 +242,35 @@ func (h *Hermes) AddWallet(chainID string, wallet types.Wallet) error {
 // AddChain adds a chain to the relayer configuration.
 func (h *Hermes) AddChain(chain types.Chain) error {
 	h.chains[chain.GetChainID()] = chain
-	// TODO: Add chain to Hermes config
+	return nil
+}
+
+// generateConfig creates the Hermes configuration file and writes it to the container
+func (h *Hermes) generateConfig(ctx context.Context) error {
+	// Collect chain configs from all added chains
+	chainConfigs := make([]types.ChainConfig, 0, len(h.chains))
+	for _, chain := range h.chains {
+		chainConfigs = append(chainConfigs, chain.GetChainConfig())
+	}
+	
+	// Generate Hermes config
+	hermesConfig, err := NewHermesConfig(chainConfigs)
+	if err != nil {
+		return fmt.Errorf("failed to create hermes config: %w", err)
+	}
+	
+	// Convert to TOML
+	configTOML, err := hermesConfig.ToTOML()
+	if err != nil {
+		return fmt.Errorf("failed to marshal hermes config: %w", err)
+	}
+	
+	// Write config to the container volume
+	configPath := "config.toml"
+	err = h.WriteFile(ctx, configPath, configTOML)
+	if err != nil {
+		return fmt.Errorf("failed to write hermes config: %w", err)
+	}
+	
 	return nil
 }

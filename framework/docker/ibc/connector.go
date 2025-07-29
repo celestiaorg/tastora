@@ -2,9 +2,13 @@ package ibc
 
 import (
 	"context"
+	sdkmath "cosmossdk.io/math"
 	"fmt"
 
+	"github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
 // Connector orchestrates IBC connections between two chains.
@@ -49,12 +53,12 @@ func (c *Connector) SetupRelayerWallets(ctx context.Context) error {
 	}
 
 	// Fund both wallets from faucets
-	err = c.fundRelayerWallet(ctx, c.chainA, c.chainA.GetFaucetWallet(), relayerWalletA)
+	err = c.fundRelayerWallet(ctx, c.chainA, relayerWalletA)
 	if err != nil {
 		return fmt.Errorf("failed to fund relayer wallet on chain A: %w", err)
 	}
 
-	err = c.fundRelayerWallet(ctx, c.chainB, c.chainB.GetFaucetWallet(), relayerWalletB)
+	err = c.fundRelayerWallet(ctx, c.chainB, relayerWalletB)
 	if err != nil {
 		return fmt.Errorf("failed to fund relayer wallet on chain B: %w", err)
 	}
@@ -122,8 +126,38 @@ func (c *Connector) CreateChannel(ctx context.Context, opts CreateChannelOptions
 }
 
 // fundRelayerWallet funds a relayer wallet from a faucet wallet.
-func (c *Connector) fundRelayerWallet(ctx context.Context, chain types.Chain, faucet, relayerWallet types.Wallet) error {
-	// TODO: Implement actual funding logic
-	// This would typically involve sending tokens from the faucet to the relayer wallet
+func (c *Connector) fundRelayerWallet(ctx context.Context, chain types.Chain, relayerWallet types.Wallet) error {
+	// Get the chain's faucet wallet and config
+	faucet := chain.GetFaucetWallet()
+	chainConfig := chain.GetChainConfig()
+
+	// Get addresses from wallets
+	fromAddr, err := sdkacc.AddressFromWallet(faucet)
+	if err != nil {
+		return fmt.Errorf("failed to get faucet address: %w", err)
+	}
+
+	toAddr, err := sdkacc.AddressFromWallet(relayerWallet)
+	if err != nil {
+		return fmt.Errorf("failed to get relayer wallet address: %w", err)
+	}
+
+	// Define amount to fund the relayer wallet (enough for relayer operations)
+	// Use the chain's native denom from the config
+	fundAmount := sdk.NewCoins(sdk.NewCoin(chainConfig.Denom, sdkmath.NewInt(10000000))) // 10 tokens
+
+	// Create bank send message
+	bankSend := banktypes.NewMsgSend(fromAddr, toAddr, fundAmount)
+
+	// Broadcast the funding transaction
+	resp, err := chain.BroadcastMessages(ctx, faucet, bankSend)
+	if err != nil {
+		return fmt.Errorf("failed to broadcast funding transaction: %w", err)
+	}
+
+	if resp.Code != 0 {
+		return fmt.Errorf("funding transaction failed: %s", resp.RawLog)
+	}
+
 	return nil
 }

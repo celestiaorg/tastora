@@ -8,6 +8,16 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
+// ChainConfig represents the minimal chain information needed for IBC operations.
+type ChainConfig struct {
+	ChainID      string
+	Denom        string
+	GasPrices    string
+	Bech32Prefix string
+	RPCAddress   string
+	GRPCAddress  string
+}
+
 type Chain interface {
 	// Height returns the current height of the chain.
 	Height(ctx context.Context) (int64, error)
@@ -35,6 +45,8 @@ type Chain interface {
 	GetFaucetWallet() Wallet
 	// GetChainID returns the chain ID.
 	GetChainID() string
+	// GetChainConfig returns the chain configuration.
+	GetChainConfig() ChainConfig
 }
 
 type ChainNode interface {
