@@ -56,6 +56,17 @@ type Chain struct {
 	started bool
 }
 
+func (c *Chain) GetChainConfig() types.ChainConfig {
+	return types.ChainConfig{
+		ChainID:      c.GetChainID(),
+		Denom:        c.cfg.ChainConfig.Denom,
+		GasPrices:    c.cfg.ChainConfig.GasPrices,
+		Bech32Prefix: c.cfg.ChainConfig.Bech32Prefix,
+		RPCAddress:   c.GetHostRPCAddress(),
+		GRPCAddress:  c.GetGRPCAddress(),
+	}
+}
+
 // GetFaucetWallet retrieves the faucet wallet for the chain.
 func (c *Chain) GetFaucetWallet() types.Wallet {
 	return c.Validators[0].GetFaucetWallet()

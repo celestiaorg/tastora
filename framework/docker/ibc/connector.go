@@ -79,7 +79,7 @@ func (c *Connector) SetupRelayerWallets(ctx context.Context) error {
 	if err := c.relayer.AddWallet(c.chainB.GetChainID(), relayerWalletB); err != nil {
 		return fmt.Errorf("failed to add chain B wallet to relayer: %w", err)
 	}
-
+	
 	// Store for later use
 	c.relayerWalletA = relayerWalletA
 	c.relayerWalletB = relayerWalletB

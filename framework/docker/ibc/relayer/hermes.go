@@ -15,7 +15,7 @@ import (
 
 const (
 	hermesDefaultImage   = "ghcr.io/informalsystems/hermes"
-	hermesDefaultVersion = "1.8.2"
+	hermesDefaultVersion = "1.13.1"
 	hermesDefaultUIDGID  = "1000:1000"
 	hermesHomeDir        = "/home/hermes"
 )
@@ -39,11 +39,11 @@ type ChannelSide struct {
 // Hermes implements the IBC relayer interface using Hermes.
 type Hermes struct {
 	*container.Node
-	
+
 	// Configuration
 	chains  map[string]types.Chain
 	wallets map[string]types.Wallet
-	
+
 	// Runtime state
 	started bool
 }
@@ -91,12 +91,7 @@ func (h *Hermes) Start(ctx context.Context) error {
 	if h.started {
 		return nil
 	}
-	
-	// Generate Hermes configuration
-	if err := h.generateConfig(ctx); err != nil {
-		return fmt.Errorf("failed to generate hermes config: %w", err)
-	}
-	
+
 	// TODO: Start Hermes Docker container as daemon
 	h.started = true
 	return nil
@@ -107,14 +102,11 @@ func (h *Hermes) Stop(ctx context.Context) error {
 	if !h.started {
 		return nil
 	}
-	
-	// Stop the container if it's running
-	if h.ContainerLifecycle != nil {
-		if err := h.StopContainer(ctx); err != nil {
-			return err
-		}
+
+	if err := h.StopContainer(ctx); err != nil {
+		return err
 	}
-	
+
 	h.started = false
 	return nil
 }
@@ -123,19 +115,24 @@ func (h *Hermes) Stop(ctx context.Context) error {
 func (h *Hermes) CreateClients(ctx context.Context, chainA, chainB types.Chain) error {
 	// Use container.Job to execute hermes create client commands
 	job := container.NewJob(h.Logger, h.DockerClient, h.NetworkID, h.TestName, hermesDefaultImage, hermesDefaultVersion)
-	
+
 	opts := container.Options{
 		Binds: h.Bind(),
 	}
-	
+
+	// generate Hermes configuration
+	if err := h.generateConfig(ctx); err != nil {
+		return fmt.Errorf("failed to generate hermes config: %w", err)
+	}
+
 	// TODO: Execute hermes create client command for chainA->chainB
 	cmd := []string{"hermes", "create", "client", "--host-chain", chainA.GetChainID(), "--reference-chain", chainB.GetChainID()}
 	result := job.Run(ctx, cmd, opts)
 	if result.Err != nil {
 		return result.Err
 	}
-	
-	// TODO: Execute hermes create client command for chainB->chainA  
+
+	// TODO: Execute hermes create client command for chainB->chainA
 	cmd = []string{"hermes", "create", "client", "--host-chain", chainB.GetChainID(), "--reference-chain", chainA.GetChainID()}
 	result = job.Run(ctx, cmd, opts)
 	return result.Err
@@ -145,11 +142,11 @@ func (h *Hermes) CreateClients(ctx context.Context, chainA, chainB types.Chain) 
 func (h *Hermes) CreateConnections(ctx context.Context, chainA, chainB types.Chain) error {
 	// Use container.Job to execute hermes create connection commands
 	job := container.NewJob(h.Logger, h.DockerClient, h.NetworkID, h.TestName, hermesDefaultImage, hermesDefaultVersion)
-	
+
 	opts := container.Options{
 		Binds: h.Bind(),
 	}
-	
+
 	// TODO: Execute hermes create connection command
 	cmd := []string{"hermes", "create", "connection", "--a-chain", chainA.GetChainID(), "--b-chain", chainB.GetChainID()}
 	result := job.Run(ctx, cmd, opts)
@@ -160,18 +157,18 @@ func (h *Hermes) CreateConnections(ctx context.Context, chainA, chainB types.Cha
 func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, opts ibc.CreateChannelOptions) (*ibc.Channel, error) {
 	// Use container.Job to execute hermes create channel commands
 	job := container.NewJob(h.Logger, h.DockerClient, h.NetworkID, h.TestName, hermesDefaultImage, hermesDefaultVersion)
-	
+
 	runOpts := container.Options{
 		Binds: h.Bind(),
 	}
-	
+
 	// Execute hermes create channel command
 	cmd := []string{
 		"hermes", "create", "channel",
 		"--order", string(opts.Order),
 		"--a-chain", chainA.GetChainID(),
 		"--a-port", opts.SourcePortName,
-		"--b-chain", chainB.GetChainID(), 
+		"--b-chain", chainB.GetChainID(),
 		"--b-port", opts.DestPortName,
 		"--channel-version", opts.Version,
 	}
@@ -179,13 +176,13 @@ func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, 
 	if result.Err != nil {
 		return nil, result.Err
 	}
-	
+
 	// Parse channel information from hermes output
 	channel, err := h.parseCreateChannelOutput(string(result.Stdout), opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse hermes create channel output: %w", err)
 	}
-	
+
 	return channel, nil
 }
 
@@ -196,7 +193,7 @@ func (h *Hermes) parseCreateChannelOutput(output string, opts ibc.CreateChannelO
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse channel IDs: %w", err)
 	}
-	
+
 	channel := &ibc.Channel{
 		ChannelID:        channelA,
 		CounterpartyID:   channelB,
@@ -206,7 +203,7 @@ func (h *Hermes) parseCreateChannelOutput(output string, opts ibc.CreateChannelO
 		Version:          opts.Version,
 		State:            "OPEN",
 	}
-	
+
 	return channel, nil
 }
 
@@ -252,25 +249,25 @@ func (h *Hermes) generateConfig(ctx context.Context) error {
 	for _, chain := range h.chains {
 		chainConfigs = append(chainConfigs, chain.GetChainConfig())
 	}
-	
+
 	// Generate Hermes config
 	hermesConfig, err := NewHermesConfig(chainConfigs)
 	if err != nil {
 		return fmt.Errorf("failed to create hermes config: %w", err)
 	}
-	
+
 	// Convert to TOML
 	configTOML, err := hermesConfig.ToTOML()
 	if err != nil {
 		return fmt.Errorf("failed to marshal hermes config: %w", err)
 	}
-	
+
 	// Write config to the container volume
-	configPath := "config.toml"
+	configPath := ".hermes/config.toml"
 	err = h.WriteFile(ctx, configPath, configTOML)
 	if err != nil {
 		return fmt.Errorf("failed to write hermes config: %w", err)
 	}
-	
+
 	return nil
 }
