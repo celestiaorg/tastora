@@ -109,17 +109,9 @@ func (c *Connector) CreateChannel(ctx context.Context, opts CreateChannelOptions
 		return nil, fmt.Errorf("chains must be connected before creating channels")
 	}
 
-	if err := c.relayer.CreateChannel(ctx, c.chainA, c.chainB, opts); err != nil {
+	channel, err := c.relayer.CreateChannel(ctx, c.chainA, c.chainB, opts)
+	if err != nil {
 		return nil, fmt.Errorf("failed to create IBC channel: %w", err)
-	}
-
-	// TODO: Query the actual channel information from the chains
-	channel := &Channel{
-		PortID:           opts.SourcePortName,
-		CounterpartyPort: opts.DestPortName,
-		Order:            opts.Order,
-		Version:          opts.Version,
-		State:            "OPEN",
 	}
 
 	// Store channel for later reference

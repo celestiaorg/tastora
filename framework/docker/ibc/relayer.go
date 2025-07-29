@@ -21,7 +21,7 @@ type Relayer interface {
 	CreateConnections(ctx context.Context, chainA, chainB types.Chain) error
 
 	// CreateChannel creates an IBC channel between the chains.
-	CreateChannel(ctx context.Context, chainA, chainB types.Chain, opts CreateChannelOptions) error
+	CreateChannel(ctx context.Context, chainA, chainB types.Chain, opts CreateChannelOptions) (*Channel, error)
 
 	// AddWallet adds a wallet for the specified chain ID to the relayer configuration.
 	AddWallet(chainID string, wallet types.Wallet) error

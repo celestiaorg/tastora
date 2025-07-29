@@ -2,7 +2,9 @@ package relayer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/ibc"
@@ -17,6 +19,22 @@ const (
 	hermesDefaultUIDGID  = "1000:1000"
 	hermesHomeDir        = "/home/hermes"
 )
+
+// ChannelCreationResponse represents the response from hermes create channel command
+type ChannelCreationResponse struct {
+	Result CreateChannelResult `json:"result"`
+}
+
+// CreateChannelResult holds channel information for both sides
+type CreateChannelResult struct {
+	ASide ChannelSide `json:"a_side"`
+	BSide ChannelSide `json:"b_side"`
+}
+
+// ChannelSide captures the channel ID for each side
+type ChannelSide struct {
+	ChannelID string `json:"channel_id"`
+}
 
 // Hermes implements the IBC relayer interface using Hermes.
 type Hermes struct {
@@ -135,7 +153,7 @@ func (h *Hermes) CreateConnections(ctx context.Context, chainA, chainB types.Cha
 }
 
 // CreateChannel creates an IBC channel between the chains.
-func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, opts ibc.CreateChannelOptions) error {
+func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, opts ibc.CreateChannelOptions) (*ibc.Channel, error) {
 	// Use container.Job to execute hermes create channel commands
 	job := container.NewJob(h.Logger, h.DockerClient, h.NetworkID, h.TestName, hermesDefaultImage, hermesDefaultVersion)
 	
@@ -143,7 +161,7 @@ func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, 
 		Binds: h.Bind(),
 	}
 	
-	// TODO: Execute hermes create channel command
+	// Execute hermes create channel command
 	cmd := []string{
 		"hermes", "create", "channel",
 		"--order", string(opts.Order),
@@ -154,7 +172,60 @@ func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, 
 		"--channel-version", opts.Version,
 	}
 	result := job.Run(ctx, cmd, runOpts)
-	return result.Err
+	if result.Err != nil {
+		return nil, result.Err
+	}
+	
+	// Parse channel information from hermes output
+	channel, err := h.parseCreateChannelOutput(string(result.Stdout), opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse hermes create channel output: %w", err)
+	}
+	
+	return channel, nil
+}
+
+// parseCreateChannelOutput parses the output from hermes create channel command
+func (h *Hermes) parseCreateChannelOutput(output string, opts ibc.CreateChannelOptions) (*ibc.Channel, error) {
+	// Extract channel IDs using the same approach as interchaintest
+	channelA, channelB, err := h.getChannelIDsFromStdout([]byte(output))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse channel IDs: %w", err)
+	}
+	
+	channel := &ibc.Channel{
+		ChannelID:        channelA,
+		CounterpartyID:   channelB,
+		PortID:           opts.SourcePortName,
+		CounterpartyPort: opts.DestPortName,
+		Order:            opts.Order,
+		Version:          opts.Version,
+		State:            "OPEN",
+	}
+	
+	return channel, nil
+}
+
+// getChannelIDsFromStdout extracts channel IDs from hermes stdout
+func (h *Hermes) getChannelIDsFromStdout(stdout []byte) (string, string, error) {
+	var channelResponse ChannelCreationResponse
+	if err := json.Unmarshal(h.extractJSONResult(stdout), &channelResponse); err != nil {
+		return "", "", fmt.Errorf("failed to unmarshal channel creation response: %w", err)
+	}
+	return channelResponse.Result.ASide.ChannelID, channelResponse.Result.BSide.ChannelID, nil
+}
+
+// extractJSONResult extracts the JSON result line from hermes output
+func (h *Hermes) extractJSONResult(stdout []byte) []byte {
+	stdoutLines := strings.Split(string(stdout), "\n")
+	var jsonOutput string
+	for _, line := range stdoutLines {
+		if strings.Contains(line, "result") {
+			jsonOutput = line
+			break
+		}
+	}
+	return []byte(jsonOutput)
 }
 
 // AddWallet adds a wallet for the specified chain ID to the relayer configuration.
