@@ -113,55 +113,31 @@ func (h *Hermes) Stop(ctx context.Context) error {
 
 // CreateClients creates IBC clients on both chains.
 func (h *Hermes) CreateClients(ctx context.Context, chainA, chainB types.Chain) error {
-	// Use container.Job to execute hermes create client commands
-	job := container.NewJob(h.Logger, h.DockerClient, h.NetworkID, h.TestName, hermesDefaultImage, hermesDefaultVersion)
-
-	opts := container.Options{
-		Binds: h.Bind(),
-	}
-
 	// generate Hermes configuration
 	if err := h.generateConfig(ctx); err != nil {
 		return fmt.Errorf("failed to generate hermes config: %w", err)
 	}
 
-	// TODO: Execute hermes create client command for chainA->chainB
 	cmd := []string{"hermes", "create", "client", "--host-chain", chainA.GetChainID(), "--reference-chain", chainB.GetChainID()}
-	result := job.Run(ctx, cmd, opts)
-	if result.Err != nil {
-		return result.Err
+	_, _, err := h.Exec(ctx, h.Logger, cmd, nil)
+	if err != nil {
+		return err
 	}
 
-	// TODO: Execute hermes create client command for chainB->chainA
 	cmd = []string{"hermes", "create", "client", "--host-chain", chainB.GetChainID(), "--reference-chain", chainA.GetChainID()}
-	result = job.Run(ctx, cmd, opts)
-	return result.Err
+	_, _, err = h.Exec(ctx, h.Logger, cmd, nil)
+	return err
 }
 
 // CreateConnections creates IBC connections between the chains.
 func (h *Hermes) CreateConnections(ctx context.Context, chainA, chainB types.Chain) error {
-	// Use container.Job to execute hermes create connection commands
-	job := container.NewJob(h.Logger, h.DockerClient, h.NetworkID, h.TestName, hermesDefaultImage, hermesDefaultVersion)
-
-	opts := container.Options{
-		Binds: h.Bind(),
-	}
-
-	// TODO: Execute hermes create connection command
 	cmd := []string{"hermes", "create", "connection", "--a-chain", chainA.GetChainID(), "--b-chain", chainB.GetChainID()}
-	result := job.Run(ctx, cmd, opts)
-	return result.Err
+	_, _, err := h.Exec(ctx, h.Logger, cmd, nil)
+	return err
 }
 
 // CreateChannel creates an IBC channel between the chains.
 func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, opts ibc.CreateChannelOptions) (*ibc.Channel, error) {
-	// Use container.Job to execute hermes create channel commands
-	job := container.NewJob(h.Logger, h.DockerClient, h.NetworkID, h.TestName, hermesDefaultImage, hermesDefaultVersion)
-
-	runOpts := container.Options{
-		Binds: h.Bind(),
-	}
-
 	// Execute hermes create channel command
 	cmd := []string{
 		"hermes", "create", "channel",
@@ -172,13 +148,13 @@ func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, 
 		"--b-port", opts.DestPortName,
 		"--channel-version", opts.Version,
 	}
-	result := job.Run(ctx, cmd, runOpts)
-	if result.Err != nil {
-		return nil, result.Err
+	stdout, _, err := h.Exec(ctx, h.Logger, cmd, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	// Parse channel information from hermes output
-	channel, err := h.parseCreateChannelOutput(string(result.Stdout), opts)
+	channel, err := h.parseCreateChannelOutput(string(stdout), opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse hermes create channel output: %w", err)
 	}

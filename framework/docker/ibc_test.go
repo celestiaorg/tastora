@@ -33,7 +33,7 @@ func (s *DockerTestSuite) TestIBC() {
 
 	r, err := relayer.NewHermes(ctx, s.dockerClient, s.T().Name(), s.networkID, zaptest.NewLogger(s.T()))
 	s.Require().NoError(err)
-	
+
 	connector := ibc.NewConnector(s.chain, chainB, r)
 	err = connector.SetupRelayerWallets(ctx)
 	s.Require().NoError(err)
