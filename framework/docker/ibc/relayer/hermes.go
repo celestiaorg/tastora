@@ -11,6 +11,7 @@ import (
 	sdkmath "cosmossdk.io/math"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/ibc"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -23,10 +24,10 @@ import (
 const (
 	hermesDefaultImage   = "ghcr.io/informalsystems/hermes"
 	hermesDefaultVersion = "1.13.1"
-	hermesDefaultUIDGID  = "2000:2000"
-	hermesHomeDir        = "/home/hermes"
+	//hermesDefaultVersion = "1.8.2"
+	hermesDefaultUIDGID = "2000:2000"
+	hermesHomeDir       = "/home/hermes"
 )
-
 
 // Hermes implements the IBC relayer interface using Hermes.
 type Hermes struct {
@@ -59,32 +60,48 @@ func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName,
 		logger,
 	)
 
-	// Create container lifecycle
-	containerName := fmt.Sprintf("%s-hermes", testName)
-	lifecycle := container.NewLifecycle(logger, dockerClient, containerName)
-	node.SetContainerLifecycle(lifecycle)
-
 	hermes := &Hermes{
 		Node:    node,
 		chains:  make(map[string]types.Chain),
 		wallets: make(map[string]types.Wallet),
 	}
 
+	lifecycle := container.NewLifecycle(logger, dockerClient, hermes.Name())
+	hermes.SetContainerLifecycle(lifecycle)
+
 	// Create and setup volume for Hermes
-	if err := hermes.CreateAndSetupVolume(ctx, "hermes"); err != nil {
+	if err := hermes.CreateAndSetupVolume(ctx, hermes.Name()); err != nil {
 		return nil, err
 	}
 
 	return hermes, nil
 }
 
+func (h *Hermes) Name() string {
+	return fmt.Sprintf("%s-hermes", internal.SanitizeContainerName(h.TestName))
+}
+
 // Start starts the Hermes relayer.
-func (h *Hermes) Start(ctx context.Context) error {
+func (h *Hermes) Start(ctx context.Context, args ...string) error {
 	if h.started {
-		return nil
+		return fmt.Errorf("already started")
 	}
 
-	// TODO: Start Hermes Docker container as daemon
+	// Build the command with optional additional arguments
+	cmd := []string{"hermes", "start"}
+	cmd = append(cmd, args...)
+
+	// Create the Hermes container with the relayer start command
+	err := h.CreateContainer(ctx, h.TestName, h.NetworkID, h.Image, nil, "", h.Bind(), nil, h.Name(), cmd, nil, []string{})
+	if err != nil {
+		return fmt.Errorf("failed to create hermes container: %w", err)
+	}
+
+	// Start the container with the relayer daemon
+	if err := h.StartContainer(ctx); err != nil {
+		return fmt.Errorf("failed to start hermes container: %w", err)
+	}
+
 	h.started = true
 	return nil
 }
@@ -92,7 +109,7 @@ func (h *Hermes) Start(ctx context.Context) error {
 // Stop stops the Hermes relayer.
 func (h *Hermes) Stop(ctx context.Context) error {
 	if !h.started {
-		return nil
+		return fmt.Errorf("not started")
 	}
 
 	if err := h.StopContainer(ctx); err != nil {
@@ -155,7 +172,6 @@ func (h *Hermes) SetupWallets(ctx context.Context, chainA, chainB types.Chain) e
 
 	return nil
 }
-
 
 // CreateClients creates IBC clients on both chains.
 func (h *Hermes) CreateClients(ctx context.Context, chainA, chainB types.Chain) error {
@@ -335,7 +351,6 @@ func (h *Hermes) generateConfig(ctx context.Context) error {
 		zap.Int("config_size", len(configTOML)),
 		zap.Int("chains_count", len(h.chains)),
 		zap.String("file_path", path.Join(h.HomeDir(), configPath)),
-		zap.String("config_content", string(configTOML)),
 	)
 	for chainID := range h.chains {
 		h.Logger.Info("Chain configured", zap.String("chain_id", chainID))
@@ -427,7 +442,7 @@ func (h *Hermes) extractAddressWithRegex(text string) (string, error) {
 	// This will match addresses like: cosmos1..., celestia1..., osmo1..., etc.
 	bech32Pattern := `([a-z]+1[a-z0-9]{38,})`
 	re := regexp.MustCompile(bech32Pattern)
-	
+
 	matches := re.FindStringSubmatch(text)
 	if len(matches) > 1 {
 		address := matches[1]
@@ -435,7 +450,7 @@ func (h *Hermes) extractAddressWithRegex(text string) (string, error) {
 		address = strings.TrimRight(address, ".,;:!?)")
 		return address, nil
 	}
-	
+
 	return "", fmt.Errorf("could not find bech32 address in output: %s", text)
 }
 

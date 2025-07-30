@@ -10,6 +10,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/bank"
+	"github.com/cosmos/ibc-go/v8/modules/apps/transfer"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -38,7 +39,7 @@ func (s *DockerTestSuite) SetupSuite() {
 	sdkConf.Seal()
 
 	s.logger = zaptest.NewLogger(s.T())
-	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{})
+	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{})
 }
 
 func (s *DockerTestSuite) SetupTest() {
@@ -62,6 +63,7 @@ func (s *DockerTestSuite) SetupTest() {
 			"--grpc.address", "0.0.0.0:9090",
 			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
 			"--timeout-commit", "1s",
+			"--minimum-gas-prices", "0utia",
 		).
 		WithNode(NewChainNodeConfigBuilder().Build())
 }
