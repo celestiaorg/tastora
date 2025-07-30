@@ -10,3 +10,12 @@ type Channel struct {
 	Order            ChannelOrder
 	Version          string
 }
+
+// Connection represents an IBC connection between two chains.
+type Connection struct {
+	ConnectionID         string
+	CounterpartyID       string
+	ClientID             string
+	CounterpartyClientID string
+	State                string
+}

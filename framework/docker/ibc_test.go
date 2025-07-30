@@ -2,7 +2,9 @@ package docker
 
 import (
 	"context"
+	"github.com/celestiaorg/tastora/framework/docker/ibc"
 	"github.com/celestiaorg/tastora/framework/docker/ibc/relayer"
+	"github.com/celestiaorg/tastora/framework/types"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/sync/errgroup"
 )
@@ -39,7 +41,36 @@ func (s *DockerTestSuite) TestIBC() {
 	err = r.SetupWallets(ctx, s.chain, chainB)
 	s.Require().NoError(err)
 
-	err = r.Connect(ctx, s.chain, chainB)
+	connection, channel := s.setupIBCConnection(ctx, r, s.chain, chainB)
+	
+	s.T().Logf("Created IBC connection: %s <-> %s", connection.ConnectionID, connection.CounterpartyID)
+	s.T().Logf("Created IBC channel: %s <-> %s", channel.ChannelID, channel.CounterpartyID)
+
+}
+
+// setupIBCConnection is a helper function that establishes a complete IBC connection and channel
+func (s *DockerTestSuite) setupIBCConnection(ctx context.Context, r *relayer.Hermes, chainA, chainB types.Chain) (ibc.Connection, *ibc.Channel) {
+	// Create clients
+	err := r.CreateClients(ctx, chainA, chainB)
 	s.Require().NoError(err)
 
+	// Create connections
+	connection, err := r.CreateConnections(ctx, chainA, chainB)
+	s.Require().NoError(err)
+	s.Require().NotEmpty(connection.ConnectionID, "Connection ID should not be empty")
+
+	// Create an ICS20 channel for token transfers
+	channelOpts := ibc.CreateChannelOptions{
+		SourcePortName: "transfer",
+		DestPortName:   "transfer", 
+		Order:          ibc.OrderUnordered,
+		Version:        "ics20-1",
+	}
+	
+	channel, err := r.CreateChannel(ctx, chainA, chainB, connection, channelOpts)
+	s.Require().NoError(err)
+	s.Require().NotNil(channel)
+	s.Require().NotEmpty(channel.ChannelID, "Channel ID should not be empty")
+
+	return connection, channel
 }

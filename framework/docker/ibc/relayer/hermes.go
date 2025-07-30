@@ -27,21 +27,6 @@ const (
 	hermesHomeDir        = "/home/hermes"
 )
 
-// ChannelCreationResponse represents the response from hermes create channel command
-type ChannelCreationResponse struct {
-	Result CreateChannelResult `json:"result"`
-}
-
-// CreateChannelResult holds channel information for both sides
-type CreateChannelResult struct {
-	ASide ChannelSide `json:"a_side"`
-	BSide ChannelSide `json:"b_side"`
-}
-
-// ChannelSide captures the channel ID for each side
-type ChannelSide struct {
-	ChannelID string `json:"channel_id"`
-}
 
 // Hermes implements the IBC relayer interface using Hermes.
 type Hermes struct {
@@ -171,20 +156,6 @@ func (h *Hermes) SetupWallets(ctx context.Context, chainA, chainB types.Chain) e
 	return nil
 }
 
-// Connect establishes IBC connection between the two chains
-func (h *Hermes) Connect(ctx context.Context, chainA, chainB types.Chain) error {
-	// Create clients
-	if err := h.CreateClients(ctx, chainA, chainB); err != nil {
-		return fmt.Errorf("failed to create IBC clients: %w", err)
-	}
-
-	// Create connections
-	if err := h.CreateConnections(ctx, chainA, chainB); err != nil {
-		return fmt.Errorf("failed to create IBC connections: %w", err)
-	}
-
-	return nil
-}
 
 // CreateClients creates IBC clients on both chains.
 func (h *Hermes) CreateClients(ctx context.Context, chainA, chainB types.Chain) error {
@@ -200,21 +171,36 @@ func (h *Hermes) CreateClients(ctx context.Context, chainA, chainB types.Chain) 
 }
 
 // CreateConnections creates IBC connections between the chains.
-func (h *Hermes) CreateConnections(ctx context.Context, chainA, chainB types.Chain) error {
-	cmd := []string{"hermes", "create", "connection", "--a-chain", chainA.GetChainID(), "--b-chain", chainB.GetChainID()}
-	_, _, err := h.Exec(ctx, h.Logger, cmd, nil)
-	return err
+func (h *Hermes) CreateConnections(ctx context.Context, chainA, chainB types.Chain) (ibc.Connection, error) {
+	cmd := []string{"hermes", "--json", "create", "connection", "--a-chain", chainA.GetChainID(), "--b-chain", chainB.GetChainID()}
+	stdout, _, err := h.Exec(ctx, h.Logger, cmd, nil)
+	if err != nil {
+		return ibc.Connection{}, err
+	}
+
+	// Parse connection information from hermes output
+	connection, err := h.parseCreateConnectionOutput(string(stdout))
+	if err != nil {
+		return ibc.Connection{}, fmt.Errorf("failed to parse hermes create connection output: %w", err)
+	}
+
+	return connection, nil
 }
 
 // CreateChannel creates an IBC channel between the chains.
-func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, opts ibc.CreateChannelOptions) (*ibc.Channel, error) {
-	// Execute hermes create channel command
+func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, connection ibc.Connection, opts ibc.CreateChannelOptions) (*ibc.Channel, error) {
+	// Validate that connection has a valid ID
+	if connection.ConnectionID == "" {
+		return nil, fmt.Errorf("invalid connection: connection ID is empty")
+	}
+
+	// Execute hermes create channel command with JSON output using existing connection
 	cmd := []string{
-		"hermes", "create", "channel",
+		"hermes", "--json", "create", "channel",
 		"--order", string(opts.Order),
 		"--a-chain", chainA.GetChainID(),
+		"--a-connection", connection.ConnectionID,
 		"--a-port", opts.SourcePortName,
-		"--b-chain", chainB.GetChainID(),
 		"--b-port", opts.DestPortName,
 		"--channel-version", opts.Version,
 	}
@@ -230,6 +216,37 @@ func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, 
 	}
 
 	return channel, nil
+}
+
+// parseCreateConnectionOutput parses the output from hermes create connection command
+func (h *Hermes) parseCreateConnectionOutput(output string) (ibc.Connection, error) {
+	// Extract connection IDs using the same approach as channel creation
+	connectionA, connectionB, err := h.getConnectionIDsFromStdout([]byte(output))
+	if err != nil {
+		return ibc.Connection{}, fmt.Errorf("failed to parse connection IDs: %w", err)
+	}
+
+	// Validate that we got valid connection IDs
+	if connectionA == "" {
+		return ibc.Connection{}, fmt.Errorf("no connection ID found in output")
+	}
+
+	connection := ibc.Connection{
+		ConnectionID:   connectionA,
+		CounterpartyID: connectionB,
+		State:          "OPEN",
+	}
+
+	return connection, nil
+}
+
+// getConnectionIDsFromStdout extracts connection IDs from hermes stdout
+func (h *Hermes) getConnectionIDsFromStdout(stdout []byte) (string, string, error) {
+	var connectionResponse ConnectionCreationResponse
+	if err := json.Unmarshal(h.extractJSONResult(stdout), &connectionResponse); err != nil {
+		return "", "", fmt.Errorf("failed to unmarshal connection creation response: %w", err)
+	}
+	return connectionResponse.Result.ASide.ConnectionID, connectionResponse.Result.BSide.ConnectionID, nil
 }
 
 // parseCreateChannelOutput parses the output from hermes create channel command
