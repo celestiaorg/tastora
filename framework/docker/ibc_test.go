@@ -37,7 +37,21 @@ func (s *DockerTestSuite) TestIBC() {
 	s.chain, err = s.builder.Build(s.ctx)
 	s.Require().NoError(err)
 
-	s.builder = s.builder.WithChainID("chain-b")
+	s.builder = s.builder.WithChainID("chain-b").
+		WithImage(container.NewImage("ghcr.io/cosmos/ibc-go-simd", "v8.5.0", "1000")).
+		WithBinaryName("simd").
+		WithBech32Prefix("cosmos").
+		WithDenom("stake").
+		WithGasPrices("0.000001stake").
+		WithAdditionalStartArgs(). // Clear any celestia-specific start args
+		WithPostInit(func(ctx context.Context, node *ChainNode) error {
+			return config.Modify(ctx, node, "config/app.toml", func(cfg *servercfg.Config) {
+				cfg.MinGasPrices = "0.000001stake"
+				cfg.GRPC.Enable = true
+				cfg.API.Enable = true
+				cfg.API.EnableUnsafeCORS = true
+			})
+		})
 
 	chainB, err := s.builder.Build(s.ctx)
 	s.Require().NoError(err)
@@ -160,22 +174,19 @@ func (s *DockerTestSuite) testIBCTransfer(ctx context.Context, relayer *relayer.
 		receiverAddr.String(),
 		clienttypes.NewHeight(0, 0),                  // timeout height (0 = no timeout)
 		uint64(time.Now().Add(time.Hour).UnixNano()), // timeout timestamp
-		"", // memo
+		"",                                           // memo
 	)
 
 	resp, err = chainA.BroadcastMessages(ctx, senderWallet, ibcTransfer)
 	s.Require().NoError(err)
 	s.Require().Equal(uint32(0), resp.Code, "IBC transfer failed: %s", resp.RawLog)
-	s.T().Log(resp.RawLog)
 	// Wait a moment for the escrow transaction to be reflected in balances
 	s.T().Logf("Waiting for balance updates...")
-	err = wait.ForBlocks(ctx, 5, chainA)
+	err = wait.ForBlocks(ctx, 5, chainA, chainB)
 	s.Require().NoError(err)
 
 	intermediateReceiverBalance := s.getBalance(ctx, chainB, receiverAddr, ibcDenom)
 	s.T().Logf("Receiver balance before relay: %s %s", intermediateReceiverBalance.String(), ibcDenom)
-
-	time.Sleep(time.Hour)
 
 	// Wait for relayer to process transfer
 	s.T().Logf("Waiting for relayer to process transfer...")
@@ -209,6 +220,30 @@ func (s *DockerTestSuite) getBalance(ctx context.Context, chain types.Chain, add
 		s.T().Logf("Chain is not a docker Chain, returning zero balance")
 		return sdkmath.ZeroInt()
 	}
+
+	// Get chain config for bech32 prefix
+	chainConfig := chain.GetChainConfig()
+	
+	// Save current global bech32 config
+	config := sdk.GetConfig()
+	currentAccountPrefix := config.GetBech32AccountAddrPrefix()
+	currentAccountPubPrefix := config.GetBech32AccountPubPrefix()
+	currentValidatorPrefix := config.GetBech32ValidatorAddrPrefix()
+	currentValidatorPubPrefix := config.GetBech32ValidatorPubPrefix()
+	currentConsensusPrefix := config.GetBech32ConsensusAddrPrefix()
+	currentConsensusPubPrefix := config.GetBech32ConsensusPubPrefix()
+	
+	// Set the global bech32 config for this chain
+	config.SetBech32PrefixForAccount(chainConfig.Bech32Prefix, chainConfig.Bech32Prefix+"pub")
+	config.SetBech32PrefixForValidator(chainConfig.Bech32Prefix+"valoper", chainConfig.Bech32Prefix+"valoperpub")
+	config.SetBech32PrefixForConsensusNode(chainConfig.Bech32Prefix+"valcons", chainConfig.Bech32Prefix+"valconspub")
+	
+	// Ensure we restore the original config when done
+	defer func() {
+		config.SetBech32PrefixForAccount(currentAccountPrefix, currentAccountPubPrefix)
+		config.SetBech32PrefixForValidator(currentValidatorPrefix, currentValidatorPubPrefix)
+		config.SetBech32PrefixForConsensusNode(currentConsensusPrefix, currentConsensusPubPrefix)
+	}()
 
 	node := dockerChain.GetNode()
 	clientCtx := node.CliContext()

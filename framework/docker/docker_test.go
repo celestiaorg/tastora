@@ -36,7 +36,6 @@ func (s *DockerTestSuite) SetupSuite() {
 	// configure Bech32 prefix, this needs to be set as account.String() uses the global config.
 	sdkConf := sdk.GetConfig()
 	sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
-	sdkConf.Seal()
 
 	s.logger = zaptest.NewLogger(s.T())
 	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{})

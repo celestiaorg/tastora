@@ -459,7 +459,28 @@ func (h *Hermes) fundRelayerAddress(ctx context.Context, chain types.Chain, rela
 	// Get the chain's faucet wallet and config
 	faucet := chain.GetFaucetWallet()
 	chainConfig := chain.GetChainConfig()
-
+	
+	// Save current global bech32 config
+	config := sdk.GetConfig()
+	currentAccountPrefix := config.GetBech32AccountAddrPrefix()
+	currentAccountPubPrefix := config.GetBech32AccountPubPrefix()
+	currentValidatorPrefix := config.GetBech32ValidatorAddrPrefix()
+	currentValidatorPubPrefix := config.GetBech32ValidatorPubPrefix()
+	currentConsensusPrefix := config.GetBech32ConsensusAddrPrefix()
+	currentConsensusPubPrefix := config.GetBech32ConsensusPubPrefix()
+	
+	// Set the global bech32 config for this chain
+	config.SetBech32PrefixForAccount(chainConfig.Bech32Prefix, chainConfig.Bech32Prefix+"pub")
+	config.SetBech32PrefixForValidator(chainConfig.Bech32Prefix+"valoper", chainConfig.Bech32Prefix+"valoperpub")
+	config.SetBech32PrefixForConsensusNode(chainConfig.Bech32Prefix+"valcons", chainConfig.Bech32Prefix+"valconspub")
+	
+	// Ensure we restore the original config when done
+	defer func() {
+		config.SetBech32PrefixForAccount(currentAccountPrefix, currentAccountPubPrefix)
+		config.SetBech32PrefixForValidator(currentValidatorPrefix, currentValidatorPubPrefix)
+		config.SetBech32PrefixForConsensusNode(currentConsensusPrefix, currentConsensusPubPrefix)
+	}()
+	
 	// Get faucet address
 	fromAddr, err := sdkacc.AddressFromWallet(faucet)
 	if err != nil {
