@@ -24,20 +24,15 @@ import (
 const (
 	hermesDefaultImage   = "ghcr.io/informalsystems/hermes"
 	hermesDefaultVersion = "1.13.1"
-	//hermesDefaultVersion = "1.8.2"
-	hermesDefaultUIDGID = "2000:2000"
-	hermesHomeDir       = "/home/hermes"
+	hermesDefaultUIDGID  = "2000:2000"
+	hermesHomeDir        = "/home/hermes"
 )
 
 // Hermes implements the IBC relayer interface using Hermes.
 type Hermes struct {
 	*container.Node
-
-	// Configuration
-	chains  map[string]types.Chain
-	wallets map[string]types.Wallet
-
-	// Runtime state
+	chains map[string]types.Chain
+	// started indicates if the relayer has been started or not.
 	started bool
 }
 
@@ -61,9 +56,8 @@ func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName,
 	)
 
 	hermes := &Hermes{
-		Node:    node,
-		chains:  make(map[string]types.Chain),
-		wallets: make(map[string]types.Wallet),
+		Node:   node,
+		chains: make(map[string]types.Chain),
 	}
 
 	lifecycle := container.NewLifecycle(logger, dockerClient, hermes.Name())
@@ -134,11 +128,6 @@ func (h *Hermes) Init(ctx context.Context, chainA, chainB types.Chain) error {
 	if err := h.generateConfig(ctx); err != nil {
 		return fmt.Errorf("failed to generate config: %w", err)
 	}
-
-	// TODO: implement
-	//if err := h.validateConfig(ctx); err != nil {
-	//	return fmt.Errorf("failed to validate config: %w", err)
-	//}
 
 	return nil
 }
@@ -308,12 +297,6 @@ func (h *Hermes) extractJSONResult(stdout []byte) []byte {
 	return []byte(jsonOutput)
 }
 
-// AddWallet adds a wallet for the specified chain ID to the relayer configuration.
-func (h *Hermes) AddWallet(chainID string, wallet types.Wallet) error {
-	h.wallets[chainID] = wallet
-	return nil
-}
-
 // AddChain adds a chain to the relayer configuration.
 func (h *Hermes) AddChain(chain types.Chain) error {
 	h.chains[chain.GetChainID()] = chain
@@ -356,40 +339,60 @@ func (h *Hermes) generateConfig(ctx context.Context) error {
 		h.Logger.Info("Chain configured", zap.String("chain_id", chainID))
 	}
 
+	if err := h.validateConfig(ctx); err != nil {
+		return fmt.Errorf("failed to validate hermes config: %w", err)
+	}
+
+	return nil
+}
+
+// validateConfig validates the Hermes configuration by running hermes config validate
+func (h *Hermes) validateConfig(ctx context.Context) error {
+	cmd := []string{"hermes", "config", "validate"}
+	stdout, stderr, err := h.Exec(ctx, h.Logger, cmd, nil)
+	if err != nil {
+		h.Logger.Error("Failed to validate hermes config",
+			zap.String("stdout", string(stdout)),
+			zap.String("stderr", string(stderr)),
+			zap.Error(err))
+		return fmt.Errorf("hermes config validation failed: %w", err)
+	}
+
+	h.Logger.Info("Hermes config validation passed",
+		zap.String("stdout", string(stdout)))
+
 	return nil
 }
 
 // createRelayerKey creates a new key on the Hermes relayer for the specified chain
 func (h *Hermes) createRelayerKey(ctx context.Context, chainID, keyName string) (string, error) {
-	// Generate a new mnemonic
+	// generate a new mnemonic
 	mnemonic, err := h.generateMnemonic()
 	if err != nil {
 		return "", fmt.Errorf("failed to generate mnemonic: %w", err)
 	}
 
-	// Write mnemonic to a temporary file in the container
+	// write mnemonic to a temporary file in the container
 	mnemonicFile := fmt.Sprintf(".hermes/%s_mnemonic.txt", keyName)
 	err = h.WriteFile(ctx, mnemonicFile, []byte(mnemonic))
 	if err != nil {
 		return "", fmt.Errorf("failed to write mnemonic file: %w", err)
 	}
 
-	// Use hermes keys add command with mnemonic file and JSON output
+	// use hermes keys add command and point it at the file we just created.
 	mnemonicPath := path.Join(h.HomeDir(), mnemonicFile)
 	cmd := []string{"hermes", "--json", "keys", "add", "--chain", chainID, "--key-name", keyName, "--mnemonic-file", mnemonicPath}
-	stdout, stderr, err := h.Exec(ctx, h.Logger, cmd, nil)
+	stdout, _, err := h.Exec(ctx, h.Logger, cmd, nil)
 	if err != nil {
 		h.Logger.Error("Failed to create relayer key",
 			zap.String("chain_id", chainID),
 			zap.String("key_name", keyName),
 			zap.String("mnemonic_file", mnemonicPath),
-			zap.String("stdout", string(stdout)),
-			zap.String("stderr", string(stderr)),
-			zap.Error(err))
+		)
 		return "", fmt.Errorf("failed to create key %s for chain %s: %w", keyName, chainID, err)
 	}
 
-	// Extract the address from the command output
+	// extract the address from the command output
 	address, err := h.parseAddressFromKeyOutput(string(stdout))
 	if err != nil {
 		return "", fmt.Errorf("failed to parse address from key creation output: %w", err)
@@ -446,7 +449,7 @@ func (h *Hermes) extractAddressWithRegex(text string) (string, error) {
 	matches := re.FindStringSubmatch(text)
 	if len(matches) > 1 {
 		address := matches[1]
-		// Remove any trailing punctuation that might have been captured
+		// remove any trailing punctuation that might have been captured
 		address = strings.TrimRight(address, ".,;:!?)")
 		return address, nil
 	}
@@ -459,28 +462,10 @@ func (h *Hermes) fundRelayerAddress(ctx context.Context, chain types.Chain, rela
 	// Get the chain's faucet wallet and config
 	faucet := chain.GetFaucetWallet()
 	chainConfig := chain.GetChainConfig()
-	
-	// Save current global bech32 config
-	config := sdk.GetConfig()
-	currentAccountPrefix := config.GetBech32AccountAddrPrefix()
-	currentAccountPubPrefix := config.GetBech32AccountPubPrefix()
-	currentValidatorPrefix := config.GetBech32ValidatorAddrPrefix()
-	currentValidatorPubPrefix := config.GetBech32ValidatorPubPrefix()
-	currentConsensusPrefix := config.GetBech32ConsensusAddrPrefix()
-	currentConsensusPubPrefix := config.GetBech32ConsensusPubPrefix()
-	
-	// Set the global bech32 config for this chain
-	config.SetBech32PrefixForAccount(chainConfig.Bech32Prefix, chainConfig.Bech32Prefix+"pub")
-	config.SetBech32PrefixForValidator(chainConfig.Bech32Prefix+"valoper", chainConfig.Bech32Prefix+"valoperpub")
-	config.SetBech32PrefixForConsensusNode(chainConfig.Bech32Prefix+"valcons", chainConfig.Bech32Prefix+"valconspub")
-	
-	// Ensure we restore the original config when done
-	defer func() {
-		config.SetBech32PrefixForAccount(currentAccountPrefix, currentAccountPubPrefix)
-		config.SetBech32PrefixForValidator(currentValidatorPrefix, currentValidatorPubPrefix)
-		config.SetBech32PrefixForConsensusNode(currentConsensusPrefix, currentConsensusPubPrefix)
-	}()
-	
+
+	reset := internal.TemporarilyModifySDKConfigPrefix(chainConfig.Bech32Prefix)
+	defer reset()
+
 	// Get faucet address
 	fromAddr, err := sdkacc.AddressFromWallet(faucet)
 	if err != nil {
