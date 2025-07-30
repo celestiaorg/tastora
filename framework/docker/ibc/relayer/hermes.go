@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 
 	sdkmath "cosmossdk.io/math"
@@ -14,6 +15,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"github.com/cosmos/go-bip39"
 	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
@@ -83,9 +85,6 @@ func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName,
 		wallets: make(map[string]types.Wallet),
 	}
 
-	// Set the user for Hermes execution
-	//hermes.SetUser(hermesDefaultUIDGID)
-
 	// Create and setup volume for Hermes
 	if err := hermes.CreateAndSetupVolume(ctx, "hermes"); err != nil {
 		return nil, err
@@ -120,38 +119,8 @@ func (h *Hermes) Stop(ctx context.Context) error {
 }
 
 // Init initializes the relayer configuration
-func (h *Hermes) Init(ctx context.Context) error {
-	return h.generateConfig(ctx)
-}
-
-// SetupWallets creates and funds relayer wallets on both chains
-func (h *Hermes) SetupWallets(ctx context.Context, chainA, chainB types.Chain) error {
-	// Create relayer wallet on chain A
-	walletNameA := fmt.Sprintf("relayer-%s", chainA.GetChainID())
-	relayerWalletA, err := chainA.CreateWallet(ctx, walletNameA)
-	if err != nil {
-		return fmt.Errorf("failed to create relayer wallet on chain A: %w", err)
-	}
-
-	// Create relayer wallet on chain B
-	walletNameB := fmt.Sprintf("relayer-%s", chainB.GetChainID())
-	relayerWalletB, err := chainB.CreateWallet(ctx, walletNameB)
-	if err != nil {
-		return fmt.Errorf("failed to create relayer wallet on chain B: %w", err)
-	}
-
-	// Fund both wallets from faucets
-	err = h.fundRelayerWallet(ctx, chainA, relayerWalletA)
-	if err != nil {
-		return fmt.Errorf("failed to fund relayer wallet on chain A: %w", err)
-	}
-
-	err = h.fundRelayerWallet(ctx, chainB, relayerWalletB)
-	if err != nil {
-		return fmt.Errorf("failed to fund relayer wallet on chain B: %w", err)
-	}
-
-	// Configure relayer with wallets and chains
+func (h *Hermes) Init(ctx context.Context, chainA, chainB types.Chain) error {
+	// register chains with relayer
 	if err := h.AddChain(chainA); err != nil {
 		return fmt.Errorf("failed to add chain A to relayer: %w", err)
 	}
@@ -160,12 +129,43 @@ func (h *Hermes) SetupWallets(ctx context.Context, chainA, chainB types.Chain) e
 		return fmt.Errorf("failed to add chain B to relayer: %w", err)
 	}
 
-	if err := h.AddWallet(chainA.GetChainID(), relayerWalletA); err != nil {
-		return fmt.Errorf("failed to add chain A wallet to relayer: %w", err)
+	if err := h.generateConfig(ctx); err != nil {
+		return fmt.Errorf("failed to generate config: %w", err)
 	}
 
-	if err := h.AddWallet(chainB.GetChainID(), relayerWalletB); err != nil {
-		return fmt.Errorf("failed to add chain B wallet to relayer: %w", err)
+	// TODO: implement
+	//if err := h.validateConfig(ctx); err != nil {
+	//	return fmt.Errorf("failed to validate config: %w", err)
+	//}
+
+	return nil
+}
+
+// SetupWallets creates keys on Hermes relayer and funds them from chain faucets
+func (h *Hermes) SetupWallets(ctx context.Context, chainA, chainB types.Chain) error {
+	// Create key for chain A on Hermes relayer
+	keyNameA := fmt.Sprintf("relayer-%s", chainA.GetChainID())
+	addressA, err := h.createRelayerKey(ctx, chainA.GetChainID(), keyNameA)
+	if err != nil {
+		return fmt.Errorf("failed to create relayer key for chain A: %w", err)
+	}
+
+	// Create key for chain B on Hermes relayer
+	keyNameB := fmt.Sprintf("relayer-%s", chainB.GetChainID())
+	addressB, err := h.createRelayerKey(ctx, chainB.GetChainID(), keyNameB)
+	if err != nil {
+		return fmt.Errorf("failed to create relayer key for chain B: %w", err)
+	}
+
+	// Fund the relayer addresses from chain faucets
+	err = h.fundRelayerAddress(ctx, chainA, addressA)
+	if err != nil {
+		return fmt.Errorf("failed to fund relayer address on chain A: %w", err)
+	}
+
+	err = h.fundRelayerAddress(ctx, chainB, addressB)
+	if err != nil {
+		return fmt.Errorf("failed to fund relayer address on chain B: %w", err)
 	}
 
 	return nil
@@ -327,21 +327,117 @@ func (h *Hermes) generateConfig(ctx context.Context) error {
 	return nil
 }
 
-// fundRelayerWallet funds a relayer wallet from a faucet wallet.
-func (h *Hermes) fundRelayerWallet(ctx context.Context, chain types.Chain, relayerWallet types.Wallet) error {
+// createRelayerKey creates a new key on the Hermes relayer for the specified chain
+func (h *Hermes) createRelayerKey(ctx context.Context, chainID, keyName string) (string, error) {
+	// Generate a new mnemonic
+	mnemonic, err := h.generateMnemonic()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate mnemonic: %w", err)
+	}
+
+	// Write mnemonic to a temporary file in the container
+	mnemonicFile := fmt.Sprintf(".hermes/%s_mnemonic.txt", keyName)
+	err = h.WriteFile(ctx, mnemonicFile, []byte(mnemonic))
+	if err != nil {
+		return "", fmt.Errorf("failed to write mnemonic file: %w", err)
+	}
+
+	// Use hermes keys add command with mnemonic file and JSON output
+	mnemonicPath := path.Join(h.HomeDir(), mnemonicFile)
+	cmd := []string{"hermes", "--json", "keys", "add", "--chain", chainID, "--key-name", keyName, "--mnemonic-file", mnemonicPath}
+	stdout, stderr, err := h.Exec(ctx, h.Logger, cmd, nil)
+	if err != nil {
+		h.Logger.Error("Failed to create relayer key",
+			zap.String("chain_id", chainID),
+			zap.String("key_name", keyName),
+			zap.String("mnemonic_file", mnemonicPath),
+			zap.String("stdout", string(stdout)),
+			zap.String("stderr", string(stderr)),
+			zap.Error(err))
+		return "", fmt.Errorf("failed to create key %s for chain %s: %w", keyName, chainID, err)
+	}
+
+	// Extract the address from the command output
+	address, err := h.parseAddressFromKeyOutput(string(stdout))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse address from key creation output: %w", err)
+	}
+
+	h.Logger.Info("Created relayer key",
+		zap.String("chain_id", chainID),
+		zap.String("key_name", keyName),
+		zap.String("address", address),
+		zap.String("mnemonic_file", mnemonicPath))
+
+	return address, nil
+}
+
+// generateMnemonic generates a new BIP39 mnemonic
+func (h *Hermes) generateMnemonic() (string, error) {
+	entropy, err := bip39.NewEntropy(256) // 24 words
+	if err != nil {
+		return "", fmt.Errorf("failed to generate entropy: %w", err)
+	}
+
+	mnemonic, err := bip39.NewMnemonic(entropy)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate mnemonic: %w", err)
+	}
+
+	return mnemonic, nil
+}
+
+// parseAddressFromKeyOutput extracts the address from hermes key creation output
+func (h *Hermes) parseAddressFromKeyOutput(output string) (string, error) {
+	// Try to parse as JSON first (when --json flag is used)
+	var jsonResult map[string]interface{}
+	if err := json.Unmarshal([]byte(output), &jsonResult); err == nil {
+		// JSON format - extract address from the result
+		if result, ok := jsonResult["result"].(string); ok {
+			// Use regex to find bech32 address in the result string
+			return h.extractAddressWithRegex(result)
+		}
+	}
+
+	// Fallback to text parsing for non-JSON output
+	// Use regex to find any bech32 address pattern (works for any chain prefix)
+	return h.extractAddressWithRegex(output)
+}
+
+// extractAddressWithRegex uses regex to find bech32 addresses
+func (h *Hermes) extractAddressWithRegex(text string) (string, error) {
+	// Bech32 address regex pattern: prefix + 1 + base32 characters (at least 38 chars total)
+	// This will match addresses like: cosmos1..., celestia1..., osmo1..., etc.
+	bech32Pattern := `([a-z]+1[a-z0-9]{38,})`
+	re := regexp.MustCompile(bech32Pattern)
+	
+	matches := re.FindStringSubmatch(text)
+	if len(matches) > 1 {
+		address := matches[1]
+		// Remove any trailing punctuation that might have been captured
+		address = strings.TrimRight(address, ".,;:!?)")
+		return address, nil
+	}
+	
+	return "", fmt.Errorf("could not find bech32 address in output: %s", text)
+}
+
+// fundRelayerAddress funds a relayer address from a faucet wallet.
+func (h *Hermes) fundRelayerAddress(ctx context.Context, chain types.Chain, relayerAddress string) error {
 	// Get the chain's faucet wallet and config
 	faucet := chain.GetFaucetWallet()
 	chainConfig := chain.GetChainConfig()
 
-	// Get addresses from wallets
+	// Get faucet address
 	fromAddr, err := sdkacc.AddressFromWallet(faucet)
 	if err != nil {
 		return fmt.Errorf("failed to get faucet address: %w", err)
 	}
 
-	toAddr, err := sdkacc.AddressFromWallet(relayerWallet)
+	// Parse the relayer address
+	toAddr, err := sdk.AccAddressFromBech32(relayerAddress)
 	if err != nil {
-		return fmt.Errorf("failed to get relayer wallet address: %w", err)
+		return fmt.Errorf("failed to parse relayer address %s: %w", relayerAddress, err)
 	}
 
 	// Define amount to fund the relayer wallet (enough for relayer operations)
