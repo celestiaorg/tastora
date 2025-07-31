@@ -49,9 +49,8 @@ func (s *IBCTestSuite) SetupSuite() {
 func (s *IBCTestSuite) SetupTest() {
 	s.dockerClient, s.networkID = DockerSetup(s.T())
 
-	var err error
-
 	// Create celestia-app chain (chain A)
+	var err error
 	s.chainA, err = s.createCelestiaChain()
 	s.Require().NoError(err, "failed to create celestia chain")
 
@@ -91,7 +90,7 @@ func (s *IBCTestSuite) createCelestiaChain() (types.Chain, error) {
 		WithDockerNetworkID(s.networkID).
 		WithChainID("chain-a").
 		WithName("celestia").
-		WithImage(container.NewImage("ghcr.io/celestiaorg/celestia-app", "v5.0.1-rc1", "1000:1000")).
+		WithImage(container.NewImage("ghcr.io/celestiaorg/celestia-app", "v5.0.1-rc1", "10001:10001")).
 		WithBinaryName("celestia-appd").
 		WithBech32Prefix("celestia").
 		WithDenom("utia").

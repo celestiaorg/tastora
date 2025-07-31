@@ -19,70 +19,46 @@ import (
 // TestIBCTransfer tests a complete IBC token transfer between celestia-app and simapp
 func (s *IBCTestSuite) TestIBCTransfer() {
 	ctx := s.ctx
-	// Create a test wallet on chainA to send tokens from
-	senderWallet, err := s.chainA.CreateWallet(ctx, "ibc-sender")
-	s.Require().NoError(err)
+	// send from faucet wallet on chain A
+	senderWallet := s.chainA.GetFaucetWallet()
 
-	s.T().Logf("Created IBC sender wallet: %s", senderWallet.GetFormattedAddress())
+	// receive on faucet wallet on chain B
+	receiverWallet := s.chainB.GetFaucetWallet()
 
-	// Fund the sender wallet
-	faucetA := s.chainA.GetFaucetWallet()
-	chainAConfig := s.chainA.GetRelayerConfig()
+	s.T().Logf("IBC sender wallet: %s", senderWallet.GetFormattedAddress())
+	s.T().Logf("IBC receiver wallet: %s", receiverWallet.GetFormattedAddress())
 
-	fromAddr, err := sdkacc.AddressFromWallet(faucetA)
+	receiverAddr, err := sdkacc.AddressFromWallet(receiverWallet)
 	s.Require().NoError(err)
 
 	senderAddr, err := sdkacc.AddressFromWallet(senderWallet)
 	s.Require().NoError(err)
 
-	// Fund sender with tokens to transfer
-	fundAmount := sdk.NewCoins(sdk.NewCoin(chainAConfig.Denom, sdkmath.NewInt(1000000))) // 1 token
-	bankSend := banktypes.NewMsgSend(fromAddr, senderAddr, fundAmount)
-
-	resp, err := s.chainA.BroadcastMessages(ctx, faucetA, bankSend)
-	s.Require().NoError(err)
-	s.Require().Equal(uint32(0), resp.Code, "funding transaction failed: %s", resp.RawLog)
-
-	// Create receiver wallet on chainB
-	receiverWallet, err := s.chainB.CreateWallet(ctx, "ibc-receiver")
-	s.Require().NoError(err)
-
-	s.T().Logf("Created IBC receiver wallet: %s", receiverWallet.GetFormattedAddress())
-
-	receiverAddr, err := sdkacc.AddressFromWallet(receiverWallet)
-	s.Require().NoError(err)
-
-	// Check initial balances
-	s.T().Logf("Checking initial balances...")
-	initialSenderBalance := s.getBalance(ctx, s.chainA, senderAddr, chainAConfig.Denom)
-	s.T().Logf("Sender initial balance: %s %s", initialSenderBalance.String(), chainAConfig.Denom)
-
 	// Calculate the IBC denom for chainA's token on chainB
-	ibcDenom := s.calculateIBCDenom(s.channel.CounterpartyPort, s.channel.CounterpartyID, chainAConfig.Denom)
+	ibcDenom := s.calculateIBCDenom(s.channel.CounterpartyPort, s.channel.CounterpartyID, s.chainA.GetRelayerConfig().Denom)
 	initialReceiverBalance := s.getBalance(ctx, s.chainB, receiverAddr, ibcDenom)
 	s.T().Logf("Receiver initial IBC balance: %s %s", initialReceiverBalance.String(), ibcDenom)
 
 	// Send IBC transfer
 	transferAmount := sdkmath.NewInt(100000) // 0.1 tokens
-	s.T().Logf("Sending IBC transfer: %s %s from %s to %s", transferAmount.String(), chainAConfig.Denom, s.chainA.GetChainID(), s.chainB.GetChainID())
+	s.T().Logf("Sending IBC transfer: %s %s from %s to %s", transferAmount.String(), s.chainA.GetRelayerConfig().Denom, s.chainA.GetChainID(), s.chainB.GetChainID())
 
-	// Start the relayer to process the packet
-	s.T().Logf("Starting Hermes relayer to process packets...")
+	s.T().Logf("Starting Hermes relayer...")
 	err = s.relayer.Start(ctx)
 	s.Require().NoError(err)
 
 	ibcTransfer := ibctransfertypes.NewMsgTransfer(
 		s.channel.PortID,
 		s.channel.ChannelID,
-		sdk.NewCoin(chainAConfig.Denom, transferAmount),
-		senderAddr.String(),
+		sdk.NewCoin(s.chainA.GetRelayerConfig().Denom, transferAmount),
+		senderWallet.GetFormattedAddress(),
 		receiverAddr.String(),
 		clienttypes.ZeroHeight(),
-		uint64(time.Now().Add(time.Hour).UnixNano()), // timeout timestamp
-		"", // memo
+		uint64(time.Now().Add(time.Hour).UnixNano()),
+		"",
 	)
 
-	resp, err = s.chainA.BroadcastMessages(ctx, senderWallet, ibcTransfer)
+	resp, err := s.chainA.BroadcastMessages(ctx, senderWallet, ibcTransfer)
 	s.Require().NoError(err)
 	s.Require().Equal(uint32(0), resp.Code, "IBC transfer failed: %s", resp.RawLog)
 
@@ -101,10 +77,10 @@ func (s *IBCTestSuite) TestIBCTransfer() {
 
 	// Check final balances
 	s.T().Logf("Checking final balances...")
-	finalSenderBalance := s.getBalance(ctx, s.chainA, senderAddr, chainAConfig.Denom)
+	finalSenderBalance := s.getBalance(ctx, s.chainA, senderAddr, s.chainA.GetRelayerConfig().Denom)
 	finalReceiverBalance := s.getBalance(ctx, s.chainB, receiverAddr, ibcDenom)
 
-	s.T().Logf("Sender final balance: %s %s", finalSenderBalance.String(), chainAConfig.Denom)
+	s.T().Logf("Sender final balance: %s %s", finalSenderBalance.String(), s.chainA.GetRelayerConfig().Denom)
 	s.T().Logf("Receiver final IBC balance: %s %s", finalReceiverBalance.String(), ibcDenom)
 
 	// Verify final balances
