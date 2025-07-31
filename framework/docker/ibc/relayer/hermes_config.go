@@ -115,7 +115,7 @@ type AddressType struct {
 }
 
 // NewHermesConfig creates a new Hermes configuration from chain configs
-func NewHermesConfig(chains []types.ChainConfig) (*HermesConfig, error) {
+func NewHermesConfig(chains []types.ChainRelayerConfig) (*HermesConfig, error) {
 	hermesChains := make([]ChainConfig, len(chains))
 
 	for i, chainCfg := range chains {

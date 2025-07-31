@@ -56,8 +56,8 @@ type Chain struct {
 	started bool
 }
 
-func (c *Chain) GetChainConfig() types.ChainConfig {
-	return types.ChainConfig{
+func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
+	return types.ChainRelayerConfig{
 		ChainID:      c.GetChainID(),
 		Denom:        c.cfg.ChainConfig.Denom,
 		GasPrices:    c.cfg.ChainConfig.GasPrices,

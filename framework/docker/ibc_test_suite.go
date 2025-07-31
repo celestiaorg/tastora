@@ -32,10 +32,10 @@ type IBCTestSuite struct {
 
 	// IBC-specific components
 	chainA     types.Chain // celestia-app chain
-	chainB     types.Chain // simapp chain  
+	chainB     types.Chain // simapp chain
 	relayer    *relayer.Hermes
 	connection ibc.Connection
-	channel    *ibc.Channel
+	channel    ibc.Channel
 }
 
 // SetupSuite runs once before all tests in the suite
@@ -50,12 +50,12 @@ func (s *IBCTestSuite) SetupTest() {
 	s.dockerClient, s.networkID = DockerSetup(s.T())
 
 	var err error
-	
+
 	// Create celestia-app chain (chain A)
 	s.chainA, err = s.createCelestiaChain()
 	s.Require().NoError(err, "failed to create celestia chain")
 
-	// Create simapp chain (chain B)  
+	// Create simapp chain (chain B)
 	s.chainB, err = s.createSimappChain()
 	s.Require().NoError(err, "failed to create simapp chain")
 
@@ -70,14 +70,11 @@ func (s *IBCTestSuite) SetupTest() {
 	s.Require().NoError(eg.Wait(), "failed to start chains")
 
 	// Create and initialize relayer (but don't start it)
-	s.relayer, err = relayer.NewHermes(s.ctx, s.dockerClient, s.T().Name(), s.networkID, s.logger)
+	s.relayer, err = relayer.NewHermes(s.ctx, s.dockerClient, s.T().Name(), s.networkID, 0, s.logger)
 	s.Require().NoError(err, "failed to create hermes relayer")
 
 	err = s.relayer.Init(s.ctx, s.chainA, s.chainB)
 	s.Require().NoError(err, "failed to initialize relayer")
-
-	err = s.relayer.SetupWallets(s.ctx, s.chainA, s.chainB)
-	s.Require().NoError(err, "failed to setup relayer wallets")
 
 	// Setup IBC connection and channel
 	s.connection, s.channel = s.setupIBCConnection()
@@ -89,18 +86,12 @@ func (s *IBCTestSuite) createCelestiaChain() (types.Chain, error) {
 	sdkConf := sdk.GetConfig()
 	sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
 
-	celestiaImage := container.Image{
-		Repository: "ghcr.io/celestiaorg/celestia-app",
-		Version:    "v5.0.1-rc1",
-		UIDGID:     "10001:10001",
-	}
-
 	builder := NewChainBuilder(s.T()).
 		WithDockerClient(s.dockerClient).
 		WithDockerNetworkID(s.networkID).
 		WithChainID("chain-a").
 		WithName("celestia").
-		WithImage(celestiaImage).
+		WithImage(container.NewImage("ghcr.io/celestiaorg/celestia-app", "v5.0.1-rc1", "1000:1000")).
 		WithBinaryName("celestia-appd").
 		WithBech32Prefix("celestia").
 		WithDenom("utia").
@@ -108,18 +99,16 @@ func (s *IBCTestSuite) createCelestiaChain() (types.Chain, error) {
 		WithEncodingConfig(&s.encConfig).
 		WithAdditionalStartArgs(
 			"--force-no-bbr",
-			"--grpc.enable",
-			"--grpc.address", "0.0.0.0:9090",
 			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
 			"--timeout-commit", "1s",
-			"--minimum-gas-prices", "0utia",
 		).
 		WithPostInit(func(ctx context.Context, node *ChainNode) error {
 			return config.Modify(ctx, node, "config/app.toml", func(cfg *servercfg.Config) {
 				cfg.MinGasPrices = "0.000001utia"
 				cfg.GRPC.Enable = true
+				cfg.GRPC.Address = "0.0.0.0:9090"
 				cfg.API.Enable = true
-				cfg.API.EnableUnsafeCORS = true
+				cfg.MinGasPrices = "0.0utia"
 			})
 		}).
 		WithNode(NewChainNodeConfigBuilder().Build())
@@ -129,24 +118,18 @@ func (s *IBCTestSuite) createCelestiaChain() (types.Chain, error) {
 
 // createSimappChain creates an IBC-Go simapp chain for IBC testing
 func (s *IBCTestSuite) createSimappChain() (types.Chain, error) {
-	simappImage := container.Image{
-		Repository: "ghcr.io/cosmos/ibc-go-simd",
-		Version:    "v8.5.0",
-		UIDGID:     "1000:1000",
-	}
-
 	builder := NewChainBuilder(s.T()).
 		WithDockerClient(s.dockerClient).
 		WithDockerNetworkID(s.networkID).
 		WithChainID("chain-b").
 		WithName("simapp").
-		WithImage(simappImage).
+		// use the simapp from ibc-go as a simple app with basic wiring and no token filters.
+		WithImage(container.NewImage("ghcr.io/cosmos/ibc-go-simd", "v8.5.0", "1000:1000")).
 		WithBinaryName("simd").
 		WithBech32Prefix("cosmos").
 		WithDenom("stake").
 		WithGasPrices("0.000001stake").
 		WithEncodingConfig(&s.encConfig).
-		WithAdditionalStartArgs(). // Clear any celestia-specific start args
 		WithPostInit(func(ctx context.Context, node *ChainNode) error {
 			return config.Modify(ctx, node, "config/app.toml", func(cfg *servercfg.Config) {
 				cfg.MinGasPrices = "0.000001stake"
@@ -161,12 +144,12 @@ func (s *IBCTestSuite) createSimappChain() (types.Chain, error) {
 }
 
 // setupIBCConnection establishes a complete IBC connection and channel
-func (s *IBCTestSuite) setupIBCConnection() (ibc.Connection, *ibc.Channel) {
-	// Create clients
+func (s *IBCTestSuite) setupIBCConnection() (ibc.Connection, ibc.Channel) {
+	// create clients
 	err := s.relayer.CreateClients(s.ctx, s.chainA, s.chainB)
 	s.Require().NoError(err)
 
-	// Create connections
+	// create connections
 	connection, err := s.relayer.CreateConnections(s.ctx, s.chainA, s.chainB)
 	s.Require().NoError(err)
 	s.Require().NotEmpty(connection.ConnectionID, "Connection ID should not be empty")
@@ -179,7 +162,7 @@ func (s *IBCTestSuite) setupIBCConnection() (ibc.Connection, *ibc.Channel) {
 		Version:        "ics20-1",
 	}
 
-	channel, err := s.relayer.CreateChannel(s.ctx, s.chainA, s.chainB, connection, channelOpts)
+	channel, err := s.relayer.CreateChannel(s.ctx, s.chainA, connection, channelOpts)
 	s.Require().NoError(err)
 	s.Require().NotNil(channel)
 	s.Require().NotEmpty(channel.ChannelID, "Channel ID should not be empty")

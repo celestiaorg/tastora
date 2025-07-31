@@ -31,13 +31,12 @@ const (
 // Hermes implements the IBC relayer interface using Hermes.
 type Hermes struct {
 	*container.Node
-	chains map[string]types.Chain
 	// started indicates if the relayer has been started or not.
 	started bool
 }
 
 // NewHermes creates a new Hermes relayer instance.
-func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName, networkID string, logger *zap.Logger) (*Hermes, error) {
+func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName, networkID string, index int, logger *zap.Logger) (*Hermes, error) {
 	image := container.Image{
 		Repository: hermesDefaultImage,
 		Version:    hermesDefaultVersion,
@@ -50,14 +49,13 @@ func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName,
 		testName,
 		image,
 		hermesHomeDir,
-		0, // index
+		index,
 		"hermes-relayer",
 		logger,
 	)
 
 	hermes := &Hermes{
-		Node:   node,
-		chains: make(map[string]types.Chain),
+		Node: node,
 	}
 
 	lifecycle := container.NewLifecycle(logger, dockerClient, hermes.Name())
@@ -71,8 +69,9 @@ func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName,
 	return hermes, nil
 }
 
+// Name returns the hostname of the docker container.
 func (h *Hermes) Name() string {
-	return fmt.Sprintf("%s-hermes", internal.SanitizeContainerName(h.TestName))
+	return fmt.Sprintf("%s-%d-hermes", internal.SanitizeContainerName(h.TestName), h.Index)
 }
 
 // Start starts the Hermes relayer.
@@ -114,51 +113,44 @@ func (h *Hermes) Stop(ctx context.Context) error {
 	return nil
 }
 
-// Init initializes the relayer configuration
-func (h *Hermes) Init(ctx context.Context, chainA, chainB types.Chain) error {
-	// register chains with relayer
-	if err := h.AddChain(chainA); err != nil {
-		return fmt.Errorf("failed to add chain A to relayer: %w", err)
-	}
-
-	if err := h.AddChain(chainB); err != nil {
-		return fmt.Errorf("failed to add chain B to relayer: %w", err)
-	}
-
-	if err := h.generateConfig(ctx); err != nil {
+// Init initializes and validates the relayer configuration, and creates and funds wallets on the provided chains.
+func (h *Hermes) Init(ctx context.Context, chains ...types.Chain) error {
+	if err := h.generateConfig(ctx, chains...); err != nil {
 		return fmt.Errorf("failed to generate config: %w", err)
 	}
 
+	if err := h.setupWallets(ctx, chains...); err != nil {
+		return fmt.Errorf("failed to setup wallets: %w", err)
+	}
 	return nil
 }
 
-// SetupWallets creates keys on Hermes relayer and funds them from chain faucets
-func (h *Hermes) SetupWallets(ctx context.Context, chainA, chainB types.Chain) error {
-	// Create key for chain A on Hermes relayer
-	keyNameA := fmt.Sprintf("relayer-%s", chainA.GetChainID())
-	addressA, err := h.createRelayerKey(ctx, chainA.GetChainID(), keyNameA)
-	if err != nil {
-		return fmt.Errorf("failed to create relayer key for chain A: %w", err)
+// setupWallets creates keys on Hermes relayer and funds them from chain faucets.
+func (h *Hermes) setupWallets(ctx context.Context, chains ...types.Chain) error {
+	for _, chain := range chains {
+		// NOTE: it is not possible to do this operation in parallel as it potentially modifies the global sdk
+		// config which could interfere with sdk functions for the other chains if the bech32 prefix is different.
+		if err := h.setupKeyAndWallet(ctx, chain); err != nil {
+			return fmt.Errorf("failed to setup key and wallet: %w", err)
+		}
 	}
+	return nil
+}
 
-	// Create key for chain B on Hermes relayer
-	keyNameB := fmt.Sprintf("relayer-%s", chainB.GetChainID())
-	addressB, err := h.createRelayerKey(ctx, chainB.GetChainID(), keyNameB)
+// setupKeyAndWallet generates a relayer key and funds it so it has tokens to submit messages to relay ibc packets.
+func (h *Hermes) setupKeyAndWallet(ctx context.Context, chain types.Chain) error {
+	// Create key for chain A on Hermes relayer
+	keyName := fmt.Sprintf("relayer-%s", chain.GetChainID())
+	address, err := h.createRelayerKey(ctx, chain.GetChainID(), keyName)
 	if err != nil {
-		return fmt.Errorf("failed to create relayer key for chain B: %w", err)
+		return fmt.Errorf("failed to create relayer key for chain %s: %w", chain.GetChainID(), err)
 	}
 
 	// Fund the relayer addresses from chain faucets
-	err = h.fundRelayerAddress(ctx, chainA, addressA)
+	err = h.fundRelayerAddress(ctx, chain, address)
 	if err != nil {
-		return fmt.Errorf("failed to fund relayer address on chain A: %w", err)
+		return fmt.Errorf("failed to fund relayer address on chain %s: %w", chain.GetChainID(), err)
 	}
-
-	err = h.fundRelayerAddress(ctx, chainB, addressB)
-	if err != nil {
-		return fmt.Errorf("failed to fund relayer address on chain B: %w", err)
-	}
-
 	return nil
 }
 
@@ -193,10 +185,9 @@ func (h *Hermes) CreateConnections(ctx context.Context, chainA, chainB types.Cha
 }
 
 // CreateChannel creates an IBC channel between the chains.
-func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, connection ibc.Connection, opts ibc.CreateChannelOptions) (*ibc.Channel, error) {
-	// Validate that connection has a valid ID
+func (h *Hermes) CreateChannel(ctx context.Context, chainA types.Chain, connection ibc.Connection, opts ibc.CreateChannelOptions) (ibc.Channel, error) {
 	if connection.ConnectionID == "" {
-		return nil, fmt.Errorf("invalid connection: connection ID is empty")
+		return ibc.Channel{}, fmt.Errorf("invalid connection: connection ID is empty")
 	}
 
 	// Execute hermes create channel command with JSON output using existing connection
@@ -211,13 +202,13 @@ func (h *Hermes) CreateChannel(ctx context.Context, chainA, chainB types.Chain, 
 	}
 	stdout, _, err := h.Exec(ctx, h.Logger, cmd, nil)
 	if err != nil {
-		return nil, err
+		return ibc.Channel{}, err
 	}
 
 	// Parse channel information from hermes output
 	channel, err := h.parseCreateChannelOutput(string(stdout), opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse hermes create channel output: %w", err)
+		return ibc.Channel{}, fmt.Errorf("failed to parse hermes create channel output: %w", err)
 	}
 
 	return channel, nil
@@ -255,14 +246,14 @@ func (h *Hermes) getConnectionIDsFromStdout(stdout []byte) (string, string, erro
 }
 
 // parseCreateChannelOutput parses the output from hermes create channel command
-func (h *Hermes) parseCreateChannelOutput(output string, opts ibc.CreateChannelOptions) (*ibc.Channel, error) {
-	// Extract channel IDs using the same approach as interchaintest
+func (h *Hermes) parseCreateChannelOutput(output string, opts ibc.CreateChannelOptions) (ibc.Channel, error) {
+	// Extract channel IDs from stdout.
 	channelA, channelB, err := h.getChannelIDsFromStdout([]byte(output))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse channel IDs: %w", err)
+		return ibc.Channel{}, fmt.Errorf("failed to parse channel IDs: %w", err)
 	}
 
-	channel := &ibc.Channel{
+	channel := ibc.Channel{
 		ChannelID:        channelA,
 		CounterpartyID:   channelB,
 		PortID:           opts.SourcePortName,
@@ -297,18 +288,12 @@ func (h *Hermes) extractJSONResult(stdout []byte) []byte {
 	return []byte(jsonOutput)
 }
 
-// AddChain adds a chain to the relayer configuration.
-func (h *Hermes) AddChain(chain types.Chain) error {
-	h.chains[chain.GetChainID()] = chain
-	return nil
-}
-
 // generateConfig creates the Hermes configuration file and writes it to the container
-func (h *Hermes) generateConfig(ctx context.Context) error {
-	// Collect chain configs from all added chains
-	chainConfigs := make([]types.ChainConfig, 0, len(h.chains))
-	for _, chain := range h.chains {
-		chainConfigs = append(chainConfigs, chain.GetChainConfig())
+func (h *Hermes) generateConfig(ctx context.Context, chains ...types.Chain) error {
+	// collect chain configs from all added chains
+	chainConfigs := make([]types.ChainRelayerConfig, 0, len(chains))
+	for _, chain := range chains {
+		chainConfigs = append(chainConfigs, chain.GetRelayerConfig())
 	}
 
 	// Generate Hermes config
@@ -317,7 +302,6 @@ func (h *Hermes) generateConfig(ctx context.Context) error {
 		return fmt.Errorf("failed to create hermes config: %w", err)
 	}
 
-	// Convert to TOML
 	configTOML, err := hermesConfig.ToTOML()
 	if err != nil {
 		return fmt.Errorf("failed to marshal hermes config: %w", err)
@@ -332,11 +316,11 @@ func (h *Hermes) generateConfig(ctx context.Context) error {
 
 	h.Logger.Info("Hermes config written",
 		zap.Int("config_size", len(configTOML)),
-		zap.Int("chains_count", len(h.chains)),
+		zap.Int("chains_count", len(chains)),
 		zap.String("file_path", path.Join(h.HomeDir(), configPath)),
 	)
-	for chainID := range h.chains {
-		h.Logger.Info("Chain configured", zap.String("chain_id", chainID))
+	for _, chain := range chains {
+		h.Logger.Info("Chain configured", zap.String("chain_id", chain.GetChainID()))
 	}
 
 	if err := h.validateConfig(ctx); err != nil {
@@ -461,9 +445,9 @@ func (h *Hermes) extractAddressWithRegex(text string) (string, error) {
 func (h *Hermes) fundRelayerAddress(ctx context.Context, chain types.Chain, relayerAddress string) error {
 	// Get the chain's faucet wallet and config
 	faucet := chain.GetFaucetWallet()
-	chainConfig := chain.GetChainConfig()
+	chainRelayerConfig := chain.GetRelayerConfig()
 
-	reset := internal.TemporarilyModifySDKConfigPrefix(chainConfig.Bech32Prefix)
+	reset := internal.TemporarilyModifySDKConfigPrefix(chainRelayerConfig.Bech32Prefix)
 	defer reset()
 
 	// Get faucet address
@@ -480,12 +464,8 @@ func (h *Hermes) fundRelayerAddress(ctx context.Context, chain types.Chain, rela
 
 	// Define amount to fund the relayer wallet (enough for relayer operations)
 	// Use the chain's native denom from the config
-	fundAmount := sdk.NewCoins(sdk.NewCoin(chainConfig.Denom, sdkmath.NewInt(10000000))) // 10 tokens
-
-	// Create bank send message
+	fundAmount := sdk.NewCoins(sdk.NewCoin(chainRelayerConfig.Denom, sdkmath.NewInt(10000000))) // 10 tokens
 	bankSend := banktypes.NewMsgSend(fromAddr, toAddr, fundAmount)
-
-	// Broadcast the funding transaction
 	resp, err := chain.BroadcastMessages(ctx, faucet, bankSend)
 	if err != nil {
 		return fmt.Errorf("failed to broadcast funding transaction: %w", err)

@@ -27,7 +27,7 @@ func (s *IBCTestSuite) TestIBCTransfer() {
 
 	// Fund the sender wallet
 	faucetA := s.chainA.GetFaucetWallet()
-	chainAConfig := s.chainA.GetChainConfig()
+	chainAConfig := s.chainA.GetRelayerConfig()
 
 	fromAddr, err := sdkacc.AddressFromWallet(faucetA)
 	s.Require().NoError(err)
@@ -126,7 +126,7 @@ func (s *IBCTestSuite) getBalance(ctx context.Context, chain types.Chain, addres
 	}
 
 	// Get chain config for bech32 prefix
-	chainConfig := chain.GetChainConfig()
+	chainConfig := chain.GetRelayerConfig()
 
 	reset := internal.TemporarilyModifySDKConfigPrefix(chainConfig.Bech32Prefix)
 	defer reset()

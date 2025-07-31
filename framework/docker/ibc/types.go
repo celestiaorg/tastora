@@ -1,5 +1,21 @@
 package ibc
 
+// CreateChannelOptions defines options for creating an IBC channel.
+type CreateChannelOptions struct {
+	SourcePortName string
+	DestPortName   string
+	Order          ChannelOrder
+	Version        string
+}
+
+// ChannelOrder represents the ordering of an IBC channel.
+type ChannelOrder string
+
+const (
+	OrderOrdered   ChannelOrder = "ordered"
+	OrderUnordered ChannelOrder = "unordered"
+)
+
 // Channel represents an IBC channel between two chains.
 type Channel struct {
 	ChannelID        string
