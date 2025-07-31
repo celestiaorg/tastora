@@ -79,7 +79,7 @@ func (s *IBCTestSuite) TestIBCTransfer() {
 		receiverAddr.String(),
 		clienttypes.ZeroHeight(),
 		uint64(time.Now().Add(time.Hour).UnixNano()), // timeout timestamp
-		"",                                           // memo
+		"", // memo
 	)
 
 	resp, err = s.chainA.BroadcastMessages(ctx, senderWallet, ibcTransfer)
