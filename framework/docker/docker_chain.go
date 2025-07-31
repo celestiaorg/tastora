@@ -310,11 +310,14 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 	// copy faucet key to all other validators now that containers are running.
 	// this ensures the faucet wallet can be used on all nodes.
-	for i := 1; i < len(c.Validators); i++ {
-		if err := c.copyFaucetKeyToValidator(c.Validators[i]); err != nil {
-			return fmt.Errorf("failed to copy faucet key to validator %d: %w", i, err)
+	// since the faucet wallet is only created if a genesis keyring is not provided, we only copy it over if that's the case.
+	if c.Validators[0].GenesisKeyring == nil {
+		for i := 1; i < len(c.Validators); i++ {
+			if err := c.copyFaucetKeyToValidator(c.Validators[i]); err != nil {
+				return fmt.Errorf("failed to copy faucet key to validator %d: %w", i, err)
+			}
+			c.Validators[i].faucetWallet = c.Validators[0].faucetWallet
 		}
-		c.Validators[i].faucetWallet = c.Validators[0].faucetWallet
 	}
 
 	return nil
