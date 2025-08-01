@@ -109,6 +109,10 @@ func (h *Hermes) Stop(ctx context.Context) error {
 		return err
 	}
 
+	if err := h.RemoveContainer(ctx); err != nil {
+		return err
+	}
+
 	h.started = false
 	return nil
 }
@@ -146,7 +150,7 @@ func (h *Hermes) setupKeyAndWallet(ctx context.Context, chain types.Chain) error
 		return fmt.Errorf("failed to create relayer key for chain %s: %w", chain.GetChainID(), err)
 	}
 
-	// Fund the relayer addresses from chain faucets
+	// fund the relayer addresses from chain faucets
 	err = h.fundRelayerAddress(ctx, chain, address)
 	if err != nil {
 		return fmt.Errorf("failed to fund relayer address on chain %s: %w", chain.GetChainID(), err)
@@ -446,9 +450,6 @@ func (h *Hermes) fundRelayerAddress(ctx context.Context, chain types.Chain, rela
 	// Get the chain's faucet wallet and config
 	faucet := chain.GetFaucetWallet()
 	chainRelayerConfig := chain.GetRelayerConfig()
-
-	reset := internal.TemporarilyModifySDKConfigPrefix(chainRelayerConfig.Bech32Prefix)
-	defer reset()
 
 	// Get faucet address
 	fromAddr, err := sdkacc.AddressFromWallet(faucet)

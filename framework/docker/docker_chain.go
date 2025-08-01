@@ -50,6 +50,8 @@ type Chain struct {
 	mu          sync.Mutex
 	broadcaster types.Broadcaster
 
+	faucetWallet types.Wallet
+
 	// started is a bool indicating if the Chain has been started or not.
 	// it is used to determine if files should be initialized at startup or
 	// if the nodes should just be started.
@@ -69,7 +71,7 @@ func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
 
 // GetFaucetWallet retrieves the faucet wallet for the chain.
 func (c *Chain) GetFaucetWallet() types.Wallet {
-	return c.Validators[0].GetFaucetWallet()
+	return c.faucetWallet
 }
 
 // GetChainID returns the chain ID.
@@ -312,8 +314,9 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	// this ensures the faucet wallet can be used on all nodes.
 	// since the faucet wallet is only created if a genesis keyring is not provided, we only copy it over if that's the case.
 	if c.Validators[0].GenesisKeyring == nil {
+		c.Validators[0].faucetWallet = c.GetFaucetWallet()
 		for i := 1; i < len(c.Validators); i++ {
-			if err := c.copyFaucetKeyToValidator(c.Validators[i]); err != nil {
+			if err := c.copyFaucetKeyToValidator(c.GetFaucetWallet(), c.Validators[i]); err != nil {
 				return fmt.Errorf("failed to copy faucet key to validator %d: %w", i, err)
 			}
 			c.Validators[i].faucetWallet = c.Validators[0].faucetWallet
@@ -349,7 +352,7 @@ func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdk
 	if err != nil {
 		return nil, fmt.Errorf("failed to create faucet wallet: %w", err)
 	}
-	c.Validators[0].faucetWallet = wallet
+	c.faucetWallet = wallet
 
 	if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
 		return nil, err
@@ -453,8 +456,8 @@ func (c *Chain) CreateWallet(ctx context.Context, keyName string) (types.Wallet,
 }
 
 // copyFaucetKeyToValidator copies the faucet key from validator[0] to the specified validator.
-func (c *Chain) copyFaucetKeyToValidator(targetValidator *ChainNode) error {
-	faucetKeyName := consts.FaucetAccountKeyName
+func (c *Chain) copyFaucetKeyToValidator(faucetWallet types.Wallet, targetValidator *ChainNode) error {
+	faucetKeyName := faucetWallet.GetKeyName()
 
 	// as part of setup, the faucet wallet was created on Validators[0]
 	sourceKeyring, err := c.Validators[0].GetKeyring()

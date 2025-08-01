@@ -7,11 +7,11 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/ibc/relayer"
 	"github.com/celestiaorg/tastora/framework/testutil/config"
 	"github.com/celestiaorg/tastora/framework/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/moby/moby/client"
 	"golang.org/x/sync/errgroup"
 
 	servercfg "github.com/cosmos/cosmos-sdk/server/config"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/bank"
@@ -43,6 +43,14 @@ func (s *IBCTestSuite) SetupSuite() {
 	s.ctx = context.Background()
 	s.logger = zaptest.NewLogger(s.T())
 	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{})
+
+	// configure global SDK for celestia prefix during chain setup
+	// NOTE: this assumes all denoms are "celestia", modifying the global config during the test can cause problems
+	// for calling code if the global config is sealed.
+	// TODO: support multiple denoms
+	sdkConf := sdk.GetConfig()
+	sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
+
 }
 
 // SetupTest sets up IBC infrastructure for each test
@@ -81,10 +89,6 @@ func (s *IBCTestSuite) SetupTest() {
 
 // createCelestiaChain creates a celestia-app chain for IBC testing
 func (s *IBCTestSuite) createCelestiaChain() (types.Chain, error) {
-	// Configure global SDK for celestia prefix during chain setup
-	sdkConf := sdk.GetConfig()
-	sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
-
 	builder := NewChainBuilder(s.T()).
 		WithDockerClient(s.dockerClient).
 		WithDockerNetworkID(s.networkID).
@@ -123,9 +127,11 @@ func (s *IBCTestSuite) createSimappChain() (types.Chain, error) {
 		WithChainID("chain-b").
 		WithName("simapp").
 		// use the simapp from ibc-go as a simple app with basic wiring and no token filters.
-		WithImage(container.NewImage("ghcr.io/cosmos/ibc-go-simd", "v8.5.0", "1000:1000")).
+		// TODO: this is a custom built simapp that has the bech32prefix as "celestia" as a workaround for the global
+		// SDK config not being usable when 2 chains have a different beck32 preix (e.g. "celestia" and "cosmos" ) if it is sealed.
+		WithImage(container.NewImage("ghcr.io/chatton/ibc-go-simd", "v8.5.0", "1000:1000")).
 		WithBinaryName("simd").
-		WithBech32Prefix("cosmos").
+		WithBech32Prefix("celestia").
 		WithDenom("stake").
 		WithGasPrices("0.000001stake").
 		WithEncodingConfig(&s.encConfig).

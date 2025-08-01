@@ -3,12 +3,11 @@ package docker
 import (
 	"context"
 	sdkmath "cosmossdk.io/math"
-	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/testutil/query"
 	"github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	ibctransfertypes "github.com/cosmos/ibc-go/v8/modules/apps/transfer/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/stretchr/testify/suite"
@@ -101,35 +100,13 @@ func (s *IBCTestSuite) getBalance(ctx context.Context, chain types.Chain, addres
 		return sdkmath.ZeroInt()
 	}
 
-	// Get chain config for bech32 prefix
-	chainConfig := chain.GetRelayerConfig()
-
-	reset := internal.TemporarilyModifySDKConfigPrefix(chainConfig.Bech32Prefix)
-	defer reset()
-
 	node := dockerChain.GetNode()
-	clientCtx := node.CliContext()
-
-	// Create bank query client
-	bankClient := banktypes.NewQueryClient(clientCtx)
-
-	// Query the balance
-	balanceReq := &banktypes.QueryBalanceRequest{
-		Address: address.String(),
-		Denom:   denom,
-	}
-
-	resp, err := bankClient.Balance(ctx, balanceReq)
+	amount, err := query.Balance(ctx, node.GrpcConn, address.String(), denom)
 	if err != nil {
 		s.T().Logf("Failed to query balance for %s denom %s: %v", address.String(), denom, err)
 		return sdkmath.ZeroInt()
 	}
-
-	if resp.Balance == nil {
-		return sdkmath.ZeroInt()
-	}
-
-	return resp.Balance.Amount
+	return amount
 }
 
 // calculateIBCDenom calculates the IBC denomination for a token transferred over IBC
