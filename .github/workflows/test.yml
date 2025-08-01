@@ -28,8 +28,5 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pre-pull Docker image
-        run: docker pull ghcr.io/chatton/ibc-go-simd:v8.5.0
-
       - name: Run tests
         run: make test
