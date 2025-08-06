@@ -4,7 +4,7 @@
   - specifically to these repos
     - <https://github.com/celestiaorg/celestia-app>
     - <https://github.com/celestiaorg/celestia-node>
-    - <https://github.com/evstack/rollkit>
+    - <https://github.com/evstack/ev-node>
 
 ### Project Structure
 
