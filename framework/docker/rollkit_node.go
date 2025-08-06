@@ -58,7 +58,7 @@ func NewRollkitNode(cfg Config, testName string, image container.Image, index in
 		zap.Bool("aggregator", index == 0),
 	)
 	rn := &RollkitNode{
-		cfg:           cfg,
+		cfg:  cfg,
 		Node: container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "rollkit"), index, "rollkit", logger),
 	}
 
@@ -229,7 +229,7 @@ func (rn *RollkitNode) GetHostHTTPPort() string {
 
 // waitForNodeReady polls the health endpoint until the node is ready or timeout is reached
 func (rn *RollkitNode) waitForNodeReady(ctx context.Context, timeout time.Duration) error {
-	healthURL := fmt.Sprintf("http://%s/rollkit.v1.HealthService/Livez", rn.hostRPCPort)
+	healthURL := fmt.Sprintf("http://%s/evnode.v1.HealthService/Livez", rn.hostRPCPort)
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	timeoutCh := time.After(timeout)
