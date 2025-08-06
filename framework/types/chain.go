@@ -8,6 +8,16 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
+// ChainRelayerConfig contains all values required to populate a relayer config.
+type ChainRelayerConfig struct {
+	ChainID      string
+	Denom        string
+	GasPrices    string
+	Bech32Prefix string
+	RPCAddress   string
+	GRPCAddress  string
+}
+
 type Chain interface {
 	// Height returns the current height of the chain.
 	Height(ctx context.Context) (int64, error)
@@ -20,7 +30,7 @@ type Chain interface {
 	// GetGRPCAddress returns the internal GRPC address.
 	GetGRPCAddress() string
 	// GetVolumeName is a docker specific field, it is the name of the docker volume the chain nodes are mounted to.
-	GetVolumeName() string // TODO: this should be removed and is a temporary function for docker only PoC.
+	GetVolumeName() string
 	// GetNodes returns a slice of ChainNodes.
 	GetNodes() []ChainNode
 	// CreateWallet creates a new wallet with the specified keyName and returns the Wallet instance or an error.
@@ -35,6 +45,8 @@ type Chain interface {
 	GetFaucetWallet() Wallet
 	// GetChainID returns the chain ID.
 	GetChainID() string
+	// GetRelayerConfig returns the chain configuration.
+	GetRelayerConfig() ChainRelayerConfig
 }
 
 type ChainNode interface {

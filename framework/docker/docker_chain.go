@@ -47,14 +47,26 @@ type Chain struct {
 	cdc        *codec.ProtoCodec
 	log        *zap.Logger
 
-	mu           sync.Mutex
+	mu          sync.Mutex
+	broadcaster types.Broadcaster
+
 	faucetWallet types.Wallet
-	broadcaster  types.Broadcaster
 
 	// started is a bool indicating if the Chain has been started or not.
 	// it is used to determine if files should be initialized at startup or
 	// if the nodes should just be started.
 	started bool
+}
+
+func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
+	return types.ChainRelayerConfig{
+		ChainID:      c.GetChainID(),
+		Denom:        c.cfg.ChainConfig.Denom,
+		GasPrices:    c.cfg.ChainConfig.GasPrices,
+		Bech32Prefix: c.cfg.ChainConfig.Bech32Prefix,
+		RPCAddress:   "http://" + c.GetNode().Name() + ":26657",
+		GRPCAddress:  "http://" + c.GetNode().Name() + ":9090",
+	}
 }
 
 // GetFaucetWallet retrieves the faucet wallet for the chain.
@@ -72,13 +84,13 @@ func (c *Chain) getBroadcaster() types.Broadcaster {
 	if c.broadcaster != nil {
 		return c.broadcaster
 	}
-	c.broadcaster = newBroadcaster(c.t, c)
+	c.broadcaster = newBroadcaster(c)
 	return c.broadcaster
 }
 
 // BroadcastMessages broadcasts the given messages signed on behalf of the provided user.
 func (c *Chain) BroadcastMessages(ctx context.Context, signingWallet types.Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error) {
-	if c.faucetWallet.GetFormattedAddress() == "" {
+	if c.GetFaucetWallet() == nil {
 		return sdk.TxResponse{}, fmt.Errorf("faucet wallet not initialized")
 	}
 	return c.getBroadcaster().BroadcastMessages(ctx, signingWallet, msgs...)
@@ -294,7 +306,24 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	}
 
 	// Wait for blocks before considering the chains "started"
-	return wait.ForBlocks(ctx, 2, c.GetNode())
+	if err := wait.ForBlocks(ctx, 2, c.GetNode()); err != nil {
+		return err
+	}
+
+	// copy faucet key to all other validators now that containers are running.
+	// this ensures the faucet wallet can be used on all nodes.
+	// since the faucet wallet is only created if a genesis keyring is not provided, we only copy it over if that's the case.
+	if c.Validators[0].GenesisKeyring == nil {
+		c.Validators[0].faucetWallet = c.GetFaucetWallet()
+		for i := 1; i < len(c.Validators); i++ {
+			if err := c.copyFaucetKeyToValidator(c.GetFaucetWallet(), c.Validators[i]); err != nil {
+				return fmt.Errorf("failed to copy faucet key to validator %d: %w", i, err)
+			}
+			c.Validators[i].faucetWallet = c.Validators[0].faucetWallet
+		}
+	}
+
+	return nil
 }
 
 // initDefaultGenesis initializes the default genesis file with validators and a faucet account for funding test wallets.
@@ -421,31 +450,37 @@ func (c *Chain) pullImages(ctx context.Context) {
 	}
 }
 
-// CreateWallet will creates a new wallet.
+// CreateWallet creates a new wallet using Validator[0] to maintain backward compatibility.
 func (c *Chain) CreateWallet(ctx context.Context, keyName string) (types.Wallet, error) {
-	if err := c.createKey(ctx, keyName); err != nil {
-		return nil, fmt.Errorf("failed to create key with name %q on chain %s: %w", keyName, c.cfg.ChainConfig.Name, err)
-	}
-
-	addrBytes, err := c.getAddress(ctx, keyName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get account address for key %q on chain %s: %w", keyName, c.cfg.ChainConfig.Name, err)
-	}
-
-	formattedAddres := sdk.MustBech32ifyAddressBytes(c.cfg.ChainConfig.Bech32Prefix, addrBytes)
-
-	w := NewWallet(addrBytes, formattedAddres, c.cfg.ChainConfig.Bech32Prefix, keyName)
-	return &w, nil
+	return c.GetNode().CreateWallet(ctx, keyName, c.cfg.ChainConfig.Bech32Prefix)
 }
 
-func (c *Chain) createKey(ctx context.Context, keyName string) error {
-	return c.GetNode().createKey(ctx, keyName)
-}
+// copyFaucetKeyToValidator copies the faucet key from validator[0] to the specified validator.
+func (c *Chain) copyFaucetKeyToValidator(faucetWallet types.Wallet, targetValidator *ChainNode) error {
+	faucetKeyName := faucetWallet.GetKeyName()
 
-func (c *Chain) getAddress(ctx context.Context, keyName string) ([]byte, error) {
-	b32Addr, err := c.GetNode().accountKeyBech32(ctx, keyName)
+	// as part of setup, the faucet wallet was created on Validators[0]
+	sourceKeyring, err := c.Validators[0].GetKeyring()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to get source keyring: %w", err)
 	}
-	return sdk.GetFromBech32(b32Addr, c.cfg.ChainConfig.Bech32Prefix)
+
+	// get the keyring from target validator
+	targetKeyring, err := targetValidator.GetKeyring()
+	if err != nil {
+		return fmt.Errorf("failed to get target keyring: %w", err)
+	}
+
+	// export the key from source
+	armoredKey, err := sourceKeyring.ExportPrivKeyArmor(faucetKeyName, "")
+	if err != nil {
+		return fmt.Errorf("failed to export faucet key: %w", err)
+	}
+
+	// import the key to target
+	if err := targetKeyring.ImportPrivKey(faucetKeyName, armoredKey, ""); err != nil {
+		return fmt.Errorf("failed to import faucet key: %w", err)
+	}
+
+	return nil
 }

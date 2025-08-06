@@ -5,13 +5,13 @@ import (
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/moby/moby/client"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/bank"
+	"github.com/cosmos/ibc-go/v8/modules/apps/transfer"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -26,7 +26,7 @@ type DockerTestSuite struct {
 	logger       *zap.Logger
 	encConfig    testutil.TestEncodingConfig
 	provider     *Provider
-	chain        types.Chain
+	chain        *Chain
 	builder      *ChainBuilder
 }
 
@@ -37,10 +37,9 @@ func (s *DockerTestSuite) SetupSuite() {
 	// configure Bech32 prefix, this needs to be set as account.String() uses the global config.
 	sdkConf := sdk.GetConfig()
 	sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
-	sdkConf.Seal()
 
 	s.logger = zaptest.NewLogger(s.T())
-	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{})
+	s.encConfig = testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{})
 }
 
 func (s *DockerTestSuite) SetupTest() {
@@ -64,6 +63,7 @@ func (s *DockerTestSuite) SetupTest() {
 			"--grpc.address", "0.0.0.0:9090",
 			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
 			"--timeout-commit", "1s",
+			"--minimum-gas-prices", "0utia",
 		).
 		WithNode(NewChainNodeConfigBuilder().Build())
 }
