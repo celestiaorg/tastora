@@ -84,7 +84,7 @@ func (c *Chain) getBroadcaster() types.Broadcaster {
 	if c.broadcaster != nil {
 		return c.broadcaster
 	}
-	c.broadcaster = newBroadcaster(c)
+	c.broadcaster = NewBroadcaster(c)
 	return c.broadcaster
 }
 
