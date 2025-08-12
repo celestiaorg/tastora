@@ -58,7 +58,7 @@ func NewRollkitNode(cfg Config, testName string, image container.Image, index in
 		zap.Bool("aggregator", index == 0),
 	)
 	rn := &RollkitNode{
-		cfg:           cfg,
+		cfg:  cfg,
 		Node: container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "rollkit"), index, "rollkit", logger),
 	}
 
@@ -136,7 +136,6 @@ func (rn *RollkitNode) createRollkitContainer(ctx context.Context, additionalSta
 	startCmd := []string{
 		rn.cfg.RollkitChainConfig.Bin,
 		"--home", rn.HomeDir(),
-		"--chain_id", rn.cfg.RollkitChainConfig.ChainID,
 		"start",
 	}
 	if rn.isAggregator() {
