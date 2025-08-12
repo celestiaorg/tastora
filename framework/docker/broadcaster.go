@@ -24,10 +24,6 @@ import (
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 )
 
-type ClientContextOpt func(clientContext client.Context) client.Context
-
-type FactoryOpt func(factory sdktx.Factory) sdktx.Factory
-
 // broadcaster is responsible for broadcasting trasactions to docker chains.
 type broadcaster struct {
 	// buf stores the output sdk.TxResponse when broadcast.Tx is invoked.
@@ -38,16 +34,16 @@ type broadcaster struct {
 	// chain is a reference to the Chain instance which will be the target of the messages.
 	chain *Chain
 	// factoryOptions is a slice of broadcast.FactoryOpt which enables arbitrary configuration of the tx.Factory.
-	factoryOptions []FactoryOpt
+	factoryOptions []types.FactoryOpt
 	// clientContextOptions is a slice of broadcast.ClientContextOpt which enables arbitrary configuration of the client.Context.
-	clientContextOptions []ClientContextOpt
+	clientContextOptions []types.ClientContextOpt
 	// chainNode is the node to target when broadcasting transactions.
 	chainNode *ChainNode
 }
 
-// newBroadcaster returns an instance of Broadcaster which can be used with broadcast.Tx to
+// NewBroadcaster returns an instance of Broadcaster which can be used with broadcast.Tx to
 // broadcast messages sdk messages.
-func newBroadcaster(chain *Chain) types.Broadcaster {
+func NewBroadcaster(chain *Chain) types.Broadcaster {
 	return NewBroadcasterForNode(chain, nil)
 }
 
@@ -58,10 +54,14 @@ func NewBroadcasterForNode(chain *Chain, chainNode *ChainNode) types.Broadcaster
 	if chainNode == nil {
 		chainNode = chain.GetNode()
 	}
+	return newBroadcasterForNode(chain, nil)
+}
 
+// newBroadcasterForNode returns an instance of Broadcaster that broadcasts through a specific node.
+func newBroadcasterForNode(chain *Chain, node *ChainNode) types.Broadcaster {
 	return &broadcaster{
 		chain:     chain,
-		chainNode: chainNode,
+		chainNode: node,
 		buf:       &bytes.Buffer{},
 		keyrings:  map[types.Wallet]keyring.Keyring{},
 	}
@@ -69,13 +69,13 @@ func NewBroadcasterForNode(chain *Chain, chainNode *ChainNode) types.Broadcaster
 
 // ConfigureFactoryOptions ensure the given configuration functions are run when calling GetFactory
 // after all default options have been applied.
-func (b *broadcaster) ConfigureFactoryOptions(opts ...FactoryOpt) {
+func (b *broadcaster) ConfigureFactoryOptions(opts ...types.FactoryOpt) {
 	b.factoryOptions = append(b.factoryOptions, opts...)
 }
 
 // ConfigureClientContextOptions ensure the given configuration functions are run when calling GetClientContext
 // after all default options have been applied.
-func (b *broadcaster) ConfigureClientContextOptions(opts ...ClientContextOpt) {
+func (b *broadcaster) ConfigureClientContextOptions(opts ...types.ClientContextOpt) {
 	b.clientContextOptions = append(b.clientContextOptions, opts...)
 }
 
@@ -109,7 +109,7 @@ func (b *broadcaster) GetFactory(ctx context.Context, wallet types.Wallet) (sdkt
 // the provided wallet. ConfigureClientContextOptions can be used to configure arbitrary options to configure the returned
 // client.Context.
 func (b *broadcaster) GetClientContext(ctx context.Context, wallet types.Wallet) (client.Context, error) {
-	cn := b.chainNode
+	cn := b.getNode()
 
 	_, ok := b.keyrings[wallet]
 	if !ok {
@@ -157,12 +157,20 @@ func (b *broadcaster) UnmarshalTxResponseBytes(ctx context.Context, bytes []byte
 	return resp, nil
 }
 
+// getNode returns the node to use for broadcasting (specific node or chain default).
+func (b *broadcaster) getNode() *ChainNode {
+	if b.chainNode != nil {
+		return b.chainNode
+	}
+	return b.chain.GetNode()
+}
+
 // defaultClientContext returns a default client context configured with the wallet as the sender.
 func (b *broadcaster) defaultClientContext(fromWallet types.Wallet, sdkAdd sdk.AccAddress) client.Context {
 	// initialize a clean buffer each time
 	b.buf.Reset()
 	kr := b.keyrings[fromWallet]
-	cn := b.chain.GetNode()
+	cn := b.getNode()
 	return cn.CliContext().
 		WithOutput(b.buf).
 		WithFrom(fromWallet.GetFormattedAddress()).

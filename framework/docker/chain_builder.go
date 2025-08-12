@@ -153,6 +153,9 @@ type ChainBuilder struct {
 	postInit []func(ctx context.Context, node *ChainNode) error
 	// env are the default environment variables for all nodes in the chain (can be overridden per node)
 	env []string
+	// faucetWallet is the wallet that should be used when broadcasting transactions when the sender doesn't matter
+	// and the outcome is the only thing important. E.g. funding relayer wallets.
+	faucetWallet Wallet
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -196,6 +199,11 @@ func NewChainBuilderFromChain(chain *Chain) *ChainBuilder {
 
 func (b *ChainBuilder) WithName(name string) *ChainBuilder {
 	b.name = name
+	return b
+}
+
+func (b *ChainBuilder) WithFaucetWallet(wallet Wallet) *ChainBuilder {
+	b.faucetWallet = wallet
 	return b
 }
 
@@ -371,6 +379,16 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 		return nil, fmt.Errorf("failed to initialize chain nodes: %w", err)
 	}
 
+	// separate validators and full nodes
+	var validators, fullNodes []*ChainNode
+	for _, node := range nodes {
+		if node.Validator {
+			validators = append(validators, node)
+		} else {
+			fullNodes = append(fullNodes, node)
+		}
+	}
+
 	chain := &Chain{
 		cfg: Config{
 			Logger:          b.logger,
@@ -393,10 +411,12 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 				GenesisFileBz:       b.genesisBz,
 			},
 		},
-		t:          b.t,
-		Validators: nodes,
-		cdc:        cdc,
-		log:        b.logger,
+		t:            b.t,
+		Validators:   validators,
+		FullNodes:    fullNodes,
+		cdc:          cdc,
+		log:          b.logger,
+		faucetWallet: &b.faucetWallet,
 	}
 
 	return chain, nil
