@@ -47,7 +47,7 @@ const (
 
 // GetInternalPeerAddress retrieves the internal peer address for the ChainNode using its ID, hostname, and default port.
 func (cn *ChainNode) GetInternalPeerAddress(ctx context.Context) (string, error) {
-	id, err := cn.nodeID(ctx)
+	id, err := cn.NodeID(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +56,7 @@ func (cn *ChainNode) GetInternalPeerAddress(ctx context.Context) (string, error)
 
 // GetInternalRPCAddress returns the internal RPC address of the chain node in the format "nodeID@hostname:port".
 func (cn *ChainNode) GetInternalRPCAddress(ctx context.Context) (string, error) {
-	id, err := cn.nodeID(ctx)
+	id, err := cn.NodeID(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -137,6 +137,31 @@ func NewChainNode(
 // GetInternalHostName retrieves the internal host name of the ChainNode instance. Returns the host name and an error if any.
 func (cn *ChainNode) GetInternalHostName(ctx context.Context) (string, error) {
 	return cn.HostName(), nil
+}
+
+// GetInternalIP returns the internal IP address of the chain node container within the docker network.
+func (cn *ChainNode) GetInternalIP(ctx context.Context) (string, error) {
+	inspect, err := cn.DockerClient.ContainerInspect(ctx, cn.ContainerLifecycle.ContainerID())
+	if err != nil {
+		return "", fmt.Errorf("inspecting container: %w", err)
+	}
+
+	if inspect.NetworkSettings == nil {
+		return "", fmt.Errorf("container network settings not available")
+	}
+
+	networks := inspect.NetworkSettings.Networks
+	if networks == nil {
+		return "", fmt.Errorf("container networks not available")
+	}
+
+	for _, network := range networks {
+		if network.IPAddress != "" {
+			return network.IPAddress, nil
+		}
+	}
+
+	return "", fmt.Errorf("no IP address found for container")
 }
 
 // HostName returns the condensed hostname for the ChainNode, truncating if the name is 64 characters or longer.
@@ -383,7 +408,7 @@ func (cn *ChainNode) genesisFileContent(ctx context.Context) ([]byte, error) {
 
 // copyGentx transfers a gentx file from the source ChainNode to the destination ChainNode by reading and writing the file.
 func (cn *ChainNode) copyGentx(ctx context.Context, destVal *ChainNode) error {
-	nid, err := cn.nodeID(ctx)
+	nid, err := cn.NodeID(ctx)
 	if err != nil {
 		return fmt.Errorf("getting node ID: %w", err)
 	}
@@ -403,21 +428,30 @@ func (cn *ChainNode) copyGentx(ctx context.Context, destVal *ChainNode) error {
 	return nil
 }
 
-// nodeID returns the persistent ID of a given node.
-func (cn *ChainNode) nodeID(ctx context.Context) (string, error) {
+// nodeKey returns the node key of a given node.
+func (cn *ChainNode) nodeKey(ctx context.Context) (p2p.NodeKey, error) {
 	// This used to call p2p.LoadNodeKey against the file on the host,
 	// but because we are transitioning to operating on Docker volumes,
 	// we only have to tmjson.Unmarshal the raw content.
 	j, err := cn.ReadFile(ctx, "config/node_key.json")
 	if err != nil {
-		return "", fmt.Errorf("getting node_key.json content: %w", err)
+		return p2p.NodeKey{}, fmt.Errorf("getting node_key.json content: %w", err)
 	}
 
 	var nk p2p.NodeKey
 	if err := tmjson.Unmarshal(j, &nk); err != nil {
-		return "", fmt.Errorf("unmarshaling node_key.json: %w", err)
+		return p2p.NodeKey{}, fmt.Errorf("unmarshaling node_key.json: %w", err)
 	}
 
+	return nk, nil
+}
+
+// NodeID returns the persistent ID of a given node.
+func (cn *ChainNode) NodeID(ctx context.Context) (string, error) {
+	nk, err := cn.nodeKey(ctx)
+	if err != nil {
+		return "", fmt.Errorf("getting node key: %w", err)
+	}
 	return string(nk.ID()), nil
 }
 
