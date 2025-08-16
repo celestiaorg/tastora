@@ -229,24 +229,15 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	var finalGenesisBz []byte
-	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
-	if !c.usingCustomGenesisFile() {
-		var err error
-		finalGenesisBz, err = c.initDefaultGenesis(ctx, defaultGenesisAmount)
-		if err != nil {
-			return err
-		}
+	genesisBz, err := c.getGenesisFileBz(ctx, defaultGenesisAmount)
+	if err != nil {
+		return err
 	}
 
 	chainNodes := c.Nodes()
 	for _, cn := range chainNodes {
-		// test case is explicitly setting genesis bytes.
-		if c.cfg.ChainConfig.GenesisFileBz != nil {
-			finalGenesisBz = c.cfg.ChainConfig.GenesisFileBz
-		}
 
-		if err := cn.overwriteGenesisFile(ctx, finalGenesisBz); err != nil {
+		if err := cn.overwriteGenesisFile(ctx, genesisBz); err != nil {
 			return err
 		}
 
@@ -306,7 +297,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	// copy faucet key to all other validators now that containers are running.
 	// this ensures the faucet wallet can be used on all nodes.
 	// since the faucet wallet is only created if a genesis keyring is not provided, we only copy it over if that's the case.
-	if !c.usingCustomGenesisFile() {
+	if len(c.Validators) > 0 && c.Validators[0].GenesisKeyring == nil {
 		c.Validators[0].faucetWallet = c.GetFaucetWallet()
 		for i := 1; i < len(c.Validators); i++ {
 			if err := c.copyFaucetKeyToValidator(c.GetFaucetWallet(), c.Validators[i]); err != nil {
@@ -478,21 +469,15 @@ func (c *Chain) copyFaucetKeyToValidator(faucetWallet types.Wallet, targetValida
 	return nil
 }
 
-// usingCustomGenesisFile returns true if the chain is using a custom genesis file.
-func (c *Chain) usingCustomGenesisFile() bool {
-	// it is possible to create a chain without validators. E.g. when using the genesis
-	// file of an existing network like mocha.
-	if len(c.Validators) == 0 {
-		return true
+// getGenesisFileBz retrieves the genesis file bytes for the chain, generating a default genesis if none is specified.
+func (c *Chain) getGenesisFileBz(ctx context.Context, defaultGenesisAmount sdk.Coins) ([]byte, error) {
+	if c.cfg.ChainConfig.GenesisFileBz != nil {
+		return c.cfg.ChainConfig.GenesisFileBz, nil
+	}
+	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
+	if len(c.Validators) > 0 && c.Validators[0].GenesisKeyring == nil {
+		return c.initDefaultGenesis(ctx, defaultGenesisAmount)
 	}
 
-	if c.Validators[0].GenesisKeyring == nil {
-		return true
-	}
-
-	if len(c.cfg.ChainConfig.GenesisFileBz) > 0 {
-		return true
-	}
-
-	return false
+	panic("genesis file must be specified no validator nodes are present")
 }
