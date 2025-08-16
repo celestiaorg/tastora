@@ -306,7 +306,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	// copy faucet key to all other validators now that containers are running.
 	// this ensures the faucet wallet can be used on all nodes.
 	// since the faucet wallet is only created if a genesis keyring is not provided, we only copy it over if that's the case.
-	if c.Validators[0].GenesisKeyring == nil {
+	if c.usingCustomGenesisFile() {
 		c.Validators[0].faucetWallet = c.GetFaucetWallet()
 		for i := 1; i < len(c.Validators); i++ {
 			if err := c.copyFaucetKeyToValidator(c.GetFaucetWallet(), c.Validators[i]); err != nil {
@@ -476,4 +476,19 @@ func (c *Chain) copyFaucetKeyToValidator(faucetWallet types.Wallet, targetValida
 	}
 
 	return nil
+}
+
+// usingCustomGenesisFile returns true if the chain is using a custom genesis file.
+func (c *Chain) usingCustomGenesisFile() bool {
+	// it is possible to create a chain without validators. E.g. when using the genesis
+	// file of an existing network like mocha.
+	if len(c.Validators) == 0 {
+		return true
+	}
+
+	if c.Validators[0].GenesisKeyring == nil {
+		return true
+	}
+
+	return false
 }
