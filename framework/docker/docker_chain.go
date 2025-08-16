@@ -490,5 +490,9 @@ func (c *Chain) usingCustomGenesisFile() bool {
 		return true
 	}
 
+	if len(c.cfg.ChainConfig.GenesisFileBz) > 0 {
+		return true
+	}
+
 	return false
 }

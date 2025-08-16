@@ -9,19 +9,22 @@ import (
 
 func TestChainUsingCustomGenesisFile(t *testing.T) {
 	tests := []struct {
-		name       string
-		validators ChainNodes
-		expected   bool
+		name        string
+		validators  ChainNodes
+		genesisFile []byte
+		expected    bool
 	}{
 		{
-			name:       "empty validators array",
-			validators: ChainNodes{},
-			expected:   true,
+			name:        "empty validators array",
+			validators:  ChainNodes{},
+			genesisFile: nil,
+			expected:    true,
 		},
 		{
-			name:       "nil validators array",
-			validators: nil,
-			expected:   true,
+			name:        "nil validators array",
+			validators:  nil,
+			genesisFile: nil,
+			expected:    true,
 		},
 		{
 			name: "validator with nil keyring",
@@ -30,16 +33,38 @@ func TestChainUsingCustomGenesisFile(t *testing.T) {
 					ChainNodeParams: ChainNodeParams{GenesisKeyring: nil},
 				},
 			},
-			expected: true,
+			genesisFile: nil,
+			expected:    true,
 		},
 		{
-			name: "validator with non-nil keyring",
+			name: "validator with non-nil keyring and empty genesis file",
 			validators: ChainNodes{
 				{
 					ChainNodeParams: ChainNodeParams{GenesisKeyring: keyring.NewInMemory(nil)},
 				},
 			},
-			expected: false,
+			genesisFile: nil,
+			expected:    false,
+		},
+		{
+			name: "validator with non-nil keyring and custom genesis file",
+			validators: ChainNodes{
+				{
+					ChainNodeParams: ChainNodeParams{GenesisKeyring: keyring.NewInMemory(nil)},
+				},
+			},
+			genesisFile: []byte(`{"chain_id": "test"}`),
+			expected:    true,
+		},
+		{
+			name: "validator with nil keyring and custom genesis file",
+			validators: ChainNodes{
+				{
+					ChainNodeParams: ChainNodeParams{GenesisKeyring: nil},
+				},
+			},
+			genesisFile: []byte(`{"chain_id": "test"}`),
+			expected:    true,
 		},
 	}
 
@@ -47,6 +72,11 @@ func TestChainUsingCustomGenesisFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			chain := &Chain{
 				Validators: tt.validators,
+				cfg: Config{
+					ChainConfig: &ChainConfig{
+						GenesisFileBz: tt.genesisFile,
+					},
+				},
 			}
 
 			result := chain.usingCustomGenesisFile()
