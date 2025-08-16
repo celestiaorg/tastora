@@ -364,7 +364,7 @@ func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdk
 }
 
 func (c *Chain) GetNode() *ChainNode {
-	return c.Validators[0]
+	return c.Nodes()[0]
 }
 
 // Nodes returns all nodes, including validators and fullnodes.
