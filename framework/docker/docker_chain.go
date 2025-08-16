@@ -231,7 +231,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 	genesisBz, err := c.getGenesisFileBz(ctx, defaultGenesisAmount)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get genesis file: %w", err)
 	}
 
 	chainNodes := c.Nodes()
@@ -479,5 +479,5 @@ func (c *Chain) getGenesisFileBz(ctx context.Context, defaultGenesisAmount sdk.C
 		return c.initDefaultGenesis(ctx, defaultGenesisAmount)
 	}
 
-	panic("genesis file must be specified no validator nodes are present")
+	return nil, fmt.Errorf("genesis file must be specified if no validator nodes are present")
 }
