@@ -231,7 +231,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 
 	var finalGenesisBz []byte
 	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
-	if c.Validators[0].GenesisKeyring == nil {
+	if !c.usingCustomGenesisFile() {
 		var err error
 		finalGenesisBz, err = c.initDefaultGenesis(ctx, defaultGenesisAmount)
 		if err != nil {
@@ -306,7 +306,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	// copy faucet key to all other validators now that containers are running.
 	// this ensures the faucet wallet can be used on all nodes.
 	// since the faucet wallet is only created if a genesis keyring is not provided, we only copy it over if that's the case.
-	if c.usingCustomGenesisFile() {
+	if !c.usingCustomGenesisFile() {
 		c.Validators[0].faucetWallet = c.GetFaucetWallet()
 		for i := 1; i < len(c.Validators); i++ {
 			if err := c.copyFaucetKeyToValidator(c.GetFaucetWallet(), c.Validators[i]); err != nil {
