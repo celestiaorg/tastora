@@ -13,6 +13,7 @@ import (
 )
 
 func TestGetHostPort(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		Container container.InspectResponse
 		PortID    string
@@ -54,6 +55,7 @@ func TestGetHostPort(t *testing.T) {
 }
 
 func TestRandLowerCaseLetterString(t *testing.T) {
+	t.Parallel()
 	require.Empty(t, random.LowerCaseLetterString(0))
 
 	rand.Seed(1) // nolint:staticcheck
@@ -64,6 +66,7 @@ func TestRandLowerCaseLetterString(t *testing.T) {
 }
 
 func TestCondenseHostName(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		HostName, Want string
 	}{
@@ -76,6 +79,7 @@ func TestCondenseHostName(t *testing.T) {
 }
 
 func TestSanitizeContainerName(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		Name, Want string
 	}{

@@ -110,6 +110,8 @@ func (b *ChainNodeConfigBuilder) Build() ChainNodeConfig {
 type ChainBuilder struct {
 	// t is the testing context used for test assertions, container naming, and test lifecycle management
 	t *testing.T
+	// testName is the unique test identifier used for Docker resource naming in parallel execution
+	testName string
 	// nodes is the array of node configurations that define the chain topology and individual node settings
 	nodes []ChainNodeConfig
 	// dockerClient is the Docker client instance used for all container operations (create, start, stop, etc.)
@@ -153,10 +155,15 @@ type ChainBuilder struct {
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
 func NewChainBuilder(t *testing.T) *ChainBuilder {
+	return NewChainBuilderWithTestName(t, t.Name())
+}
+
+func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
 	t.Helper()
 	cb := &ChainBuilder{}
 	return cb.
 		WithT(t).
+		WithTestName(testName).
 		WithBinaryName("celestia-appd").
 		WithCoinType("118").
 		WithGasPrices("0.025utia").
@@ -209,6 +216,11 @@ func (b *ChainBuilder) WithChainID(chainID string) *ChainBuilder {
 func (b *ChainBuilder) WithT(t *testing.T) *ChainBuilder {
 	t.Helper()
 	b.t = t
+	return b
+}
+
+func (b *ChainBuilder) WithTestName(testName string) *ChainBuilder {
+	b.testName = testName
 	return b
 }
 
@@ -481,7 +493,7 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 	// Get the appropriate image using fallback logic
 	imageToUse := b.getImage(nodeConfig)
 
-	return NewChainNode(log, b.dockerClient, b.dockerNetworkID, b.t.Name(), imageToUse, homeDir, index, chainParams)
+	return NewChainNode(log, b.dockerClient, b.dockerNetworkID, b.testName, imageToUse, homeDir, index, chainParams)
 }
 
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume

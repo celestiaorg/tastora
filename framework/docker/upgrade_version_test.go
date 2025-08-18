@@ -2,38 +2,44 @@ package docker
 
 import (
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
+	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 // TestUpgradeVersion verifies that you can upgrade from one tag to another.
-func (s *DockerTestSuite) TestUpgradeVersion() {
-	var err error
-	s.chain, err = s.builder.Build(s.ctx)
-	s.Require().NoError(err)
+func TestUpgradeVersion(t *testing.T) {
+	t.Parallel()
 
-	err = s.chain.Start(s.ctx)
-	s.Require().NoError(err)
+	// Setup isolated docker environment for this test
+	testCfg := setupDockerTest(t)
 
-	s.Require().NoError(wait.ForBlocks(s.ctx, 5, s.chain))
+	chain, err := testCfg.Builder.Build(testCfg.Ctx)
+	require.NoError(t, err)
 
-	err = s.chain.Stop(s.ctx)
-	s.Require().NoError(err)
+	err = chain.Start(testCfg.Ctx)
+	require.NoError(t, err)
 
-	s.chain.UpgradeVersion(s.ctx, "v4.0.2-mocha")
+	require.NoError(t, wait.ForBlocks(testCfg.Ctx, 5, chain))
 
-	err = s.chain.Start(s.ctx)
-	s.Require().NoError(err)
+	err = chain.Stop(testCfg.Ctx)
+	require.NoError(t, err)
+
+	chain.UpgradeVersion(testCfg.Ctx, "v4.0.2-mocha")
+
+	err = chain.Start(testCfg.Ctx)
+	require.NoError(t, err)
 
 	// chain is producing blocks at the next version
-	err = wait.ForBlocks(s.ctx, 2, s.chain)
-	s.Require().NoError(err)
+	err = wait.ForBlocks(testCfg.Ctx, 2, chain)
+	require.NoError(t, err)
 
-	validatorNode := s.chain.GetNodes()[0]
+	validatorNode := chain.GetNodes()[0]
 
 	rpcClient, err := validatorNode.GetRPCClient()
-	s.Require().NoError(err, "failed to get RPC client for version check")
+	require.NoError(t, err, "failed to get RPC client for version check")
 
-	abciInfo, err := rpcClient.ABCIInfo(s.ctx)
-	s.Require().NoError(err, "failed to fetch ABCI info")
-	s.Require().Equal("4.0.2-mocha", abciInfo.Response.GetVersion(), "version mismatch")
-	s.Require().Equal(uint64(4), abciInfo.Response.GetAppVersion(), "app_version mismatch")
+	abciInfo, err := rpcClient.ABCIInfo(testCfg.Ctx)
+	require.NoError(t, err, "failed to fetch ABCI info")
+	require.Equal(t, "4.0.2-mocha", abciInfo.Response.GetVersion(), "version mismatch")
+	require.Equal(t, uint64(4), abciInfo.Response.GetAppVersion(), "app_version mismatch")
 }

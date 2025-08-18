@@ -47,6 +47,7 @@ func generateSampleLogs(lines int) string {
 
 // TestLogBehaviorLogic tests the logic for determining when to show full vs tailed logs
 func TestLogBehaviorLogic(t *testing.T) {
+	// Cannot use t.Parallel() because this test uses t.Setenv()
 	testCases := []struct {
 		name              string
 		testFailed        bool
@@ -163,6 +164,7 @@ func TestLogBehaviorLogic(t *testing.T) {
 }
 
 func TestLogContentDifference(t *testing.T) {
+	t.Parallel()
 	// Generate sample logs
 	fullLogs := generateSampleLogs(100) // 100 lines
 	fullLogLines := strings.Count(fullLogs, "Log line")
@@ -182,6 +184,7 @@ func TestLogContentDifference(t *testing.T) {
 }
 
 func TestLogHeaderGeneration(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		testFailed     bool
@@ -225,6 +228,7 @@ func TestLogHeaderGeneration(t *testing.T) {
 }
 
 func TestEnvironmentVariableHandling(t *testing.T) {
+	// Cannot use t.Parallel() because this test uses t.Setenv()
 	// Test default behavior (no env vars set)
 	t.Run("default_behavior", func(t *testing.T) {
 		showLogs := os.Getenv("SHOW_CONTAINER_LOGS")
@@ -250,6 +254,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 
 // TestHelperFunctions tests the extracted helper functions
 func TestHelperFunctions(t *testing.T) {
+	t.Parallel()
 	t.Run("shouldShowContainerLogs", func(t *testing.T) {
 		testCases := []struct {
 			name              string
@@ -331,6 +336,7 @@ func TestHelperFunctions(t *testing.T) {
 
 // TestDockerCleanupBehaviorSimulation simulates the key behavior changes
 func TestDockerCleanupBehaviorSimulation(t *testing.T) {
+	// Cannot use t.Parallel() because this test uses t.Setenv()
 	t.Run("failed_test_shows_full_logs", func(t *testing.T) {
 		// Simulate a failed test scenario
 		mockT := &mockTestingT{

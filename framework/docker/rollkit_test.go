@@ -1,43 +1,48 @@
 package docker
 
 import (
-	"context"
-	"encoding/hex"
 	"fmt"
 	"testing"
 
 	"cosmossdk.io/math"
-	"github.com/celestiaorg/go-square/v2/share"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"github.com/stretchr/testify/require"
 )
 
-func (s *DockerTestSuite) TestRollkit() {
-	ctx := context.Background()
+func TestRollkit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping due to short mode")
+	}
+	t.Parallel()
+	configureBech32PrefixOnce()
 
-	var err error
-	s.provider = s.CreateDockerProvider()
-	s.chain, err = s.builder.Build(s.ctx)
-	s.Require().NoError(err)
+	// Setup isolated docker environment for this test
+	testCfg := setupDockerTest(t)
 
-	err = s.chain.Start(s.ctx)
-	s.Require().NoError(err)
+	provider := testCfg.CreateDockerProvider(t)
+	chain, err := testCfg.Builder.Build(testCfg.Ctx)
+	require.NoError(t, err)
 
-	daNetwork, err := s.provider.GetDataAvailabilityNetwork(ctx)
-	s.Require().NoError(err)
+	err = chain.Start(testCfg.Ctx)
+	require.NoError(t, err)
 
-	genesisHash := s.getGenesisHash(ctx)
+	daNetwork, err := provider.GetDataAvailabilityNetwork(testCfg.Ctx)
+	require.NoError(t, err)
 
-	hostname, err := s.chain.GetNodes()[0].GetInternalHostName(ctx)
-	s.Require().NoError(err, "failed to get internal hostname")
+	genesisHash, err := getGenesisHash(testCfg.Ctx, chain)
+	require.NoError(t, err)
+
+	hostname, err := chain.GetNodes()[0].GetInternalHostName(testCfg.Ctx)
+	require.NoError(t, err, "failed to get internal hostname")
 
 	bridgeNode := daNetwork.GetBridgeNodes()[0]
-	chainID := s.chain.GetChainID()
+	chainID := chain.GetChainID()
 
-	s.T().Run("bridge node can be started", func(t *testing.T) {
-		err = bridgeNode.Start(ctx,
+	t.Run("bridge node can be started", func(t *testing.T) {
+		err = bridgeNode.Start(testCfg.Ctx,
 			types.WithChainID(chainID),
 			types.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
 			types.WithEnvironmentVariables(
@@ -47,52 +52,49 @@ func (s *DockerTestSuite) TestRollkit() {
 				},
 			),
 		)
-		s.Require().NoError(err)
+		require.NoError(t, err)
 	})
 
 	daWallet, err := bridgeNode.GetWallet()
-	s.Require().NoError(err)
-	s.T().Logf("da node celestia address: %s", daWallet.GetFormattedAddress())
+	require.NoError(t, err)
+	t.Logf("da node celestia address: %s", daWallet.GetFormattedAddress())
 
 	// Fund the da node address
-	fromAddress, err := sdkacc.AddressFromWallet(s.chain.GetFaucetWallet())
-	s.Require().NoError(err)
+	fromAddress, err := sdkacc.AddressFromWallet(chain.GetFaucetWallet())
+	require.NoError(t, err)
 
 	toAddress, err := sdk.AccAddressFromBech32(daWallet.GetFormattedAddress())
-	s.Require().NoError(err)
+	require.NoError(t, err)
 
 	// Fund the rollkit node wallet with coins
 	bankSend := banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
-	_, err = s.chain.BroadcastMessages(ctx, s.chain.GetFaucetWallet(), bankSend)
-	s.Require().NoError(err)
+	_, err = chain.BroadcastMessages(testCfg.Ctx, chain.GetFaucetWallet(), bankSend)
+	require.NoError(t, err)
 
-	rollkit, err := s.provider.GetRollkitChain(ctx)
-	s.Require().NoError(err)
+	rollkit, err := provider.GetRollkitChain(testCfg.Ctx)
+	require.NoError(t, err)
 
 	nodes := rollkit.GetNodes()
-	s.Require().Len(nodes, 1)
+	require.Len(t, nodes, 1)
 	aggregatorNode := nodes[0]
 
-	err = aggregatorNode.Init(ctx)
-	s.Require().NoError(err)
+	err = aggregatorNode.Init(testCfg.Ctx)
+	require.NoError(t, err)
 
 	authToken, err := bridgeNode.GetAuthToken()
-	s.Require().NoError(err)
+	require.NoError(t, err)
 
 	// Use the configured RPC port instead of hardcoded 26658
 	bridgeRPCAddress, err := bridgeNode.GetInternalRPCAddress()
-	s.Require().NoError(err)
+	require.NoError(t, err)
 	daAddress := fmt.Sprintf("http://%s", bridgeRPCAddress)
-	err = aggregatorNode.Start(ctx,
+	err = aggregatorNode.Start(testCfg.Ctx,
 		"--rollkit.da.address", daAddress,
 		"--rollkit.da.gas_price", "0.025",
 		"--rollkit.da.auth_token", authToken,
 		"--rollkit.rpc.address", "0.0.0.0:7331", // bind to 0.0.0.0 so rpc is reachable from test host.
-		"--rollkit.da.namespace", generateValidNamespaceHex(),
+		"--rollkit.da.header_namespace", "ev-header",
+		"--rollkit.da.data_namespace", "ev-data",
 	)
-	s.Require().NoError(err)
-}
-
-func generateValidNamespaceHex() string {
-	return hex.EncodeToString(share.RandomBlobNamespaceID())
+	require.NoError(t, err)
 }

@@ -11,6 +11,7 @@ import (
 )
 
 func TestChainNodeHostName(t *testing.T) {
+	t.Parallel()
 	// Create a chain with multiple nodes
 	testName := "test-hostname"
 	chainID := "test-chain"

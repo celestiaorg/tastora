@@ -11,6 +11,7 @@ import (
 )
 
 func TestDANodePortConfiguration(t *testing.T) {
+	t.Parallel()
 	logger := zaptest.NewLogger(t)
 
 	t.Run("default ports when no configuration provided", func(t *testing.T) {
@@ -137,6 +138,7 @@ func TestDANodePortConfiguration(t *testing.T) {
 }
 
 func TestConfigurationOptions(t *testing.T) {
+	t.Parallel()
 	t.Run("WithDANodePorts configures DA node ports", func(t *testing.T) {
 		cfg := Config{}
 		option := WithDANodePorts("27000", "3000")
