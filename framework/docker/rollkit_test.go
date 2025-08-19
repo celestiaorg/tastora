@@ -22,7 +22,7 @@ func TestRollkit(t *testing.T) {
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	provider := testCfg.CreateDockerProvider(t)
+	provider := testCfg.Provider
 	chain, err := testCfg.Builder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
