@@ -6,6 +6,7 @@ import (
 	"regexp"
 
 	"github.com/celestiaorg/go-square/v2/share"
+
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 )
 
@@ -49,24 +50,6 @@ func extractFirstTCPv4Addr(addrs []string) (string, error) {
 
 type Header struct {
 	Height uint64 `json:"height"`
-}
-
-type DANodeType int
-
-const (
-	BridgeNode DANodeType = iota
-	LightNode
-	FullNode
-)
-
-func (n DANodeType) String() string {
-	return nodeStrings[n]
-}
-
-var nodeStrings = [...]string{
-	"bridge",
-	"light",
-	"full",
 }
 
 type DANode interface {

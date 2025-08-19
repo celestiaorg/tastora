@@ -4,6 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/fnv"
+	"os"
+	"path"
+	"strconv"
+	"sync"
+	"time"
+
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	internal "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/config"
@@ -25,12 +32,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"hash/fnv"
-	"os"
-	"path"
-	"strconv"
-	"sync"
-	"time"
 )
 
 var _ types.ChainNode = &ChainNode{}
@@ -86,6 +87,7 @@ type ChainNode struct {
 // ChainNodeParams contains the chain-specific parameters needed to create a ChainNode
 type ChainNodeParams struct {
 	Validator           bool
+	NodeType            types.ConsensusNodeType
 	ChainID             string
 	BinaryName          string
 	CoinType            string
@@ -100,7 +102,6 @@ type ChainNodeParams struct {
 	PrivValidatorKey []byte
 	// PostInit functions are executed sequentially after the node is initialized.
 	PostInit []func(ctx context.Context, node *ChainNode) error
-	GenTX    bool
 }
 
 // NewChainNode creates a new ChainNode with injected dependencies
@@ -114,9 +115,16 @@ func NewChainNode(
 	index int,
 	chainParams ChainNodeParams,
 ) *ChainNode {
-	nodeType := "fn"
-	if chainParams.Validator {
-		nodeType = "val"
+	// Derive NodeType from Validator field if not explicitly set
+	nodeType := chainParams.NodeType
+	if nodeType == 0 { // If NodeType is zero value (not set)
+		if chainParams.Validator {
+			nodeType = types.NodeTypeValidator
+		} else {
+			nodeType = types.NodeTypeConsensusFull
+		}
+		// Update the params to reflect the derived type
+		chainParams.NodeType = nodeType
 	}
 
 	log := logger.With(
@@ -186,13 +194,14 @@ func (cn *ChainNode) Name() string {
 	return fmt.Sprintf("%s-%s-%d-%s", cn.ChainID, cn.NodeType(), cn.Index, internal.SanitizeContainerName(cn.TestName))
 }
 
-// NodeType returns the type of the ChainNode as a string: "fn" for full nodes and "val" for validator nodes.
+// NodeType returns the type of the ChainNode as a string.
 func (cn *ChainNode) NodeType() string {
-	nodeType := "fn"
-	if cn.Validator {
-		nodeType = "val"
-	}
-	return nodeType
+	return cn.ChainNodeParams.NodeType.String()
+}
+
+// GetType returns the ConsensusNodeType enum value for the ChainNode interface
+func (cn *ChainNode) GetType() types.ConsensusNodeType {
+	return cn.ChainNodeParams.NodeType
 }
 
 // Height retrieves the latest block height of the chain node using the Tendermint RPC client.
@@ -494,11 +503,6 @@ func (cn *ChainNode) initValidatorGenTx(
 	}
 	if err := cn.addGenesisAccount(ctx, bech32, genesisAmounts); err != nil {
 		return err
-	}
-
-	// specified to skip gen tx for this node.
-	if !cn.GenTX {
-		return nil
 	}
 
 	return cn.gentx(ctx, valKey, genesisSelfDelegation)

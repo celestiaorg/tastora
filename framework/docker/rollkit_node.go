@@ -59,7 +59,7 @@ func NewRollkitNode(cfg Config, testName string, image container.Image, index in
 	)
 	rn := &RollkitNode{
 		cfg:  cfg,
-		Node: container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "rollkit"), index, "rollkit", logger),
+		Node: container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "rollkit"), index, RollkitType, logger),
 	}
 
 	rn.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, rn.Name()))

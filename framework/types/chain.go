@@ -2,7 +2,9 @@ package types
 
 import (
 	"context"
+
 	"github.com/celestiaorg/go-square/v2/share"
+
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -50,8 +52,8 @@ type Chain interface {
 }
 
 type ChainNode interface {
-	// GetType returns if the node is a fullnode or a validator. "fn" or a "val"
-	GetType() string
+	// GetType returns if the node is a fullnode or a validator. NodeTypeConsensusFull or NodeTypeValidator
+	GetType() ConsensusNodeType
 	// GetRPCClient retrieves the RPC client associated with the chain node, returning the client instance or an error.
 	GetRPCClient() (rpcclient.Client, error)
 	// GetInternalPeerAddress returns the peer address resolvable within the network.

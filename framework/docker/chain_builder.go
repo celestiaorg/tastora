@@ -3,7 +3,12 @@ package docker
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
+	"testing"
+
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
@@ -12,14 +17,11 @@ import (
 	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
-	"os"
-	"path"
-	"testing"
 )
 
 type ChainNodeConfig struct {
 	// nodeType specifies which type of node should be built.
-	nodeType NodeType
+	nodeType types.ConsensusNodeType
 	// Image overrides the chain's default image for this specific node (optional)
 	Image *container.Image
 	// AdditionalStartArgs overrides the chain-level AdditionalStartArgs for this specific node
@@ -34,8 +36,6 @@ type ChainNodeConfig struct {
 	keyring keyring.Keyring
 	// accountName specifies the name of the account/key in the genesis keyring to use for this validator
 	accountName string
-	// genTX specifies if a node should run genesis gentx
-	genTX bool
 }
 
 // ChainNodeConfigBuilder provides a fluent interface for building ChainNodeConfig
@@ -47,10 +47,9 @@ type ChainNodeConfigBuilder struct {
 func NewChainNodeConfigBuilder() *ChainNodeConfigBuilder {
 	return &ChainNodeConfigBuilder{
 		config: &ChainNodeConfig{
-			nodeType:            ValidatorNodeType,
+			nodeType:            types.NodeTypeValidator,
 			AdditionalStartArgs: make([]string, 0),
 			Env:                 make([]string, 0),
-			genTX:               true,
 		},
 	}
 }
@@ -97,14 +96,8 @@ func (b *ChainNodeConfigBuilder) WithAccountName(accountName string) *ChainNodeC
 }
 
 // WithNodeType sets the type of blockchain node to be configured and returns the updated ChainNodeConfigBuilder.
-func (b *ChainNodeConfigBuilder) WithNodeType(nodeType NodeType) *ChainNodeConfigBuilder {
+func (b *ChainNodeConfigBuilder) WithNodeType(nodeType types.ConsensusNodeType) *ChainNodeConfigBuilder {
 	b.config.nodeType = nodeType
-	return b
-}
-
-// WithGenTX sets genTx to the specified value.
-func (b *ChainNodeConfigBuilder) WithGenTX(genTX bool) *ChainNodeConfigBuilder {
-	b.config.genTX = genTX
 	return b
 }
 
@@ -452,7 +445,7 @@ func (b *ChainBuilder) newChainNode(
 	}
 
 	// if this is a validator and we have a genesis keyring, preload the keys using a one-shot container
-	if nodeConfig.nodeType == ValidatorNodeType && tn.GenesisKeyring != nil {
+	if nodeConfig.nodeType == types.NodeTypeValidator && tn.GenesisKeyring != nil {
 		if err := preloadKeyringToVolume(ctx, tn, nodeConfig); err != nil {
 			return nil, fmt.Errorf("failed to preload keyring to volume: %w", err)
 		}
@@ -469,7 +462,8 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 	}
 
 	chainParams := ChainNodeParams{
-		Validator:           nodeConfig.nodeType == ValidatorNodeType,
+		Validator:           nodeConfig.nodeType == types.NodeTypeValidator,
+		NodeType:            nodeConfig.nodeType,
 		ChainID:             b.chainID,
 		BinaryName:          b.binaryName,
 		CoinType:            b.coinType,
@@ -482,7 +476,6 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 		ValidatorIndex:      index,
 		PrivValidatorKey:    nodeConfig.privValidatorKey,
 		PostInit:            b.getPostInit(nodeConfig),
-		GenTX:               nodeConfig.genTX,
 	}
 
 	// Get the appropriate image using fallback logic

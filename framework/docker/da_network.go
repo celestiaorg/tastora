@@ -3,8 +3,9 @@ package docker
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/types"
 	"sync"
+
+	"github.com/celestiaorg/tastora/framework/types"
 )
 
 var _ types.DataAvailabilityNetwork = &DataAvailabilityNetwork{}

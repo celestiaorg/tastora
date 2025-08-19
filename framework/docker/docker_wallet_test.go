@@ -2,6 +2,7 @@ package docker
 
 import (
 	"cosmossdk.io/math"
+
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -11,9 +12,9 @@ import (
 func (s *DockerTestSuite) TestCreateWalletOnSpecificNode() {
 	// create chain with 2 validators and 1 full node
 	s.builder = s.builder.WithNodes(
-		NewChainNodeConfigBuilder().WithNodeType(ValidatorNodeType).Build(),
-		NewChainNodeConfigBuilder().WithNodeType(ValidatorNodeType).Build(),
-		NewChainNodeConfigBuilder().WithNodeType(FullNodeType).Build(),
+		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
+		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
+		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeConsensusFull).Build(),
 	)
 
 	var err error
@@ -52,8 +53,8 @@ func (s *DockerTestSuite) TestCreateWalletOnSpecificNode() {
 func (s *DockerTestSuite) TestGetFaucetWalletOnNodes() {
 	// create chain with 2 validators
 	s.builder = s.builder.WithNodes(
-		NewChainNodeConfigBuilder().WithNodeType(ValidatorNodeType).Build(),
-		NewChainNodeConfigBuilder().WithNodeType(ValidatorNodeType).Build(),
+		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
+		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
 	)
 
 	var err error

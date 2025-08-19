@@ -3,8 +3,12 @@ package docker
 import (
 	"bytes"
 	"context"
-	sdkmath "cosmossdk.io/math"
 	"fmt"
+	"io"
+	"sync"
+	"testing"
+
+	sdkmath "cosmossdk.io/math"
 	"github.com/celestiaorg/go-square/v2/share"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	addressutil "github.com/celestiaorg/tastora/framework/testutil/address"
@@ -16,9 +20,6 @@ import (
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"io"
-	"sync"
-	"testing"
 )
 
 var _ types.Chain = &Chain{}
@@ -30,14 +31,6 @@ var sentryPorts = nat.PortMap{
 	nat.Port(apiPort):     {},
 	nat.Port(privValPort): {},
 }
-
-// NodeType represents the type of blockchain node
-type NodeType int
-
-const (
-	ValidatorNodeType NodeType = iota
-	FullNodeType
-)
 
 type Chain struct {
 	t          *testing.T
@@ -231,24 +224,15 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 		return err
 	}
 
-	var finalGenesisBz []byte
-	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
-	if c.Validators[0].GenesisKeyring == nil {
-		var err error
-		finalGenesisBz, err = c.initDefaultGenesis(ctx, defaultGenesisAmount)
-		if err != nil {
-			return err
-		}
+	genesisBz, err := c.getGenesisFileBz(ctx, defaultGenesisAmount)
+	if err != nil {
+		return fmt.Errorf("failed to get genesis file: %w", err)
 	}
 
 	chainNodes := c.Nodes()
 	for _, cn := range chainNodes {
-		// test case is explicitly setting genesis bytes.
-		if c.cfg.ChainConfig.GenesisFileBz != nil {
-			finalGenesisBz = c.cfg.ChainConfig.GenesisFileBz
-		}
 
-		if err := cn.overwriteGenesisFile(ctx, finalGenesisBz); err != nil {
+		if err := cn.overwriteGenesisFile(ctx, genesisBz); err != nil {
 			return err
 		}
 
@@ -308,7 +292,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	// copy faucet key to all other validators now that containers are running.
 	// this ensures the faucet wallet can be used on all nodes.
 	// since the faucet wallet is only created if a genesis keyring is not provided, we only copy it over if that's the case.
-	if c.Validators[0].GenesisKeyring == nil {
+	if len(c.Validators) > 0 && c.Validators[0].GenesisKeyring == nil {
 		c.Validators[0].faucetWallet = c.GetFaucetWallet()
 		for i := 1; i < len(c.Validators); i++ {
 			if err := c.copyFaucetKeyToValidator(c.GetFaucetWallet(), c.Validators[i]); err != nil {
@@ -337,10 +321,8 @@ func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdk
 			return nil, err
 		}
 
-		if validatorN.GenTX {
-			if err := validatorN.copyGentx(ctx, validator0); err != nil {
-				return nil, err
-			}
+		if err := validatorN.copyGentx(ctx, validator0); err != nil {
+			return nil, err
 		}
 	}
 
@@ -368,7 +350,7 @@ func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdk
 }
 
 func (c *Chain) GetNode() *ChainNode {
-	return c.Validators[0]
+	return c.Nodes()[0]
 }
 
 // Nodes returns all nodes, including validators and fullnodes.
@@ -480,4 +462,17 @@ func (c *Chain) copyFaucetKeyToValidator(faucetWallet types.Wallet, targetValida
 	}
 
 	return nil
+}
+
+// getGenesisFileBz retrieves the genesis file bytes for the chain, generating a default genesis if none is specified.
+func (c *Chain) getGenesisFileBz(ctx context.Context, defaultGenesisAmount sdk.Coins) ([]byte, error) {
+	if c.cfg.ChainConfig.GenesisFileBz != nil {
+		return c.cfg.ChainConfig.GenesisFileBz, nil
+	}
+	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
+	if len(c.Validators) > 0 && c.Validators[0].GenesisKeyring == nil {
+		return c.initDefaultGenesis(ctx, defaultGenesisAmount)
+	}
+
+	return nil, fmt.Errorf("genesis file must be specified if no validator nodes are present")
 }
