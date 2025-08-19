@@ -15,8 +15,8 @@ import (
 )
 
 // createCelestiaChain creates a celestia-app chain for IBC testing
-func createCelestiaChain(t *testing.T, ctx context.Context, client *dockerclient.Client, networkID string, encConfig testutil.TestEncodingConfig) (types.Chain, error) {
-	builder := NewChainBuilder(t).
+func createCelestiaChain(t *testing.T, ctx context.Context, client *dockerclient.Client, networkID string, encConfig testutil.TestEncodingConfig, testName string) (types.Chain, error) {
+	builder := NewChainBuilderWithTestName(t, testName).
 		WithDockerClient(client).
 		WithDockerNetworkID(networkID).
 		WithChainID("chain-a").
@@ -47,8 +47,8 @@ func createCelestiaChain(t *testing.T, ctx context.Context, client *dockerclient
 }
 
 // createSimappChain creates an IBC-Go simapp chain for IBC testing
-func createSimappChain(t *testing.T, ctx context.Context, client *dockerclient.Client, networkID string, encConfig testutil.TestEncodingConfig) (types.Chain, error) {
-	builder := NewChainBuilder(t).
+func createSimappChain(t *testing.T, ctx context.Context, client *dockerclient.Client, networkID string, encConfig testutil.TestEncodingConfig, testName string) (types.Chain, error) {
+	builder := NewChainBuilderWithTestName(t, testName).
 		WithDockerClient(client).
 		WithDockerNetworkID(networkID).
 		WithChainID("chain-b").

@@ -86,7 +86,7 @@ func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
 	t.Helper()
 
 	// ensure Bech32 prefix is configured once globally
-	sdkConfigOnce.Do(configureBech32Prefix)
+	configureBech32PrefixOnce()
 
 	// generate unique test name for parallel execution
 	uniqueTestName := fmt.Sprintf("%s-%s", t.Name(), random.LowerCaseLetterString(8))
@@ -303,4 +303,3 @@ func TestChainNodeExec(t *testing.T) {
 	require.Empty(t, stdout, "stdout should be empty for failing command")
 	require.Empty(t, stderr, "stderr should be empty for failing command")
 }
-
