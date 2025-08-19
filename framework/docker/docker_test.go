@@ -93,6 +93,9 @@ func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
 
 	ctx := context.Background()
 	dockerClient, networkID := DockerSetup(t)
+	
+	// Override the default cleanup to use our unique test name
+	t.Cleanup(DockerCleanupWithTestName(t, dockerClient, uniqueTestName))
 
 	logger := zaptest.NewLogger(t)
 	encConfig := testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{})
@@ -163,6 +166,7 @@ func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
 		Ctx:          ctx,
 	}
 }
+
 
 // getGenesisHash returns the genesis hash of the given chain node.
 func getGenesisHash(ctx context.Context, chain *Chain) (string, error) {

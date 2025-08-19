@@ -164,6 +164,11 @@ func incrementIP(ip net.IP, incrementLevel int) {
 
 // DockerCleanup will clean up Docker containers, networks, and the other various config files generated in testing.
 func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
+	return DockerCleanupWithTestName(t, cli, t.Name())
+}
+
+// DockerCleanupWithTestName will clean up Docker containers, networks, and other config files using a custom test name.
+func DockerCleanupWithTestName(t DockerSetupTestingT, cli *client.Client, testName string) func() {
 	return func() {
 		showContainerLogs := os.Getenv("SHOW_CONTAINER_LOGS")
 		containerLogTail := os.Getenv("CONTAINER_LOG_TAIL")
@@ -174,7 +179,7 @@ func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
 		cs, err := cli.ContainerList(ctx, container.ListOptions{
 			All: true,
 			Filters: filters.NewArgs(
-				filters.Arg("label", consts.CleanupLabel+"="+t.Name()),
+				filters.Arg("label", consts.CleanupLabel+"="+testName),
 			),
 		})
 		if err != nil {
@@ -222,8 +227,8 @@ func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
 		}
 
 		if !keepContainers {
-			PruneVolumesWithRetry(ctx, t, cli)
-			PruneNetworksWithRetry(ctx, t, cli)
+			PruneVolumesWithRetryAndTestName(ctx, t, cli, testName)
+			PruneNetworksWithRetryAndTestName(ctx, t, cli, testName)
 		} else {
 			t.Logf("Keeping containers - Docker cleanup skipped")
 		}
@@ -231,6 +236,10 @@ func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
 }
 
 func PruneVolumesWithRetry(ctx context.Context, t DockerSetupTestingT, cli *client.Client) {
+	PruneVolumesWithRetryAndTestName(ctx, t, cli, t.Name())
+}
+
+func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT, cli *client.Client, testName string) {
 	if KeepVolumesOnFailure && t.Failed() {
 		return
 	}
@@ -238,7 +247,7 @@ func PruneVolumesWithRetry(ctx context.Context, t DockerSetupTestingT, cli *clie
 	var msg string
 	err := retry.Do(
 		func() error {
-			res, err := cli.VolumesPrune(ctx, filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+t.Name())))
+			res, err := cli.VolumesPrune(ctx, filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+testName)))
 			if err != nil {
 				if errdefs.IsConflict(err) {
 					// Prune is already in progress; try again.
@@ -271,10 +280,14 @@ func PruneVolumesWithRetry(ctx context.Context, t DockerSetupTestingT, cli *clie
 }
 
 func PruneNetworksWithRetry(ctx context.Context, t DockerSetupTestingT, cli *client.Client) {
+	PruneNetworksWithRetryAndTestName(ctx, t, cli, t.Name())
+}
+
+func PruneNetworksWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT, cli *client.Client, testName string) {
 	var deleted []string
 	err := retry.Do(
 		func() error {
-			res, err := cli.NetworksPrune(ctx, filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+t.Name())))
+			res, err := cli.NetworksPrune(ctx, filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+testName)))
 			if err != nil {
 				if errdefs.IsConflict(err) {
 					// Prune is already in progress; try again.

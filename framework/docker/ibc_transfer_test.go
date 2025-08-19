@@ -48,6 +48,9 @@ func setupIBCDockerTest(t *testing.T) *IBCTestSetupConfig {
 	uniqueTestName := fmt.Sprintf("%s-%s", t.Name(), random.LowerCaseLetterString(8))
 
 	dockerClient, networkID := DockerSetup(t)
+	
+	// Override the default cleanup to use our unique test name
+	t.Cleanup(DockerCleanupWithTestName(t, dockerClient, uniqueTestName))
 
 	// Create celestia-app chain (chain A)
 	chainA, err := createCelestiaChain(t, ctx, dockerClient, networkID, encConfig, uniqueTestName)
