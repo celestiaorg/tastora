@@ -2,12 +2,10 @@ package docker
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"testing"
 
 	"cosmossdk.io/math"
-	"github.com/celestiaorg/go-square/v2/share"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -88,11 +86,8 @@ func (s *DockerTestSuite) TestRollkit() {
 		"--rollkit.da.gas_price", "0.025",
 		"--rollkit.da.auth_token", authToken,
 		"--rollkit.rpc.address", "0.0.0.0:7331", // bind to 0.0.0.0 so rpc is reachable from test host.
-		"--rollkit.da.namespace", generateValidNamespaceHex(),
+		"--rollkit.da.header_namespace", "ev-header",
+		"--rollkit.da.data_namespace", "ev-data",
 	)
 	s.Require().NoError(err)
-}
-
-func generateValidNamespaceHex() string {
-	return hex.EncodeToString(share.RandomBlobNamespaceID())
 }

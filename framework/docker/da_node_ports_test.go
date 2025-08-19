@@ -72,7 +72,8 @@ func TestDANodePortConfiguration(t *testing.T) {
 		}
 
 		daNode := &DANode{
-			cfg: cfg,
+			cfg:      cfg,
+			nodeType: types.BridgeNode,
 			Node: &container.Node{
 				Index: 0,
 			},

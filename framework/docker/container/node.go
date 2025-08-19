@@ -3,9 +3,11 @@ package container
 import (
 	"context"
 	"fmt"
+
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	"github.com/celestiaorg/tastora/framework/docker/volume"
+	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/docker/docker/api/types/mount"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
@@ -22,7 +24,7 @@ type Node struct {
 	Image              Image
 	ContainerLifecycle *Lifecycle
 	homeDir            string
-	nodeType           string
+	nodeType           types.NodeType
 	Index              int
 	Logger             *zap.Logger
 }
@@ -35,7 +37,7 @@ func NewNode(
 	image Image,
 	homeDir string,
 	idx int,
-	nodeType string,
+	nodeType types.NodeType,
 	logger *zap.Logger,
 ) *Node {
 	return &Node{
@@ -79,8 +81,8 @@ func (n *Node) Bind() []string {
 	return []string{fmt.Sprintf("%s:%s", n.VolumeName, n.homeDir)}
 }
 
-// GetType returns the Node type as a string.
-func (n *Node) GetType() string {
+// GetType returns the Node type.
+func (n *Node) GetType() types.NodeType {
 	return n.nodeType
 }
 
@@ -144,7 +146,7 @@ func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error 
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("creating volume for %s: %w", n.nodeType, err)
+		return fmt.Errorf("creating volume for %s: %w", n.nodeType.String(), err)
 	}
 
 	n.VolumeName = v.Name

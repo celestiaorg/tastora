@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"path"
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
 
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -41,7 +42,7 @@ func newDANode(ctx context.Context, testName string, cfg Config, idx int, nodeTy
 	daNode := &DANode{
 		cfg:      cfg,
 		nodeType: nodeType,
-		Node:     container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType.String(), logger),
+		Node:     container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, defaultImage, "/home/celestia", idx, nodeType, logger),
 	}
 
 	daNode.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, daNode.Name()))

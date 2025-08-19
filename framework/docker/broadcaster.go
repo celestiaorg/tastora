@@ -24,10 +24,6 @@ import (
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 )
 
-type ClientContextOpt func(clientContext client.Context) client.Context
-
-type FactoryOpt func(factory sdktx.Factory) sdktx.Factory
-
 // broadcaster is responsible for broadcasting trasactions to docker chains.
 type broadcaster struct {
 	// buf stores the output sdk.TxResponse when broadcast.Tx is invoked.
@@ -42,14 +38,14 @@ type broadcaster struct {
 	node *ChainNode
 
 	// factoryOptions is a slice of broadcast.FactoryOpt which enables arbitrary configuration of the tx.Factory.
-	factoryOptions []FactoryOpt
+	factoryOptions []types.FactoryOpt
 	// clientContextOptions is a slice of broadcast.ClientContextOpt which enables arbitrary configuration of the client.Context.
-	clientContextOptions []ClientContextOpt
+	clientContextOptions []types.ClientContextOpt
 }
 
-// newBroadcaster returns an instance of Broadcaster which can be used with broadcast.Tx to
+// NewBroadcaster returns an instance of Broadcaster which can be used with broadcast.Tx to
 // broadcast messages sdk messages.
-func newBroadcaster(chain *Chain) types.Broadcaster {
+func NewBroadcaster(chain *Chain) types.Broadcaster {
 	return newBroadcasterForNode(chain, nil)
 }
 
@@ -65,13 +61,13 @@ func newBroadcasterForNode(chain *Chain, node *ChainNode) types.Broadcaster {
 
 // ConfigureFactoryOptions ensure the given configuration functions are run when calling GetFactory
 // after all default options have been applied.
-func (b *broadcaster) ConfigureFactoryOptions(opts ...FactoryOpt) {
+func (b *broadcaster) ConfigureFactoryOptions(opts ...types.FactoryOpt) {
 	b.factoryOptions = append(b.factoryOptions, opts...)
 }
 
 // ConfigureClientContextOptions ensure the given configuration functions are run when calling GetClientContext
 // after all default options have been applied.
-func (b *broadcaster) ConfigureClientContextOptions(opts ...ClientContextOpt) {
+func (b *broadcaster) ConfigureClientContextOptions(opts ...types.ClientContextOpt) {
 	b.clientContextOptions = append(b.clientContextOptions, opts...)
 }
 
