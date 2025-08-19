@@ -31,14 +31,16 @@ type broadcaster struct {
 	// keyrings is a mapping of keyrings which point to a temporary test directory. The contents
 	// of this directory are copied from the node container for the specific wallet.
 	keyrings map[types.Wallet]keyring.Keyring
+
 	// chain is a reference to the Chain instance which will be the target of the messages.
 	chain *Chain
+	// node is the specific node to broadcast through (defaults to chain.GetNode() if nil)
+	node *ChainNode
+
 	// factoryOptions is a slice of broadcast.FactoryOpt which enables arbitrary configuration of the tx.Factory.
 	factoryOptions []types.FactoryOpt
 	// clientContextOptions is a slice of broadcast.ClientContextOpt which enables arbitrary configuration of the client.Context.
 	clientContextOptions []types.ClientContextOpt
-	// chainNode is the node to target when broadcasting transactions.
-	chainNode *ChainNode
 }
 
 // NewBroadcaster returns an instance of Broadcaster which can be used with broadcast.Tx to
@@ -49,10 +51,10 @@ func NewBroadcaster(chain *Chain) types.Broadcaster {
 
 // NewBroadcasterForNode returns an instance of Broadcaster which can be used with broadcast.Tx to
 // broadcast messages sdk messages which will broadcast to a specific chain node.
-func NewBroadcasterForNode(chain *Chain, chainNode *ChainNode) types.Broadcaster {
+func NewBroadcasterForNode(chain *Chain, node *ChainNode) types.Broadcaster {
 	// if nil is provided, we assume we don't caer which node is chosen.
-	if chainNode == nil {
-		chainNode = chain.GetNode()
+	if node == nil {
+		node = chain.GetNode()
 	}
 	return newBroadcasterForNode(chain, nil)
 }
@@ -60,10 +62,10 @@ func NewBroadcasterForNode(chain *Chain, chainNode *ChainNode) types.Broadcaster
 // newBroadcasterForNode returns an instance of Broadcaster that broadcasts through a specific node.
 func newBroadcasterForNode(chain *Chain, node *ChainNode) types.Broadcaster {
 	return &broadcaster{
-		chain:     chain,
-		chainNode: node,
-		buf:       &bytes.Buffer{},
-		keyrings:  map[types.Wallet]keyring.Keyring{},
+		chain:    chain,
+		node:     node,
+		buf:      &bytes.Buffer{},
+		keyrings: map[types.Wallet]keyring.Keyring{},
 	}
 }
 
@@ -159,8 +161,8 @@ func (b *broadcaster) UnmarshalTxResponseBytes(ctx context.Context, bytes []byte
 
 // getNode returns the node to use for broadcasting (specific node or chain default).
 func (b *broadcaster) getNode() *ChainNode {
-	if b.chainNode != nil {
-		return b.chainNode
+	if b.node != nil {
+		return b.node
 	}
 	return b.chain.GetNode()
 }
@@ -291,11 +293,10 @@ func (b *broadcaster) BroadcastMessages(ctx context.Context, signingWallet types
 		msgTypes = append(msgTypes, msgType)
 	}
 
-	b.chain.log.Info("broadcasted msg",
-		zap.String("signing_wallet", signingWallet.GetFormattedAddress()),
-		zap.Strings("msg_types", msgTypes),
-		zap.String("hash", respWithTxHash.TxHash),
-	)
+	b.chain.log.Info("broadcasted message",
+		zap.String("wallet_address", signingWallet.GetFormattedAddress()),
+		zap.Strings("message_types", msgTypes),
+		zap.String("tx_hash", respWithTxHash.TxHash))
 
 	return getFullyPopulatedResponse(ctx, cc, respWithTxHash.TxHash)
 }
