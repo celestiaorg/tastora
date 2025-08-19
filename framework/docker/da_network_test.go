@@ -18,9 +18,6 @@ func TestDANetworkCreation(t *testing.T) {
 	t.Parallel()
 	configureBech32PrefixOnce()
 
-	// Setup isolated docker environment for this test
-	testCfg := setupDockerTest(t)
-
 	// configure different images for different DA node types
 	bridgeNodeConfigs := map[int]*DANodeConfig{
 		0: {
@@ -42,10 +39,12 @@ func TestDANetworkCreation(t *testing.T) {
 		},
 	}
 
-	provider := testCfg.CreateDockerProvider(t,
+	// Setup isolated docker environment for this test
+	testCfg := setupDockerTest(t,
 		WithPerBridgeNodeConfig(bridgeNodeConfigs),
 		WithPerFullNodeConfig(fullNodeConfigs),
 	)
+	provider := testCfg.Provider
 	chain, err := testCfg.Builder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
@@ -155,7 +154,7 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 	testCfg := setupDockerTest(t)
 	var bridgeNodes []types.DANode
 
-	provider := testCfg.CreateDockerProvider(t)
+	provider := testCfg.Provider
 	chain, err := testCfg.Builder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
@@ -244,12 +243,12 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 	t.Run("test simple configuration with WithDefaultPorts", func(t *testing.T) {
 		// Setup isolated docker environment for this test
-		testCfg := setupDockerTest(t)
-
-		// Test the simple one-liner configuration
-		provider := testCfg.CreateDockerProvider(t,
+		testCfg := setupDockerTest(t,
 			WithDefaultPorts(), // This should use ports 26668, 2131, 26667, 9091
 		)
+
+		// Test the simple one-liner configuration
+		provider := testCfg.Provider
 
 		chain, err := testCfg.Builder.Build(testCfg.Ctx)
 		require.NoError(t, err)
@@ -278,13 +277,13 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 	t.Run("test custom ports setup with individual functions", func(t *testing.T) {
 		// Setup isolated docker environment for this test
-		testCfg := setupDockerTest(t)
-
-		// Test the custom ports configuration using individual functions
-		provider := testCfg.CreateDockerProvider(t,
+		testCfg := setupDockerTest(t,
 			WithDANodePorts("27000", "3000"),
 			WithDANodeCoreConnection("27001", "9095"),
 		)
+
+		// Test the custom ports configuration using individual functions
+		provider := testCfg.Provider
 
 		chain, err := testCfg.Builder.Build(testCfg.Ctx)
 		require.NoError(t, err)
@@ -313,12 +312,12 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 	t.Run("test per-node configuration with WithNodePorts", func(t *testing.T) {
 		// Setup isolated docker environment for this test
-		testCfg := setupDockerTest(t)
-
-		// Test per-node configuration
-		provider := testCfg.CreateDockerProvider(t,
+		testCfg := setupDockerTest(t,
 			WithNodePorts(types.BridgeNode, 0, "28000", "4000"), // Configure bridge node 0 with specific ports
 		)
+
+		// Test per-node configuration
+		provider := testCfg.Provider
 
 		chain, err := testCfg.Builder.Build(testCfg.Ctx)
 		require.NoError(t, err)
@@ -347,10 +346,10 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 	t.Run("test backward compatibility - default behavior unchanged", func(t *testing.T) {
 		// Setup isolated docker environment for this test
-		testCfg := setupDockerTest(t)
+		testCfg := setupDockerTest(t) // No custom configuration
 
 		// Test that existing code works unchanged
-		provider := testCfg.CreateDockerProvider(t) // No custom configuration
+		provider := testCfg.Provider
 
 		chain, err := testCfg.Builder.Build(testCfg.Ctx)
 		require.NoError(t, err)

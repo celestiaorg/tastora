@@ -45,41 +45,6 @@ type TestSetupConfig struct {
 	Ctx          context.Context
 }
 
-// CreateDockerProvider creates a provider with configuration options applied to the default Celestia config.
-func (cfg *TestSetupConfig) CreateDockerProvider(t *testing.T, opts ...ConfigOption) *Provider {
-	providerCfg := Config{
-		Logger:          cfg.Logger,
-		DockerClient:    cfg.DockerClient,
-		DockerNetworkID: cfg.NetworkID,
-		DataAvailabilityNetworkConfig: &DataAvailabilityNetworkConfig{
-			FullNodeCount:   1,
-			BridgeNodeCount: 1,
-			LightNodeCount:  1,
-			Image: container.Image{
-				Repository: "ghcr.io/celestiaorg/celestia-node",
-				Version:    "pr-4283", // TODO: use tag that includes changes from https://github.com/celestiaorg/celestia-node/pull/4283.
-				UIDGID:     "10001:10001",
-			},
-		},
-		RollkitChainConfig: &RollkitChainConfig{
-			ChainID:              "test",
-			Bin:                  "testapp",
-			AggregatorPassphrase: "12345678",
-			NumNodes:             1,
-			Image: container.Image{
-				Repository: "ghcr.io/evstack/ev-node",
-				Version:    "main",
-				UIDGID:     "2000",
-			},
-		},
-	}
-
-	for _, opt := range opts {
-		opt(&providerCfg)
-	}
-
-	return NewProvider(providerCfg, t)
-}
 
 // setupDockerTest creates an isolated Docker test environment
 func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
