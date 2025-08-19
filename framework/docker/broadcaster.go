@@ -56,7 +56,7 @@ func NewBroadcasterForNode(chain *Chain, node *ChainNode) types.Broadcaster {
 	if node == nil {
 		node = chain.GetNode()
 	}
-	return newBroadcasterForNode(chain, nil)
+	return newBroadcasterForNode(chain, node)
 }
 
 // newBroadcasterForNode returns an instance of Broadcaster that broadcasts through a specific node.
