@@ -70,4 +70,6 @@ type ChainNode interface {
 	GetKeyring() (keyring.Keyring, error)
 	// Exec executes a command in the specified context with the given environment variables, returning stdout, stderr, and an error.
 	Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error)
+	// GetInternalIP returns the internal IP address of the chain node container within the docker network.
+	GetInternalIP(ctx context.Context) (string, error)
 }

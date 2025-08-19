@@ -46,7 +46,17 @@ type broadcaster struct {
 // NewBroadcaster returns an instance of Broadcaster which can be used with broadcast.Tx to
 // broadcast messages sdk messages.
 func NewBroadcaster(chain *Chain) types.Broadcaster {
-	return newBroadcasterForNode(chain, nil)
+	return NewBroadcasterForNode(chain, nil)
+}
+
+// NewBroadcasterForNode returns an instance of Broadcaster which can be used with broadcast.Tx to
+// broadcast messages sdk messages which will broadcast to a specific chain node.
+func NewBroadcasterForNode(chain *Chain, node *ChainNode) types.Broadcaster {
+	// if nil is provided, we assume we don't caer which node is chosen.
+	if node == nil {
+		node = chain.GetNode()
+	}
+	return newBroadcasterForNode(chain, node)
 }
 
 // newBroadcasterForNode returns an instance of Broadcaster that broadcasts through a specific node.
