@@ -142,7 +142,7 @@ type ChainBuilder struct {
 	dockerImage *container.Image
 	// additionalStartArgs are the default additional command-line arguments for all nodes in the chain (can be overridden per node)
 	additionalStartArgs []string
-	// postInits are the default post-initialization functionss for all nodes in the chain (can be overridden per node)
+	// postInits are the default post-initialization functions for all nodes in the chain (can be overridden per node)
 	postInits []func(ctx context.Context, node *ChainNode) error
 	// env are the default environment variables for all nodes in the chain (can be overridden per node)
 	env []string
