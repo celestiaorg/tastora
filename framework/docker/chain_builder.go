@@ -144,8 +144,8 @@ type ChainBuilder struct {
 	dockerImage *container.Image
 	// additionalStartArgs are the default additional command-line arguments for all nodes in the chain (can be overridden per node)
 	additionalStartArgs []string
-	// postInit are the default post-initialization functions for all nodes in the chain (can be overridden per node)
-	postInit []func(ctx context.Context, node *ChainNode) error
+	// postInits are the default post-initialization functions for all nodes in the chain (can be overridden per node)
+	postInits []func(ctx context.Context, node *ChainNode) error
 	// env are the default environment variables for all nodes in the chain (can be overridden per node)
 	env []string
 	// faucetWallet is the wallet that should be used when broadcasting transactions when the sender doesn't matter
@@ -316,7 +316,7 @@ func (b *ChainBuilder) WithAdditionalStartArgs(args ...string) *ChainBuilder {
 
 // WithPostInit sets the default post init functions for all nodes in the chain
 func (b *ChainBuilder) WithPostInit(postInitFns ...func(ctx context.Context, node *ChainNode) error) *ChainBuilder {
-	b.postInit = postInitFns
+	b.postInits = append(b.postInits, postInitFns...)
 	return b
 }
 
@@ -360,7 +360,7 @@ func (b *ChainBuilder) getPostInit(nodeConfig ChainNodeConfig) []func(ctx contex
 		return nodeConfig.postInit
 	}
 	// use chain default post init functions (may be empty)
-	return b.postInit
+	return b.postInits
 }
 
 // getEnv returns the appropriate environment variables for a node, using node-specific override if available,
@@ -409,7 +409,7 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 				CoinType:            b.coinType,
 				GasPrices:           b.gasPrices,
 				GasAdjustment:       b.gasAdjustment,
-				PostInit:            b.postInit,
+				PostInit:            b.postInits,
 				EncodingConfig:      b.encodingConfig,
 				AdditionalStartArgs: b.additionalStartArgs,
 				Env:                 b.env,
