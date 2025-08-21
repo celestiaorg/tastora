@@ -572,3 +572,290 @@ func copyKeyringFilesToVolume(ctx context.Context, node *ChainNode, hostKeyringD
 	}
 	return nil
 }
+
+// RollkitNodeConfig defines the configuration for a single rollkit node
+type RollkitNodeConfig struct {
+	// isAggregator specifies whether this node should act as an aggregator
+	isAggregator bool
+	// Image overrides the chain's default image for this specific node (optional)
+	Image *container.Image
+	// AdditionalStartArgs overrides the chain-level AdditionalStartArgs for this specific node
+	AdditionalStartArgs []string
+	// Env overrides the chain-level Env for this specific node
+	Env []string
+	// postInit functions are executed sequentially after the node is initialized
+	postInit []func(ctx context.Context, node *RollkitNode) error
+}
+
+// RollkitNodeConfigBuilder provides a fluent interface for building RollkitNodeConfig
+type RollkitNodeConfigBuilder struct {
+	config *RollkitNodeConfig
+}
+
+// NewRollkitNodeConfigBuilder creates a new RollkitNodeConfigBuilder
+func NewRollkitNodeConfigBuilder() *RollkitNodeConfigBuilder {
+	return &RollkitNodeConfigBuilder{
+		config: &RollkitNodeConfig{
+			isAggregator:        false,
+			AdditionalStartArgs: make([]string, 0),
+			Env:                 make([]string, 0),
+		},
+	}
+}
+
+// WithAggregator sets whether this node should be an aggregator
+func (b *RollkitNodeConfigBuilder) WithAggregator(isAggregator bool) *RollkitNodeConfigBuilder {
+	b.config.isAggregator = isAggregator
+	return b
+}
+
+// WithImage sets the Docker image for the node (overrides chain default)
+func (b *RollkitNodeConfigBuilder) WithImage(image container.Image) *RollkitNodeConfigBuilder {
+	b.config.Image = &image
+	return b
+}
+
+// WithAdditionalStartArgs sets the additional start arguments
+func (b *RollkitNodeConfigBuilder) WithAdditionalStartArgs(args ...string) *RollkitNodeConfigBuilder {
+	b.config.AdditionalStartArgs = args
+	return b
+}
+
+// WithEnvVars sets the environment variables
+func (b *RollkitNodeConfigBuilder) WithEnvVars(envVars ...string) *RollkitNodeConfigBuilder {
+	b.config.Env = envVars
+	return b
+}
+
+// WithPostInit sets the post init functions
+func (b *RollkitNodeConfigBuilder) WithPostInit(postInitFns ...func(ctx context.Context, node *RollkitNode) error) *RollkitNodeConfigBuilder {
+	b.config.postInit = postInitFns
+	return b
+}
+
+// Build returns the configured RollkitNodeConfig
+func (b *RollkitNodeConfigBuilder) Build() RollkitNodeConfig {
+	return *b.config
+}
+
+// RollkitChainBuilder defines a builder for configuring and initializing a rollkit chain for testing purposes
+type RollkitChainBuilder struct {
+	// t is the testing context used for test assertions, container naming, and test lifecycle management
+	t *testing.T
+	// testName is the unique test identifier used for Docker resource naming in parallel execution
+	testName string
+	// nodes is the array of node configurations that define the chain topology and individual node settings
+	nodes []RollkitNodeConfig
+	// dockerClient is the Docker client instance used for all container operations
+	dockerClient *client.Client
+	// dockerNetworkID is the ID of the Docker network where all rollkit nodes are deployed
+	dockerNetworkID string
+	// logger is the structured logger for chain operations and debugging. Defaults to test logger.
+	logger *zap.Logger
+	// dockerImage is the default Docker image configuration for all nodes in the chain (can be overridden per node)
+	dockerImage *container.Image
+	// additionalStartArgs are the default additional command-line arguments for all nodes in the chain
+	additionalStartArgs []string
+	// env are the default environment variables for all nodes in the chain
+	env []string
+	// chainID is the rollkit chain ID for network identification (e.g., "test-rollkit")
+	chainID string
+	// binaryName is the name of the rollkit binary executable (e.g., "testapp")
+	binaryName string
+	// aggregatorPassphrase is the passphrase used for aggregator nodes
+	aggregatorPassphrase string
+}
+
+// NewRollkitChainBuilder initializes and returns a new RollkitChainBuilder with default values for testing purposes
+func NewRollkitChainBuilder(t *testing.T) *RollkitChainBuilder {
+	return NewRollkitChainBuilderWithTestName(t, t.Name())
+}
+
+// NewRollkitChainBuilderWithTestName initializes and returns a new RollkitChainBuilder with a custom test name
+func NewRollkitChainBuilderWithTestName(t *testing.T, testName string) *RollkitChainBuilder {
+	t.Helper()
+	return &RollkitChainBuilder{
+		t:                    t,
+		testName:             testName,
+		logger:               zaptest.NewLogger(t),
+		chainID:              "test-rollkit",
+		binaryName:           "testapp",
+		aggregatorPassphrase: "12345678",
+		additionalStartArgs:  make([]string, 0),
+		env:                  make([]string, 0),
+	}
+}
+
+// WithTestName sets the test name
+func (b *RollkitChainBuilder) WithTestName(testName string) *RollkitChainBuilder {
+	b.testName = testName
+	return b
+}
+
+// WithLogger sets the logger
+func (b *RollkitChainBuilder) WithLogger(logger *zap.Logger) *RollkitChainBuilder {
+	b.logger = logger
+	return b
+}
+
+// WithChainID sets the chain ID
+func (b *RollkitChainBuilder) WithChainID(chainID string) *RollkitChainBuilder {
+	b.chainID = chainID
+	return b
+}
+
+// WithBinaryName sets the binary name
+func (b *RollkitChainBuilder) WithBinaryName(binaryName string) *RollkitChainBuilder {
+	b.binaryName = binaryName
+	return b
+}
+
+// WithAggregatorPassphrase sets the aggregator passphrase
+func (b *RollkitChainBuilder) WithAggregatorPassphrase(passphrase string) *RollkitChainBuilder {
+	b.aggregatorPassphrase = passphrase
+	return b
+}
+
+// WithDockerClient sets the Docker client
+func (b *RollkitChainBuilder) WithDockerClient(client *client.Client) *RollkitChainBuilder {
+	b.dockerClient = client
+	return b
+}
+
+// WithDockerNetworkID sets the Docker network ID
+func (b *RollkitChainBuilder) WithDockerNetworkID(networkID string) *RollkitChainBuilder {
+	b.dockerNetworkID = networkID
+	return b
+}
+
+// WithImage sets the default Docker image for all nodes in the chain
+func (b *RollkitChainBuilder) WithImage(image container.Image) *RollkitChainBuilder {
+	b.dockerImage = &image
+	return b
+}
+
+// WithAdditionalStartArgs sets the default additional start arguments for all nodes in the chain
+func (b *RollkitChainBuilder) WithAdditionalStartArgs(args ...string) *RollkitChainBuilder {
+	b.additionalStartArgs = args
+	return b
+}
+
+// WithEnv sets the default environment variables for all nodes in the chain
+func (b *RollkitChainBuilder) WithEnv(env ...string) *RollkitChainBuilder {
+	b.env = env
+	return b
+}
+
+// WithNode adds a node configuration to the chain
+func (b *RollkitChainBuilder) WithNode(config RollkitNodeConfig) *RollkitChainBuilder {
+	b.nodes = append(b.nodes, config)
+	return b
+}
+
+// WithNodes adds multiple node configurations
+func (b *RollkitChainBuilder) WithNodes(nodeConfigs ...RollkitNodeConfig) *RollkitChainBuilder {
+	b.nodes = nodeConfigs
+	return b
+}
+
+
+// Build creates and returns a new RollkitChain instance
+func (b *RollkitChainBuilder) Build(ctx context.Context) (*RollkitChain, error) {
+	if b.dockerImage == nil {
+		return nil, fmt.Errorf("docker image must be specified")
+	}
+
+	nodes, err := b.initializeRollkitNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize rollkit nodes: %w", err)
+	}
+
+	return &RollkitChain{
+		cfg: Config{
+			Logger:          b.logger,
+			DockerClient:    b.dockerClient,
+			DockerNetworkID: b.dockerNetworkID,
+			RollkitChainConfig: &RollkitChainConfig{
+				ChainID:              b.chainID,
+				Env:                  b.env,
+				Bin:                  b.binaryName,
+				AggregatorPassphrase: b.aggregatorPassphrase,
+				NumNodes:             len(b.nodes),
+				Image:                *b.dockerImage,
+			},
+		},
+		log:          b.logger,
+		rollkitNodes: nodes,
+	}, nil
+}
+
+func (b *RollkitChainBuilder) initializeRollkitNodes(ctx context.Context) ([]*RollkitNode, error) {
+	var nodes []*RollkitNode
+
+	for i, nodeConfig := range b.nodes {
+		node, err := b.newRollkitNode(ctx, nodeConfig, i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create rollkit node %d: %w", i, err)
+		}
+		nodes = append(nodes, node)
+	}
+
+	return nodes, nil
+}
+
+func (b *RollkitChainBuilder) newRollkitNode(ctx context.Context, nodeConfig RollkitNodeConfig, index int) (*RollkitNode, error) {
+	// Get the appropriate image using fallback logic
+	imageToUse := b.getImage(nodeConfig)
+
+	// Create rollkit node configuration
+	cfg := Config{
+		Logger:          b.logger,
+		DockerClient:    b.dockerClient,
+		DockerNetworkID: b.dockerNetworkID,
+		RollkitChainConfig: &RollkitChainConfig{
+			ChainID:              b.chainID,
+			Env:                  b.getEnv(nodeConfig),
+			Bin:                  b.binaryName,
+			AggregatorPassphrase: b.aggregatorPassphrase,
+			NumNodes:             len(b.nodes),
+			Image:                imageToUse,
+		},
+	}
+
+	rn := NewRollkitNode(cfg, b.testName, imageToUse, index, nodeConfig.isAggregator)
+
+	// Create and setup volume using shared logic
+	if err := rn.CreateAndSetupVolume(ctx, rn.Name()); err != nil {
+		return nil, err
+	}
+
+	// Run post-init functions if any
+	for _, postInitFn := range nodeConfig.postInit {
+		if err := postInitFn(ctx, rn); err != nil {
+			return nil, fmt.Errorf("post-init failed for node %d: %w", index, err)
+		}
+	}
+
+	return rn, nil
+}
+
+// getImage returns the appropriate Docker image for a node, using node-specific override if available,
+// otherwise falling back to the chain's default image
+func (b *RollkitChainBuilder) getImage(nodeConfig RollkitNodeConfig) container.Image {
+	if nodeConfig.Image != nil {
+		return *nodeConfig.Image
+	}
+	if b.dockerImage != nil {
+		return *b.dockerImage
+	}
+	panic("no image specified: neither node-specific nor chain default image provided")
+}
+
+
+// getEnv returns the appropriate environment variables for a node
+func (b *RollkitChainBuilder) getEnv(nodeConfig RollkitNodeConfig) []string {
+	if len(nodeConfig.Env) > 0 {
+		return nodeConfig.Env
+	}
+	return b.env
+}

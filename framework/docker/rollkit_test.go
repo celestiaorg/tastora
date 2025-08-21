@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"cosmossdk.io/math"
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -71,7 +72,25 @@ func TestRollkit(t *testing.T) {
 	_, err = chain.BroadcastMessages(testCfg.Ctx, chain.GetFaucetWallet(), bankSend)
 	require.NoError(t, err)
 
-	rollkit, err := provider.GetRollkitChain(testCfg.Ctx)
+	rollkitImage := container.Image{
+		Repository: "ghcr.io/evstack/ev-node",
+		Version:    "main",
+		UIDGID:     "10001:10001",
+	}
+
+	aggregatorNodeConfig := NewRollkitNodeConfigBuilder().
+		WithAggregator(true).
+		Build()
+
+	rollkit, err := NewRollkitChainBuilder(t).
+		WithChainID("test").
+		WithBinaryName("testapp").
+		WithAggregatorPassphrase("12345678").
+		WithImage(rollkitImage).
+		WithDockerClient(testCfg.DockerClient).
+		WithDockerNetworkID(testCfg.NetworkID).
+		WithNode(aggregatorNodeConfig).
+		Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	nodes := rollkit.GetNodes()

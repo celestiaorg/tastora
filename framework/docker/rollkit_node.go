@@ -44,6 +44,9 @@ type RollkitNode struct {
 
 	GrpcConn *grpc.ClientConn
 
+	// isAggregatorFlag determines if this node should act as an aggregator
+	isAggregatorFlag bool
+
 	// Ports set during startContainer.
 	hostRPCPort  string
 	hostAPIPort  string
@@ -52,14 +55,15 @@ type RollkitNode struct {
 	hostHTTPPort string
 }
 
-func NewRollkitNode(cfg Config, testName string, image container.Image, index int) *RollkitNode {
+func NewRollkitNode(cfg Config, testName string, image container.Image, index int, isAggregator bool) *RollkitNode {
 	logger := cfg.Logger.With(
 		zap.Int("i", index),
-		zap.Bool("aggregator", index == 0),
+		zap.Bool("aggregator", isAggregator),
 	)
 	rn := &RollkitNode{
-		cfg:  cfg,
-		Node: container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "rollkit"), index, RollkitType, logger),
+		cfg:              cfg,
+		isAggregatorFlag: isAggregator,
+		Node:             container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "rollkit"), index, RollkitType, logger),
 	}
 
 	rn.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, rn.Name()))
@@ -85,7 +89,7 @@ func (rn *RollkitNode) logger() *zap.Logger {
 
 // isAggregator returns true if the RollkitNode is the aggregator
 func (rn *RollkitNode) isAggregator() bool {
-	return rn.Index == 0
+	return rn.isAggregatorFlag
 }
 
 // Init initializes the RollkitNode.
