@@ -13,7 +13,6 @@ import (
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
-	"github.com/celestiaorg/tastora/framework/types"
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
@@ -21,11 +20,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var _ types.EVStackNode = &Node{}
 
 const (
 	p2pPort         = "26656/tcp"
-	grpcPort        = "9090/tcp" 
+	grpcPort        = "9090/tcp"
 	apiPort         = "1317/tcp"
 	privValPort     = "1234/tcp"
 	evstackRpcPort  = "7331/tcp"
@@ -109,9 +107,9 @@ func (n *Node) Init(ctx context.Context, initArguments ...string) error {
 	if n.isAggregator() {
 		signerPath := filepath.Join(n.HomeDir(), "config")
 		cmd = append(cmd,
-			"--rollkit.node.aggregator",
-			"--rollkit.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
-			"--rollkit.signer.path="+signerPath)
+			"--evnode.node.aggregator",
+			"--evnode.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
+			"--evnode.signer.path="+signerPath)
 	}
 
 	cmd = append(cmd, initArguments...)
@@ -153,14 +151,14 @@ func (n *Node) createEvstackContainer(ctx context.Context, additionalStartArgs .
 	if n.isAggregator() {
 		signerPath := filepath.Join(n.HomeDir(), "config")
 		startCmd = append(startCmd,
-			"--rollkit.node.aggregator",
-			"--rollkit.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
-			"--rollkit.signer.path="+signerPath)
+			"--evnode.node.aggregator",
+			"--evnode.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
+			"--evnode.signer.path="+signerPath)
 	}
 
 	// add stored additional start args from the node configuration
 	startCmd = append(startCmd, n.additionalStartArgs...)
-	
+
 	// any custom arguments passed in on top of the required ones.
 	startCmd = append(startCmd, additionalStartArgs...)
 

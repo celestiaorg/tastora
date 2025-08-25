@@ -2,6 +2,8 @@ package evstack
 
 import "github.com/celestiaorg/tastora/framework/types"
 
+var _ types.NodeType = (*NodeType)(nil)
+
 // NodeType represents an evstack Node
 type NodeType struct{}
 
@@ -12,6 +14,3 @@ func (e NodeType) String() string {
 
 // EvstackType is the singleton instance representing an evstack Node
 var EvstackType = NodeType{}
-
-// Interface Compliance Check - ensure NodeType implements the NodeType interface
-var _ types.NodeType = (*NodeType)(nil)

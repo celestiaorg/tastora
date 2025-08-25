@@ -18,8 +18,6 @@ type Config struct {
 	ChainConfig *ChainConfig
 	// DataAvailabilityNetworkConfig defines the configuration for the data availability network settings.
 	DataAvailabilityNetworkConfig *DataAvailabilityNetworkConfig
-	// RollkitChainConfig defines configuration settings specific to a Rollkit-based chain.
-	RollkitChainConfig *RollkitChainConfig
 }
 
 type ChainConfig struct {
@@ -110,4 +108,3 @@ type RollkitChainConfig struct {
 	// Image specifies the Docker image used for the rollkit nodes.
 	Image container.Image
 }
-

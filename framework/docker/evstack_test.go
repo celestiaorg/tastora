@@ -68,7 +68,7 @@ func TestEvstack(t *testing.T) {
 	toAddress, err := sdk.AccAddressFromBech32(daWallet.GetFormattedAddress())
 	require.NoError(t, err)
 
-	// Fund the rollkit node wallet with coins
+	// Fund the ev node wallet with coins
 	bankSend := banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
 	_, err = chain.BroadcastMessages(testCfg.Ctx, chain.GetFaucetWallet(), bankSend)
 	require.NoError(t, err)
