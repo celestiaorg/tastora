@@ -14,13 +14,6 @@ type Config struct {
 	DockerClient *client.Client
 	// DockerNetworkID is the ID of the docker network to use
 	DockerNetworkID string
-	// ChainConfig defines configuration specific to the evstack chain
-	ChainConfig *ChainConfig
-}
-
-// ChainConfig defines the configuration for an evstack chain
-// including node counts, image settings, and chainID.
-type ChainConfig struct {
 	// ChainID, e.g. test-evstack
 	ChainID string
 	// Environment variables for chain nodes
@@ -29,8 +22,6 @@ type ChainConfig struct {
 	Bin string
 	// AggregatorPassphrase is the passphrase used when a node is an aggregator.
 	AggregatorPassphrase string
-	// NumNodes
-	NumNodes int
 	// Image specifies the Docker image used for the evstack nodes.
 	Image container.Image
 }

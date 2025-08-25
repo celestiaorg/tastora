@@ -144,17 +144,14 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 
 	return &Chain{
 		cfg: Config{
-			Logger:          b.logger,
-			DockerClient:    b.dockerClient,
-			DockerNetworkID: b.dockerNetworkID,
-			ChainConfig: &ChainConfig{
-				ChainID:              b.chainID,
-				Env:                  b.env,
-				Bin:                  b.binaryName,
-				AggregatorPassphrase: b.aggregatorPassphrase,
-				NumNodes:             len(b.nodes),
-				Image:                *b.dockerImage,
-			},
+			Logger:               b.logger,
+			DockerClient:         b.dockerClient,
+			DockerNetworkID:      b.dockerNetworkID,
+			ChainID:              b.chainID,
+			Env:                  b.env,
+			Bin:                  b.binaryName,
+			AggregatorPassphrase: b.aggregatorPassphrase,
+			Image:                *b.dockerImage,
 		},
 		log:   b.logger,
 		nodes: nodes,
@@ -179,22 +176,18 @@ func (b *ChainBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, index
 	// Get the appropriate image using fallback logic
 	imageToUse := b.getImage(nodeConfig)
 
-	// Create Node configuration
 	cfg := Config{
-		Logger:          b.logger,
-		DockerClient:    b.dockerClient,
-		DockerNetworkID: b.dockerNetworkID,
-		ChainConfig: &ChainConfig{
-			ChainID:              b.chainID,
-			Env:                  b.getEnv(nodeConfig),
-			Bin:                  b.binaryName,
-			AggregatorPassphrase: b.aggregatorPassphrase,
-			NumNodes:             len(b.nodes),
-			Image:                imageToUse,
-		},
+		Logger:               b.logger,
+		DockerClient:         b.dockerClient,
+		DockerNetworkID:      b.dockerNetworkID,
+		ChainID:              b.chainID,
+		Env:                  b.getEnv(nodeConfig),
+		Bin:                  b.binaryName,
+		AggregatorPassphrase: b.aggregatorPassphrase,
+		Image:                imageToUse,
 	}
 
-	node := NewNode(cfg, b.testName, imageToUse, index, nodeConfig.isAggregator)
+	node := NewNode(cfg, b.testName, imageToUse, index, nodeConfig.IsAggregator, b.getAdditionalStartArgs(nodeConfig))
 
 	// Create and setup volume using shared logic
 	if err := node.CreateAndSetupVolume(ctx, node.Name()); err != nil {
@@ -229,4 +222,12 @@ func (b *ChainBuilder) getEnv(nodeConfig NodeConfig) []string {
 		return nodeConfig.Env
 	}
 	return b.env
+}
+
+// getAdditionalStartArgs returns the appropriate additional start arguments for a node
+func (b *ChainBuilder) getAdditionalStartArgs(nodeConfig NodeConfig) []string {
+	if len(nodeConfig.AdditionalStartArgs) > 0 {
+		return nodeConfig.AdditionalStartArgs
+	}
+	return b.additionalStartArgs
 }

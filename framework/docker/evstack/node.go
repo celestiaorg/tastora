@@ -51,6 +51,9 @@ type Node struct {
 	// isAggregatorFlag determines if this node should act as an aggregator
 	isAggregatorFlag bool
 
+	// additionalStartArgs are additional command-line arguments for this node
+	additionalStartArgs []string
+
 	// Ports set during startContainer.
 	hostRPCPort  string
 	hostAPIPort  string
@@ -59,15 +62,16 @@ type Node struct {
 	hostHTTPPort string
 }
 
-func NewNode(cfg Config, testName string, image container.Image, index int, isAggregator bool) *Node {
+func NewNode(cfg Config, testName string, image container.Image, index int, isAggregator bool, additionalStartArgs []string) *Node {
 	logger := cfg.Logger.With(
 		zap.Int("i", index),
 		zap.Bool("aggregator", isAggregator),
 	)
 	node := &Node{
-		cfg:              cfg,
-		isAggregatorFlag: isAggregator,
-		Node:             container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "evstack"), index, EvstackType, logger),
+		cfg:                 cfg,
+		isAggregatorFlag:    isAggregator,
+		additionalStartArgs: additionalStartArgs,
+		Node:                container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "evstack"), index, EvstackType, logger),
 	}
 
 	node.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, node.Name()))
@@ -76,7 +80,7 @@ func NewNode(cfg Config, testName string, image container.Image, index int, isAg
 
 // Name of the test node container.
 func (n *Node) Name() string {
-	return fmt.Sprintf("%s-evstack-%d-%s", n.cfg.ChainConfig.ChainID, n.Index, internal.SanitizeContainerName(n.TestName))
+	return fmt.Sprintf("%s-evstack-%d-%s", n.cfg.ChainID, n.Index, internal.SanitizeContainerName(n.TestName))
 }
 
 // HostName returns the condensed hostname for the Node.
@@ -86,7 +90,7 @@ func (n *Node) HostName() string {
 
 func (n *Node) logger() *zap.Logger {
 	return n.cfg.Logger.With(
-		zap.String("chain_id", n.cfg.ChainConfig.ChainID),
+		zap.String("chain_id", n.cfg.ChainID),
 		zap.String("test", n.TestName),
 	)
 }
@@ -101,18 +105,18 @@ func (n *Node) Init(ctx context.Context, initArguments ...string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	cmd := []string{n.cfg.ChainConfig.Bin, "--home", n.HomeDir(), "--chain_id", n.cfg.ChainConfig.ChainID, "init"}
+	cmd := []string{n.cfg.Bin, "--home", n.HomeDir(), "--chain_id", n.cfg.ChainID, "init"}
 	if n.isAggregator() {
 		signerPath := filepath.Join(n.HomeDir(), "config")
 		cmd = append(cmd,
 			"--rollkit.node.aggregator",
-			"--rollkit.signer.passphrase="+n.cfg.ChainConfig.AggregatorPassphrase, //nolint:gosec // used for testing only
+			"--rollkit.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
 			"--rollkit.signer.path="+signerPath)
 	}
 
 	cmd = append(cmd, initArguments...)
 
-	_, _, err := n.Exec(ctx, n.Logger, cmd, n.cfg.ChainConfig.Env)
+	_, _, err := n.Exec(ctx, n.Logger, cmd, n.cfg.Env)
 	if err != nil {
 		return fmt.Errorf("failed to initialize evstack node: %w", err)
 	}
@@ -142,7 +146,7 @@ func (n *Node) createEvstackContainer(ctx context.Context, additionalStartArgs .
 	}
 
 	startCmd := []string{
-		n.cfg.ChainConfig.Bin,
+		n.cfg.Bin,
 		"--home", n.HomeDir(),
 		"start",
 	}
@@ -150,14 +154,17 @@ func (n *Node) createEvstackContainer(ctx context.Context, additionalStartArgs .
 		signerPath := filepath.Join(n.HomeDir(), "config")
 		startCmd = append(startCmd,
 			"--rollkit.node.aggregator",
-			"--rollkit.signer.passphrase="+n.cfg.ChainConfig.AggregatorPassphrase, //nolint:gosec // used for testing only
+			"--rollkit.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
 			"--rollkit.signer.path="+signerPath)
 	}
 
+	// add stored additional start args from the node configuration
+	startCmd = append(startCmd, n.additionalStartArgs...)
+	
 	// any custom arguments passed in on top of the required ones.
 	startCmd = append(startCmd, additionalStartArgs...)
 
-	return n.ContainerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.Bind(), nil, n.HostName(), startCmd, n.cfg.ChainConfig.Env, []string{})
+	return n.ContainerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.Bind(), nil, n.HostName(), startCmd, n.cfg.Env, []string{})
 }
 
 // startContainer starts the container for the Node, initializes its ports, and ensures the node rpc is responding returning.

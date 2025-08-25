@@ -8,8 +8,8 @@ import (
 
 // NodeConfig defines the configuration for a single evstack Node
 type NodeConfig struct {
-	// isAggregator specifies whether this node should act as an aggregator
-	isAggregator bool
+	// IsAggregator specifies whether this node should act as an aggregator
+	IsAggregator bool
 	// Image overrides the chain's default image for this specific node (optional)
 	Image *container.Image
 	// AdditionalStartArgs overrides the chain-level AdditionalStartArgs for this specific node
@@ -29,7 +29,7 @@ type NodeBuilder struct {
 func NewNodeBuilder() *NodeBuilder {
 	return &NodeBuilder{
 		config: &NodeConfig{
-			isAggregator:        false,
+			IsAggregator:        false,
 			AdditionalStartArgs: make([]string, 0),
 			Env:                 make([]string, 0),
 		},
@@ -38,7 +38,7 @@ func NewNodeBuilder() *NodeBuilder {
 
 // WithAggregator sets whether this node should be an aggregator
 func (b *NodeBuilder) WithAggregator(isAggregator bool) *NodeBuilder {
-	b.config.isAggregator = isAggregator
+	b.config.IsAggregator = isAggregator
 	return b
 }
 
@@ -62,7 +62,7 @@ func (b *NodeBuilder) WithEnvVars(envVars ...string) *NodeBuilder {
 
 // WithPostInit sets the post init functions
 func (b *NodeBuilder) WithPostInit(postInitFns ...func(ctx context.Context, node *Node) error) *NodeBuilder {
-	b.config.postInit = postInitFns
+	b.config.postInit = append(b.config.postInit, postInitFns...)
 	return b
 }
 
