@@ -45,7 +45,6 @@ type TestSetupConfig struct {
 	Ctx          context.Context
 }
 
-
 // setupDockerTest creates an isolated Docker test environment
 func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
 	t.Helper()
@@ -58,7 +57,7 @@ func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
 
 	ctx := context.Background()
 	dockerClient, networkID := DockerSetup(t)
-	
+
 	// Override the default cleanup to use our unique test name
 	t.Cleanup(DockerCleanupWithTestName(t, dockerClient, uniqueTestName))
 
@@ -101,17 +100,6 @@ func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
 				UIDGID:     "10001:10001",
 			},
 		},
-		RollkitChainConfig: &RollkitChainConfig{
-			ChainID:              "test",
-			Bin:                  "testapp",
-			AggregatorPassphrase: "12345678",
-			NumNodes:             1,
-			Image: container.Image{
-				Repository: "ghcr.io/evstack/ev-node",
-				Version:    "main",
-				UIDGID:     "2000",
-			},
-		},
 	}
 
 	for _, opt := range opts {
@@ -131,7 +119,6 @@ func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
 		Ctx:          ctx,
 	}
 }
-
 
 // getGenesisHash returns the genesis hash of the given chain node.
 func getGenesisHash(ctx context.Context, chain *Chain) (string, error) {

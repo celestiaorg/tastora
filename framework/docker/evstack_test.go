@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"cosmossdk.io/math"
+	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/evstack"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -12,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRollkit(t *testing.T) {
+func TestEvstack(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")
 	}
@@ -66,15 +68,33 @@ func TestRollkit(t *testing.T) {
 	toAddress, err := sdk.AccAddressFromBech32(daWallet.GetFormattedAddress())
 	require.NoError(t, err)
 
-	// Fund the rollkit node wallet with coins
+	// Fund the ev node wallet with coins
 	bankSend := banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100_000_000_00))))
 	_, err = chain.BroadcastMessages(testCfg.Ctx, chain.GetFaucetWallet(), bankSend)
 	require.NoError(t, err)
 
-	rollkit, err := provider.GetRollkitChain(testCfg.Ctx)
+	evstackImage := container.Image{
+		Repository: "ghcr.io/evstack/ev-node",
+		Version:    "main",
+		UIDGID:     "10001:10001",
+	}
+
+	aggregatorNodeConfig := evstack.NewNodeBuilder().
+		WithAggregator(true).
+		Build()
+
+	evstackChain, err := evstack.NewChainBuilder(t).
+		WithChainID("test").
+		WithBinaryName("testapp").
+		WithAggregatorPassphrase("12345678").
+		WithImage(evstackImage).
+		WithDockerClient(testCfg.DockerClient).
+		WithDockerNetworkID(testCfg.NetworkID).
+		WithNode(aggregatorNodeConfig).
+		Build(testCfg.Ctx)
 	require.NoError(t, err)
 
-	nodes := rollkit.GetNodes()
+	nodes := evstackChain.GetNodes()
 	require.Len(t, nodes, 1)
 	aggregatorNode := nodes[0]
 
@@ -89,12 +109,12 @@ func TestRollkit(t *testing.T) {
 	require.NoError(t, err)
 	daAddress := fmt.Sprintf("http://%s", bridgeRPCAddress)
 	err = aggregatorNode.Start(testCfg.Ctx,
-		"--rollkit.da.address", daAddress,
-		"--rollkit.da.gas_price", "0.025",
-		"--rollkit.da.auth_token", authToken,
-		"--rollkit.rpc.address", "0.0.0.0:7331", // bind to 0.0.0.0 so rpc is reachable from test host.
-		"--rollkit.da.header_namespace", "ev-header",
-		"--rollkit.da.data_namespace", "ev-data",
+		"--evnode.da.address", daAddress,
+		"--evnode.da.gas_price", "0.025",
+		"--evnode.da.auth_token", authToken,
+		"--evnode.rpc.address", "0.0.0.0:7331", // bind to 0.0.0.0 so rpc is reachable from test host.
+		"--evnode.da.header_namespace", "ev-header",
+		"--evnode.da.data_namespace", "ev-data",
 	)
 	require.NoError(t, err)
 }
