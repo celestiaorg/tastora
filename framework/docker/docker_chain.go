@@ -43,7 +43,7 @@ type Chain struct {
 	mu          sync.Mutex
 	broadcaster types.Broadcaster
 
-	faucetWallet types.Wallet
+	faucetWallet *types.Wallet
 
 	// started is a bool indicating if the Chain has been started or not.
 	// it is used to determine if files should be initialized at startup or
@@ -63,7 +63,7 @@ func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
 }
 
 // GetFaucetWallet retrieves the faucet wallet for the chain.
-func (c *Chain) GetFaucetWallet() types.Wallet {
+func (c *Chain) GetFaucetWallet() *types.Wallet {
 	return c.faucetWallet
 }
 
@@ -82,7 +82,7 @@ func (c *Chain) getBroadcaster() types.Broadcaster {
 }
 
 // BroadcastMessages broadcasts the given messages signed on behalf of the provided user.
-func (c *Chain) BroadcastMessages(ctx context.Context, signingWallet types.Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error) {
+func (c *Chain) BroadcastMessages(ctx context.Context, signingWallet *types.Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error) {
 	if c.GetFaucetWallet() == nil {
 		return sdk.TxResponse{}, fmt.Errorf("faucet wallet not initialized")
 	}
@@ -91,7 +91,7 @@ func (c *Chain) BroadcastMessages(ctx context.Context, signingWallet types.Walle
 
 // BroadcastBlobMessage broadcasts the given messages signed on behalf of the provided user. The transaction bytes are wrapped
 // using the MarshalBlobTx function before broadcasting.
-func (c *Chain) BroadcastBlobMessage(ctx context.Context, signingWallet types.Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error) {
+func (c *Chain) BroadcastBlobMessage(ctx context.Context, signingWallet *types.Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error) {
 	return c.getBroadcaster().BroadcastBlobMessage(ctx, signingWallet, msg, blobs...)
 }
 
@@ -436,12 +436,12 @@ func (c *Chain) pullImages(ctx context.Context) {
 }
 
 // CreateWallet creates a new wallet using Validator[0] to maintain backward compatibility.
-func (c *Chain) CreateWallet(ctx context.Context, keyName string) (types.Wallet, error) {
+func (c *Chain) CreateWallet(ctx context.Context, keyName string) (*types.Wallet, error) {
 	return c.GetNode().CreateWallet(ctx, keyName, c.cfg.ChainConfig.Bech32Prefix)
 }
 
 // copyFaucetKeyToValidator copies the faucet key from validator[0] to the specified validator.
-func (c *Chain) copyFaucetKeyToValidator(faucetWallet types.Wallet, targetValidator *ChainNode) error {
+func (c *Chain) copyFaucetKeyToValidator(faucetWallet *types.Wallet, targetValidator *ChainNode) error {
 	faucetKeyName := faucetWallet.GetKeyName()
 
 	// as part of setup, the faucet wallet was created on Validators[0]

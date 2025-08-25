@@ -14,7 +14,7 @@ func AddressToBech32(addr sdk.AccAddress, prefix string) (string, error) {
 }
 
 // AddressFromWallet returns an sdk address from a wallet.
-func AddressFromWallet(wallet types.Wallet) (sdk.AccAddress, error) {
+func AddressFromWallet(wallet *types.Wallet) (sdk.AccAddress, error) {
 	if len(strings.TrimSpace(wallet.GetFormattedAddress())) == 0 {
 		return sdk.AccAddress{}, fmt.Errorf("empty address string is not allowed")
 	}

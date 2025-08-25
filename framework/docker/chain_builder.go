@@ -150,7 +150,7 @@ type ChainBuilder struct {
 	env []string
 	// faucetWallet is the wallet that should be used when broadcasting transactions when the sender doesn't matter
 	// and the outcome is the only thing important. E.g. funding relayer wallets.
-	faucetWallet Wallet
+	faucetWallet *types.Wallet
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -202,7 +202,7 @@ func (b *ChainBuilder) WithName(name string) *ChainBuilder {
 	return b
 }
 
-func (b *ChainBuilder) WithFaucetWallet(wallet Wallet) *ChainBuilder {
+func (b *ChainBuilder) WithFaucetWallet(wallet *types.Wallet) *ChainBuilder {
 	b.faucetWallet = wallet
 	return b
 }
@@ -421,7 +421,7 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 		FullNodes:    fullNodes,
 		cdc:          cdc,
 		log:          b.logger,
-		faucetWallet: &b.faucetWallet,
+		faucetWallet: b.faucetWallet,
 	}
 
 	return chain, nil

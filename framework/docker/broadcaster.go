@@ -30,7 +30,7 @@ type broadcaster struct {
 	buf *bytes.Buffer
 	// keyrings is a mapping of keyrings which point to a temporary test directory. The contents
 	// of this directory are copied from the node container for the specific wallet.
-	keyrings map[types.Wallet]keyring.Keyring
+	keyrings map[*types.Wallet]keyring.Keyring
 
 	// chain is a reference to the Chain instance which will be the target of the messages.
 	chain *Chain
@@ -65,7 +65,7 @@ func newBroadcasterForNode(chain *Chain, node *ChainNode) types.Broadcaster {
 		chain:    chain,
 		node:     node,
 		buf:      &bytes.Buffer{},
-		keyrings: map[types.Wallet]keyring.Keyring{},
+		keyrings: map[*types.Wallet]keyring.Keyring{},
 	}
 }
 
@@ -84,7 +84,7 @@ func (b *broadcaster) ConfigureClientContextOptions(opts ...types.ClientContextO
 // GetFactory returns an instance of tx.Factory that is configured with this Broadcaster's Chain
 // and the provided wallet. ConfigureFactoryOptions can be used to specify arbitrary options to configure the returned
 // factory.
-func (b *broadcaster) GetFactory(ctx context.Context, wallet types.Wallet) (sdktx.Factory, error) {
+func (b *broadcaster) GetFactory(ctx context.Context, wallet *types.Wallet) (sdktx.Factory, error) {
 	clientContext, err := b.GetClientContext(ctx, wallet)
 	if err != nil {
 		return sdktx.Factory{}, err
@@ -110,7 +110,7 @@ func (b *broadcaster) GetFactory(ctx context.Context, wallet types.Wallet) (sdkt
 // GetClientContext returns a client context that is configured with this Broadcaster's Chain and
 // the provided wallet. ConfigureClientContextOptions can be used to configure arbitrary options to configure the returned
 // client.Context.
-func (b *broadcaster) GetClientContext(ctx context.Context, wallet types.Wallet) (client.Context, error) {
+func (b *broadcaster) GetClientContext(ctx context.Context, wallet *types.Wallet) (client.Context, error) {
 	cn := b.getNode()
 
 	_, ok := b.keyrings[wallet]
@@ -133,7 +133,7 @@ func (b *broadcaster) GetClientContext(ctx context.Context, wallet types.Wallet)
 }
 
 // GetTxResponseBytes returns the sdk.TxResponse bytes which returned from broadcast.Tx.
-func (b *broadcaster) GetTxResponseBytes(ctx context.Context, wallet types.Wallet) ([]byte, error) {
+func (b *broadcaster) GetTxResponseBytes(ctx context.Context, wallet *types.Wallet) ([]byte, error) {
 	if b.buf == nil || b.buf.Len() == 0 {
 		return nil, fmt.Errorf("empty buffer, transaction has not been executed yet")
 	}
@@ -168,7 +168,7 @@ func (b *broadcaster) getNode() *ChainNode {
 }
 
 // defaultClientContext returns a default client context configured with the wallet as the sender.
-func (b *broadcaster) defaultClientContext(fromWallet types.Wallet, sdkAdd sdk.AccAddress) client.Context {
+func (b *broadcaster) defaultClientContext(fromWallet *types.Wallet, sdkAdd sdk.AccAddress) client.Context {
 	// initialize a clean buffer each time
 	b.buf.Reset()
 	kr := b.keyrings[fromWallet]
@@ -206,7 +206,7 @@ func (b *broadcaster) defaultTxFactory(clientCtx client.Context, account client.
 // BroadcastBlobMessage uses the provided Broadcaster to broadcast all the provided message which will be signed
 // by the Wallet provided. The transaction will be wrapped with MarshalBlobTx before being broadcast.
 // The sdk.TxResponse and an error are returned.
-func (b *broadcaster) BroadcastBlobMessage(ctx context.Context, signingWallet types.Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error) {
+func (b *broadcaster) BroadcastBlobMessage(ctx context.Context, signingWallet *types.Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error) {
 	cc, err := b.GetClientContext(ctx, signingWallet)
 	if err != nil {
 		return sdk.TxResponse{}, err
@@ -251,7 +251,7 @@ func (b *broadcaster) BroadcastBlobMessage(ctx context.Context, signingWallet ty
 
 // BroadcastMessages uses the provided Broadcaster to broadcast all the provided messages which will be signed
 // by the Wallet provided. The sdk.TxResponse and an error are returned.
-func (b *broadcaster) BroadcastMessages(ctx context.Context, signingWallet types.Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error) {
+func (b *broadcaster) BroadcastMessages(ctx context.Context, signingWallet *types.Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error) {
 	f, err := b.GetFactory(ctx, signingWallet)
 	if err != nil {
 		return sdk.TxResponse{}, err

@@ -16,7 +16,7 @@ func CreateAndFund(
 	keyNamePrefix string,
 	coins sdk.Coins,
 	chain types.Chain,
-) (types.Wallet, error) {
+) (*types.Wallet, error) {
 	keyName := fmt.Sprintf("%s-%s", keyNamePrefix, random.LowerCaseLetterString(6))
 	wallet, err := chain.CreateWallet(ctx, keyName)
 	if err != nil {

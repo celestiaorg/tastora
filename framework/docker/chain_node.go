@@ -81,7 +81,7 @@ type ChainNode struct {
 	hostP2PPort  string
 
 	// faucetWallet stores the faucet wallet for this node
-	faucetWallet types.Wallet
+	faucetWallet *types.Wallet
 }
 
 // ChainNodeParams contains the chain-specific parameters needed to create a ChainNode
@@ -579,7 +579,7 @@ func (cn *ChainNode) keyBech32(ctx context.Context, name string, bech string) (s
 }
 
 // CreateWallet creates a new wallet with the specified keyName on this specific chain node.
-func (cn *ChainNode) CreateWallet(ctx context.Context, keyName string, bech32Prefix string) (types.Wallet, error) {
+func (cn *ChainNode) CreateWallet(ctx context.Context, keyName string, bech32Prefix string) (*types.Wallet, error) {
 	if err := cn.createKey(ctx, keyName); err != nil {
 		return nil, fmt.Errorf("failed to create key with name %q on node %s: %w", keyName, cn.Name(), err)
 	}
@@ -591,8 +591,8 @@ func (cn *ChainNode) CreateWallet(ctx context.Context, keyName string, bech32Pre
 
 	formattedAddress := sdk.MustBech32ifyAddressBytes(bech32Prefix, addrBytes)
 
-	w := NewWallet(addrBytes, formattedAddress, bech32Prefix, keyName)
-	return &w, nil
+	w := types.NewWallet(addrBytes, formattedAddress, bech32Prefix, keyName)
+	return w, nil
 }
 
 // getAddress retrieves the address bytes for a given key name and bech32 prefix.
@@ -605,7 +605,7 @@ func (cn *ChainNode) getAddress(ctx context.Context, keyName string, bech32Prefi
 }
 
 // GetFaucetWallet returns the faucet wallet for this node.
-func (cn *ChainNode) GetFaucetWallet() types.Wallet {
+func (cn *ChainNode) GetFaucetWallet() *types.Wallet {
 	return cn.faucetWallet
 }
 

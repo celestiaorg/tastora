@@ -36,15 +36,15 @@ type Chain interface {
 	// GetNodes returns a slice of ChainNodes.
 	GetNodes() []ChainNode
 	// CreateWallet creates a new wallet with the specified keyName and returns the Wallet instance or an error.
-	CreateWallet(ctx context.Context, keyName string) (Wallet, error)
+	CreateWallet(ctx context.Context, keyName string) (*Wallet, error)
 	// BroadcastMessages sends multiple messages to the blockchain network using the signingWallet, returning a transaction response.
-	BroadcastMessages(ctx context.Context, signingWallet Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error)
+	BroadcastMessages(ctx context.Context, signingWallet *Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error)
 	// BroadcastBlobMessage broadcasts a transaction that includes a message and associated blobs to the blockchain.
-	BroadcastBlobMessage(ctx context.Context, signingWallet Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error)
+	BroadcastBlobMessage(ctx context.Context, signingWallet *Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error)
 	// UpgradeVersion upgrades the chain to the specified version.
 	UpgradeVersion(ctx context.Context, version string)
 	// GetFaucetWallet returns the faucet wallet.
-	GetFaucetWallet() Wallet
+	GetFaucetWallet() *Wallet
 	// GetChainID returns the chain ID.
 	GetChainID() string
 	// GetRelayerConfig returns the chain configuration.

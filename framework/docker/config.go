@@ -16,8 +16,6 @@ type Config struct {
 	DockerNetworkID string
 	// ChainConfig defines configuration specific to the app chain.
 	ChainConfig *ChainConfig
-	// DataAvailabilityNetworkConfig defines the configuration for the data availability network settings.
-	DataAvailabilityNetworkConfig *DataAvailabilityNetworkConfig
 }
 
 type ChainConfig struct {
@@ -57,40 +55,6 @@ type ChainConfig struct {
 	GenesisFileBz []byte
 }
 
-// DataAvailabilityNetworkConfig defines the configuration for the data availability network, including node counts and image settings.
-type DataAvailabilityNetworkConfig struct {
-	// FullNodeCount specifies the number of full nodes to deploy in the data availability network.
-	FullNodeCount int
-	// BridgeNodeCount specifies the number of bridge nodes to deploy in the data availability network.
-	BridgeNodeCount int
-	// LightNodeCount specifies the number of light nodes to deploy in the data availability network.
-	LightNodeCount int
-	// Image specifies the Docker image used for nodes in the data availability network.
-	Image container.Image
-	// BridgeNodeConfigs allows per-bridge-node configuration overrides, keyed by bridge node index
-	BridgeNodeConfigs map[int]*DANodeConfig
-	// FullNodeConfigs allows per-full-node configuration overrides, keyed by full node index
-	FullNodeConfigs map[int]*DANodeConfig
-	// LightNodeConfigs allows per-light-node configuration overrides, keyed by light node index
-	LightNodeConfigs map[int]*DANodeConfig
-
-	// NEW: Default port configuration for all DA nodes
-	DefaultRPCPort      string // Default internal RPC port (default: "26658")
-	DefaultP2PPort      string // Default internal P2P port (default: "2121")
-	DefaultCoreRPCPort  string // Default core RPC port to connect to (default: "26657")
-	DefaultCoreGRPCPort string // Default core GRPC port to connect to (default: "9090")
-}
-
-// DANodeConfig provides per-node configuration that can override DataAvailabilityNetworkConfig defaults
-type DANodeConfig struct {
-	// Image overrides the network-level Image for this specific node
-	Image *container.Image
-
-	RPCPort      string // Internal RPC port (overrides default)
-	P2PPort      string // Internal P2P port (overrides default)
-	CoreRPCPort  string // Port to connect to celestia-app RPC (overrides default)
-	CoreGRPCPort string // Port to connect to celestia-app GRPC (overrides default)
-}
 
 // RollkitChainConfig defines the configuration for a Rollkit-based chain
 // including node counts, image settings, and chainID.

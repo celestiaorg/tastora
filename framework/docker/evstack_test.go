@@ -6,6 +6,7 @@ import (
 
 	"cosmossdk.io/math"
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/dataavailability"
 	"github.com/celestiaorg/tastora/framework/docker/evstack"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -24,14 +25,30 @@ func TestEvstack(t *testing.T) {
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	provider := testCfg.Provider
 	chain, err := testCfg.Builder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	err = chain.Start(testCfg.Ctx)
 	require.NoError(t, err)
 
-	daNetwork, err := provider.GetDataAvailabilityNetwork(testCfg.Ctx)
+	// Create DA network using builder pattern
+	celestiaImage := container.Image{
+		Repository: "ghcr.io/celestiaorg/celestia-node",
+		Version:    "main",
+		UIDGID:     "10001:10001",
+	}
+
+	bridgeNodeConfig := dataavailability.NewNodeBuilder().
+		WithNodeType(dataavailability.BridgeNodeType).
+		Build()
+
+	daNetwork, err := dataavailability.NewNetworkBuilder(t).
+		WithChainID(chain.GetChainID()).
+		WithImage(celestiaImage).
+		WithDockerClient(testCfg.DockerClient).
+		WithDockerNetworkID(testCfg.NetworkID).
+		WithNode(bridgeNodeConfig).
+		Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	genesisHash, err := getGenesisHash(testCfg.Ctx, chain)
@@ -45,9 +62,9 @@ func TestEvstack(t *testing.T) {
 
 	t.Run("bridge node can be started", func(t *testing.T) {
 		err = bridgeNode.Start(testCfg.Ctx,
-			types.WithChainID(chainID),
-			types.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
-			types.WithEnvironmentVariables(
+			dataavailability.WithChainID(chainID),
+			dataavailability.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
+			dataavailability.WithEnvironmentVariables(
 				map[string]string{
 					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, ""),
 					"P2P_NETWORK":     chainID,

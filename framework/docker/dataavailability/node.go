@@ -1,0 +1,466 @@
+package dataavailability
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"path"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/celestiaorg/go-square/v2/share"
+	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
+	dockerutil "github.com/celestiaorg/tastora/framework/testutil/docker"
+	tomlutil "github.com/celestiaorg/tastora/framework/testutil/toml"
+	"github.com/celestiaorg/tastora/framework/types"
+	"github.com/docker/go-connections/nat"
+	"go.uber.org/zap"
+)
+
+// Default port numbers (without /tcp suffix)
+const (
+	defaultDANodeRPCPort = "26658" // Default RPC port for DANode
+	defaultDANodeP2PPort = "2121"  // Default P2P port for DANode
+	defaultCoreRPCPort   = "26657" // Default RPC port for Core
+	defaultCoreGRPCPort  = "9090"  // Default GRPC port for Core
+)
+
+// Node is a docker implementation of a celestia da node.
+type Node struct {
+	*container.Node
+	cfg                 Config
+	mu                  sync.Mutex
+	hasBeenStarted      bool
+	nodeType            NodeType
+	additionalStartArgs []string
+	configModifications map[string]tomlutil.Toml
+	customPorts         *PortConfig
+	wallet              *types.Wallet
+	// adminAuthToken is a token that has admin access, it should be generated after init.
+	adminAuthToken string
+	// ports that are resolvable from the test runners themselves.
+	hostRPCPort string
+	hostP2PPort string
+}
+
+func NewNode(cfg Config, testName string, image container.Image, index int, nodeType NodeType, additionalStartArgs []string, configModifications map[string]tomlutil.Toml) *Node {
+	logger := cfg.Logger.With(
+		zap.String("node_type", nodeType.String()),
+	)
+	node := &Node{
+		cfg:                 cfg,
+		nodeType:            nodeType,
+		additionalStartArgs: additionalStartArgs,
+		configModifications: configModifications,
+		Node:                container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", index, nodeType, logger),
+	}
+
+	node.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, node.Name()))
+	return node
+}
+
+// Name returns the container name for the Node.
+func (n *Node) Name() string {
+	return fmt.Sprintf("da-%s-%d-%s", n.nodeType.String(), n.Index, internal.SanitizeContainerName(n.TestName))
+}
+
+// HostName returns the condensed hostname for the Node.
+func (n *Node) HostName() string {
+	return internal.CondenseHostName(n.Name())
+}
+
+// GetType returns the type of the Node.
+func (n *Node) GetType() NodeType {
+	return n.nodeType
+}
+
+// GetWallet returns the wallet associated with the node.
+func (n *Node) GetWallet() (*types.Wallet, error) {
+	return n.wallet, nil
+}
+
+// GetAuthToken returns the auth token for the node.
+func (n *Node) GetAuthToken() (string, error) {
+	if n.adminAuthToken == "" {
+		return "", fmt.Errorf("admin token has not yet been generated for da node: %s", n.Name())
+	}
+	return n.adminAuthToken, nil
+}
+
+// GetInternalHostName returns the hostname resolvable within the network.
+func (n *Node) GetInternalHostName() (string, error) {
+	return n.HostName(), nil
+}
+
+// GetInternalRPCAddress returns the internal RPC address resolvable within the network
+func (n *Node) GetInternalRPCAddress() (string, error) {
+	rpcPort := strings.TrimSuffix(n.getRPCPort(), "/tcp")
+	return fmt.Sprintf("%s:%s", n.HostName(), rpcPort), nil
+}
+
+// GetInternalP2PAddress returns the internal P2P address resolvable within the network
+func (n *Node) GetInternalP2PAddress() (string, error) {
+	p2pPort := strings.TrimSuffix(n.getP2PPort(), "/tcp")
+	return fmt.Sprintf("%s:%s", n.HostName(), p2pPort), nil
+}
+
+// GetHostRPCAddress returns the externally resolvable RPC address of the node.
+func (n *Node) GetHostRPCAddress() string {
+	return n.hostRPCPort
+}
+
+// Stop terminates the Node by stopping its associated container gracefully using the provided context.
+func (n *Node) Stop(ctx context.Context) error {
+	return n.StopContainer(ctx)
+}
+
+// Start initializes and starts the Node with the provided options in the given context.
+// It returns an error if the node initialization or startup fails.
+func (n *Node) Start(ctx context.Context, opts ...StartOption) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// if the container has already been started, we just start the container with existing settings.
+	if n.hasBeenStarted {
+		return n.StartContainer(ctx)
+	}
+	return n.startAndInitialize(ctx, opts...)
+}
+
+func (n *Node) startAndInitialize(ctx context.Context, opts ...StartOption) error {
+	startOpts := StartOptions{
+		ChainID: n.cfg.ChainID,
+		// by default disable RPC authentication, if any custom overrides are applied,
+		// they will need to explicitly disable rpc auth also if that is required.
+		ConfigModifications: disableRPCAuthModification(),
+	}
+
+	for _, fn := range opts {
+		fn(&startOpts)
+	}
+
+	var env []string
+	for k, v := range startOpts.EnvironmentVariables {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	// merge with node-level env vars
+	env = append(env, n.cfg.Env...)
+
+	if err := n.initNode(ctx, startOpts.ChainID, env); err != nil {
+		return fmt.Errorf("failed to initialize da node: %w", err)
+	}
+
+	if err := n.initAuthToken(ctx); err != nil {
+		return fmt.Errorf("failed to initialize auth token: %w", err)
+	}
+
+	// merge config modifications
+	allConfigMods := make(map[string]tomlutil.Toml)
+	for k, v := range n.configModifications {
+		allConfigMods[k] = v
+	}
+	for k, v := range startOpts.ConfigModifications {
+		allConfigMods[k] = v
+	}
+
+	// merge start arguments
+	allStartArgs := append(n.additionalStartArgs, startOpts.StartArguments...)
+
+	if err := n.startNode(ctx, allStartArgs, allConfigMods, env); err != nil {
+		return fmt.Errorf("failed to start da node: %w", err)
+	}
+
+	n.hasBeenStarted = true
+	return nil
+}
+
+// getRPCPort returns the RPC port for the node type.
+func (n *Node) getRPCPort() string {
+	if n.customPorts != nil && n.customPorts.RPCPort != "" {
+		return n.customPorts.RPCPort + "/tcp"
+	}
+	return defaultDANodeRPCPort + "/tcp"
+}
+
+// getP2PPort returns the P2P port for the node type.
+func (n *Node) getP2PPort() string {
+	if n.customPorts != nil && n.customPorts.P2PPort != "" {
+		return n.customPorts.P2PPort + "/tcp"
+	}
+	return defaultDANodeP2PPort + "/tcp"
+}
+
+// PortInfo contains all port information for a DA node
+type PortInfo struct {
+	RPCPort      string // Internal RPC port
+	P2PPort      string // Internal P2P port
+	CoreRPCPort  string // Core RPC port to connect to
+	CoreGRPCPort string // Core GRPC port to connect to
+}
+
+// GetPortInfo returns all port information for the node
+func (n *Node) GetPortInfo() PortInfo {
+	// RPC Port logic
+	rpcPort := defaultDANodeRPCPort
+	if n.customPorts != nil && n.customPorts.RPCPort != "" {
+		rpcPort = n.customPorts.RPCPort
+	}
+
+	// P2P Port logic  
+	p2pPort := defaultDANodeP2PPort
+	if n.customPorts != nil && n.customPorts.P2PPort != "" {
+		p2pPort = n.customPorts.P2PPort
+	}
+
+	// Core RPC Port logic
+	coreRPCPort := defaultCoreRPCPort
+	if n.customPorts != nil && n.customPorts.CoreRPCPort != "" {
+		coreRPCPort = n.customPorts.CoreRPCPort
+	}
+
+	// Core GRPC Port logic
+	coreGRPCPort := defaultCoreGRPCPort
+	if n.customPorts != nil && n.customPorts.CoreGRPCPort != "" {
+		coreGRPCPort = n.customPorts.CoreGRPCPort
+	}
+
+	return PortInfo{
+		RPCPort:      rpcPort,
+		P2PPort:      p2pPort,
+		CoreRPCPort:  coreRPCPort,
+		CoreGRPCPort: coreGRPCPort,
+	}
+}
+
+// initNode initializes the Node by running the "init" command for the specified Node type, network, and keyring settings.
+func (n *Node) initNode(ctx context.Context, chainID string, env []string) error {
+	if err := n.createWallet(ctx); err != nil {
+		return fmt.Errorf("failed to create wallet: %w", err)
+	}
+
+	// note: my_celes_key is the default key name for the da node.
+	cmd := []string{n.cfg.Bin, n.nodeType.String(), "init", "--p2p.network", chainID, "--keyring.keyname", "my-key", "--node.store", n.HomeDir()}
+	_, _, err := n.Exec(ctx, n.Logger, cmd, env)
+	return err
+}
+
+// createWallet creates a wallet for use on this node. Creating one explicitly
+// gives us access to the address for use in tests.
+func (n *Node) createWallet(ctx context.Context) error {
+	cmd := []string{"cel-key", "add", "my-key", "--node.type", n.nodeType.String(), "--keyring-dir", path.Join(n.HomeDir(), "keys"), "--output", "json"}
+	_, stderr, err := n.Exec(ctx, n.Logger, cmd, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create wallet: %w", err)
+	}
+
+	address := extractAddressFromCreateWalletOutput(string(stderr))
+	n.wallet = types.NewWallet(nil, address, "celestia", "my-key")
+	return nil
+}
+
+// extractAddressFromCreateWalletOutput extracts the address from the output of the create wallet command.
+func extractAddressFromCreateWalletOutput(output string) string {
+	re := regexp.MustCompile(`"address"\s*:\s*"([^"]+)"`)
+	matches := re.FindStringSubmatch(output)
+	if len(matches) < 2 {
+		panic("address not found")
+	}
+	return matches[1]
+}
+
+// startNode initializes and starts the Node container and updates its configuration based on the provided options.
+func (n *Node) startNode(ctx context.Context, additionalStartArgs []string, configModifications map[string]tomlutil.Toml, env []string) error {
+	if err := n.createNodeContainer(ctx, additionalStartArgs, env); err != nil {
+		return fmt.Errorf("failed to create container: %w", err)
+	}
+
+	// apply any config modifications
+	if err := n.ModifyConfigFiles(ctx, configModifications); err != nil {
+		return fmt.Errorf("failed to apply config modifications: %w", err)
+	}
+
+	if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
+		return fmt.Errorf("failed to start container: %w", err)
+	}
+
+	// Set the host ports once since they will not change after the container has started.
+	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.getRPCPort(), n.getP2PPort())
+	if err != nil {
+		return err
+	}
+
+	n.hostRPCPort, n.hostP2PPort = hostPorts[0], hostPorts[1]
+	return nil
+}
+
+// createNodeContainer creates and initializes a container for the Node with specified context, options, and environment variables.
+func (n *Node) createNodeContainer(ctx context.Context, additionalStartArgs []string, env []string) error {
+	cmd := []string{n.cfg.Bin, n.nodeType.String(), "start"}
+	cmd = append(cmd, additionalStartArgs...)
+	usingPorts := n.getPortMap()
+	return n.ContainerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.cfg.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, env, []string{})
+}
+
+// initAuthToken initialises an admin auth token.
+func (n *Node) initAuthToken(ctx context.Context) error {
+	// Command to generate admin token
+	cmd := []string{n.cfg.Bin, n.nodeType.String(), "auth", "admin"}
+
+	// Run the command inside the container
+	stdout, stderr, err := n.Exec(ctx, n.Logger, cmd, nil)
+	if err != nil {
+		return fmt.Errorf("failed to generate auth token (stderr=%q): %w", stderr, err)
+	}
+
+	n.adminAuthToken = string(bytes.TrimSpace(stdout))
+	return nil
+}
+
+// getPortMap returns the port mapping for the node type.
+func (n *Node) getPortMap() nat.PortMap {
+	return nat.PortMap{
+		nat.Port(n.getRPCPort()): {},
+		nat.Port(n.getP2PPort()): {},
+	}
+}
+
+// ModifyConfigFiles modifies the specified config files with the provided TOML modifications.
+func (n *Node) ModifyConfigFiles(ctx context.Context, configModifications map[string]tomlutil.Toml) error {
+	for filePath, modifications := range configModifications {
+		if err := dockerutil.ModifyConfigFile(
+			ctx,
+			n.Logger,
+			n.DockerClient,
+			n.TestName,
+			n.VolumeName,
+			filePath,
+			modifications,
+		); err != nil {
+			return fmt.Errorf("failed to modify %s: %w", filePath, err)
+		}
+	}
+	return nil
+}
+
+// disableRPCAuthModification returns TOML modifications to disable RPC authentication
+func disableRPCAuthModification() map[string]tomlutil.Toml {
+	return map[string]tomlutil.Toml{
+		"config.toml": {
+			"RPC": map[string]interface{}{
+				"SkipAuth": true,
+			},
+		},
+	}
+}
+
+// JSON RPC method implementations
+
+// GetHeader fetches a header for the given block height from the DANode via an RPC call and returns it.
+func (n *Node) GetHeader(ctx context.Context, height uint64) (types.Header, error) {
+	url := fmt.Sprintf("http://%s", n.hostRPCPort)
+
+	result, err := callRPC[HeaderResult](ctx, url, "header.GetByHeight", []uint64{height})
+	if err != nil {
+		return types.Header{}, err
+	}
+
+	h, err := strconv.Atoi(result.Header.Height)
+	if err != nil {
+		return types.Header{}, fmt.Errorf("failed to parse header height: %w", err)
+	}
+
+	return types.Header{Height: uint64(h)}, nil
+}
+
+// GetAllBlobs retrieves all blobs from the node for the specified height and namespaces via an RPC call.
+func (n *Node) GetAllBlobs(ctx context.Context, height uint64, namespaces []share.Namespace) ([]types.Blob, error) {
+	url := fmt.Sprintf("http://%s", n.hostRPCPort)
+	result, err := callRPC[[]types.Blob](ctx, url, "blob.GetAll", []any{height, namespaces})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch blobs: %w", err)
+	}
+	return result, nil
+}
+
+// GetP2PInfo retrieves the p2p information of the node, such as PeerID and Addresses, via an RPC call.
+func (n *Node) GetP2PInfo(ctx context.Context) (types.P2PInfo, error) {
+	url := fmt.Sprintf("http://%s", n.hostRPCPort)
+	p2pInfo, err := callRPC[types.P2PInfo](ctx, url, "p2p.Info", []any{})
+	if err != nil {
+		return types.P2PInfo{}, fmt.Errorf("failed to fetch p2p info: %w", err)
+	}
+	return p2pInfo, nil
+}
+
+// Supporting types for JSON RPC
+
+type HeaderResult struct {
+	Header Header `json:"header"`
+}
+
+type Header struct {
+	Height string `json:"height"`
+}
+
+type RPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+// RPCResponse is a Generic RPC response.
+type RPCResponse[T any] struct {
+	Result T         `json:"result"`
+	Error  *RPCError `json:"error"`
+}
+
+// callRPC sends a JSON-RPC POST request and unmarshals the result into a typed response.
+func callRPC[T any](ctx context.Context, url, method string, params interface{}) (T, error) {
+	var zero T
+
+	payload := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  method,
+		"params":  params,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return zero, fmt.Errorf("failed to marshal JSON payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return zero, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return zero, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(resp.Body)
+		return zero, fmt.Errorf("unexpected status code: %s, body: %s", resp.Status, data)
+	}
+
+	var rpcResp RPCResponse[T]
+	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+		return zero, fmt.Errorf("failed to decode JSON response: %w", err)
+	}
+
+	if rpcResp.Error != nil {
+		return zero, fmt.Errorf("rpc error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
+	}
+
+	return rpcResp.Result, nil
+}
