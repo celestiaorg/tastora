@@ -25,7 +25,7 @@ func TestEvstack(t *testing.T) {
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	chain, err := testCfg.Builder.Build(testCfg.Ctx)
+	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	err = chain.Start(testCfg.Ctx)
@@ -42,12 +42,10 @@ func TestEvstack(t *testing.T) {
 		WithNodeType(types.BridgeNode).
 		Build()
 
-	daNetwork, err := da.NewNetworkBuilder(t).
+	daNetwork, err := testCfg.DANetworkBuilder.
 		WithChainID(chain.GetChainID()).
 		WithImage(celestiaImage).
-		WithDockerClient(testCfg.DockerClient).
-		WithDockerNetworkID(testCfg.NetworkID).
-		WithNode(bridgeNodeConfig).
+		WithNodes(bridgeNodeConfig).
 		Build(testCfg.Ctx)
 	require.NoError(t, err)
 

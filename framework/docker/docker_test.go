@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
+	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/moby/moby/client"
 	"sync"
 	"testing"
@@ -34,14 +36,15 @@ func configureBech32PrefixOnce() {
 
 // TestSetupConfig contains all the components needed for a Docker test
 type TestSetupConfig struct {
-	DockerClient *client.Client
-	NetworkID    string
-	TestName     string
-	Logger       *zap.Logger
-	EncConfig    testutil.TestEncodingConfig
-	Builder      *ChainBuilder
-	Chain        *Chain
-	Ctx          context.Context
+	DockerClient     *client.Client
+	NetworkID        string
+	TestName         string
+	Logger           *zap.Logger
+	EncConfig        testutil.TestEncodingConfig
+	ChainBuilder     *ChainBuilder
+	DANetworkBuilder *da.NetworkBuilder
+	Chain            *Chain
+	Ctx              context.Context
 }
 
 // setupDockerTest creates an isolated Docker test environment
@@ -84,14 +87,41 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 		).
 		WithNode(NewChainNodeConfigBuilder().Build())
 
+	// default image for the DA network
+	defaultDAImage := container.Image{
+		Repository: "ghcr.io/celestiaorg/celestia-node",
+		Version:    "pr-4283",
+		UIDGID:     "10001:10001",
+	}
+
+	// create node configurations for each type
+	bridgeNodeConfig := da.NewNodeBuilder().
+		WithNodeType(types.BridgeNode).
+		Build()
+
+	fullNodeConfig := da.NewNodeBuilder().
+		WithNodeType(types.FullNode).
+		Build()
+
+	lightNodeConfig := da.NewNodeBuilder().
+		WithNodeType(types.LightNode).
+		Build()
+
+	daNetworkBuilder := da.NewNetworkBuilderWithTestName(t, uniqueTestName).
+		WithDockerClient(dockerClient).
+		WithDockerNetworkID(networkID).
+		WithImage(defaultDAImage).
+		WithNodes(bridgeNodeConfig, lightNodeConfig, fullNodeConfig)
+
 	return &TestSetupConfig{
-		DockerClient: dockerClient,
-		NetworkID:    networkID,
-		TestName:     uniqueTestName,
-		Logger:       logger,
-		EncConfig:    encConfig,
-		Builder:      builder,
-		Ctx:          ctx,
+		DockerClient:     dockerClient,
+		NetworkID:        networkID,
+		TestName:         uniqueTestName,
+		Logger:           logger,
+		EncConfig:        encConfig,
+		ChainBuilder:     builder,
+		DANetworkBuilder: daNetworkBuilder,
+		Ctx:              ctx,
 	}
 }
 
@@ -118,6 +148,9 @@ func getGenesisHash(ctx context.Context, chain *Chain) (string, error) {
 
 // TestPerNodeDifferentImages tests that nodes can be deployed with different Docker images
 func TestPerNodeDifferentImages(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping due to short mode")
+	}
 	t.Parallel()
 	configureBech32PrefixOnce()
 
@@ -155,7 +188,7 @@ func TestPerNodeDifferentImages(t *testing.T) {
 		Build()
 
 	// Use builder directly - tests can modify as needed before calling Build
-	chain, err := testCfg.Builder.
+	chain, err := testCfg.ChainBuilder.
 		WithNodes(validator0Config, validator1Config).
 		Build(testCfg.Ctx)
 	require.NoError(t, err)
@@ -190,7 +223,7 @@ func TestChainNodeExec(t *testing.T) {
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	chain, err := testCfg.Builder.Build(testCfg.Ctx)
+	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	err = chain.Start(testCfg.Ctx)

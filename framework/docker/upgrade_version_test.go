@@ -8,12 +8,15 @@ import (
 
 // TestUpgradeVersion verifies that you can upgrade from one tag to another.
 func TestUpgradeVersion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping due to short mode")
+	}
 	t.Parallel()
 
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	chain, err := testCfg.Builder.Build(testCfg.Ctx)
+	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	err = chain.Start(testCfg.Ctx)

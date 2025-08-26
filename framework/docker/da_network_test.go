@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDANetworkCreation tests the creation of a daNetwork with one of each type of node.
+// TestDANetworkCreation tests the creation of a dataavailability.Network with one of each type of node.
 func TestDANetworkCreation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")
@@ -22,7 +22,7 @@ func TestDANetworkCreation(t *testing.T) {
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	chain, err := testCfg.Builder.Build(testCfg.Ctx)
+	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	err = chain.Start(testCfg.Ctx)
@@ -65,11 +65,9 @@ func TestDANetworkCreation(t *testing.T) {
 		Build()
 
 	// Create DA network with all node types (default configuration uses 1/1/1 for Bridge/Light/Full da nodes)
-	daNetwork, err := da.NewNetworkBuilder(t).
+	daNetwork, err := testCfg.DANetworkBuilder.
 		WithChainID(chain.GetChainID()).
 		WithImage(defaultImage).
-		WithDockerClient(testCfg.DockerClient).
-		WithDockerNetworkID(testCfg.NetworkID).
 		WithNodes(bridgeNodeConfig, lightNodeConfig, fullNodeConfig).
 		Build(testCfg.Ctx)
 	require.NoError(t, err)
@@ -172,7 +170,7 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	chain, err := testCfg.Builder.Build(testCfg.Ctx)
+	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	err = chain.Start(testCfg.Ctx)
@@ -191,12 +189,10 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 		Build()
 
 	// Create DA network with bridge node
-	daNetwork, err := da.NewNetworkBuilder(t).
+	daNetwork, err := testCfg.DANetworkBuilder.
 		WithChainID(chain.GetChainID()).
 		WithImage(defaultImage).
-		WithDockerClient(testCfg.DockerClient).
-		WithDockerNetworkID(testCfg.NetworkID).
-		WithNode(bridgeNodeConfig).
+		WithNodes(bridgeNodeConfig).
 		Build(testCfg.Ctx)
 	require.NoError(t, err)
 
@@ -281,7 +277,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Setup isolated docker environment for this test
 		testCfg := setupDockerTest(t)
 
-		chain, err := testCfg.Builder.Build(testCfg.Ctx)
+		chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 		require.NoError(t, err)
 
 		err = chain.Start(testCfg.Ctx)
@@ -302,12 +298,10 @@ func TestDANetworkCustomPorts(t *testing.T) {
 			Build()
 
 		// Create DA network with custom port bridge node
-		daNetwork, err := da.NewNetworkBuilder(t).
+		daNetwork, err := testCfg.DANetworkBuilder.
 			WithChainID(chain.GetChainID()).
 			WithImage(defaultImage).
-			WithDockerClient(testCfg.DockerClient).
-			WithDockerNetworkID(testCfg.NetworkID).
-			WithNode(bridgeNodeConfig).
+			WithNodes(bridgeNodeConfig).
 			Build(testCfg.Ctx)
 		require.NoError(t, err)
 
@@ -337,7 +331,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Setup isolated docker environment for this test
 		testCfg := setupDockerTest(t)
 
-		chain, err := testCfg.Builder.Build(testCfg.Ctx)
+		chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 		require.NoError(t, err)
 
 		err = chain.Start(testCfg.Ctx)
@@ -357,12 +351,10 @@ func TestDANetworkCustomPorts(t *testing.T) {
 			Build()
 
 		// Create DA network with default port bridge node
-		daNetwork, err := da.NewNetworkBuilder(t).
+		daNetwork, err := testCfg.DANetworkBuilder.
 			WithChainID(chain.GetChainID()).
 			WithImage(defaultImage).
-			WithDockerClient(testCfg.DockerClient).
-			WithDockerNetworkID(testCfg.NetworkID).
-			WithNode(bridgeNodeConfig).
+			WithNodes(bridgeNodeConfig).
 			Build(testCfg.Ctx)
 		require.NoError(t, err)
 

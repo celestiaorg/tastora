@@ -6,13 +6,16 @@ import (
 
 	"cosmossdk.io/math"
 	"github.com/celestiaorg/tastora/framework/types"
-	"github.com/stretchr/testify/require"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"github.com/stretchr/testify/require"
 )
 
 // TestCreateWalletOnSpecificNode tests wallet creation on specific nodes.
 func TestCreateWalletOnSpecificNode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping due to short mode")
+	}
 	t.Parallel()
 	configureBech32PrefixOnce()
 
@@ -20,7 +23,7 @@ func TestCreateWalletOnSpecificNode(t *testing.T) {
 	testCfg := setupDockerTest(t)
 
 	// create chain with 2 validators and 1 full node
-	builder := testCfg.Builder.WithNodes(
+	builder := testCfg.ChainBuilder.WithNodes(
 		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
 		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
 		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeConsensusFull).Build(),
@@ -59,6 +62,9 @@ func TestCreateWalletOnSpecificNode(t *testing.T) {
 
 // TestGetFaucetWalletOnNodes tests faucet wallet accessibility on all nodes.
 func TestGetFaucetWalletOnNodes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping due to short mode")
+	}
 	t.Parallel()
 	configureBech32PrefixOnce()
 
@@ -66,7 +72,7 @@ func TestGetFaucetWalletOnNodes(t *testing.T) {
 	testCfg := setupDockerTest(t)
 
 	// create chain with 2 validators
-	builder := testCfg.Builder.WithNodes(
+	builder := testCfg.ChainBuilder.WithNodes(
 		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
 		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
 	)
@@ -104,15 +110,18 @@ func TestGetFaucetWalletOnNodes(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestCreateWalletBackwardCompatibility tests that existing Chain.CreateWallet still works.
-func TestCreateWalletBackwardCompatibility(t *testing.T) {
+// TestCreateWallet tests that existing Chain.CreateWallet works.
+func TestCreateWallet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping due to short mode")
+	}
 	t.Parallel()
 	configureBech32PrefixOnce()
 
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	chain, err := testCfg.Builder.Build(testCfg.Ctx)
+	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	err = chain.Start(testCfg.Ctx)
