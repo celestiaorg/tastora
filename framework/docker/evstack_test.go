@@ -34,7 +34,7 @@ func TestEvstack(t *testing.T) {
 	// Create DA network using builder pattern
 	celestiaImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "main",
+		Version:    "pr-4283",
 		UIDGID:     "10001:10001",
 	}
 

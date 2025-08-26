@@ -291,7 +291,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Default image for the DA network
 		defaultImage := container.Image{
 			Repository: "ghcr.io/celestiaorg/celestia-node",
-			Version:    "main",
+			Version:    "pr-4283",
 			UIDGID:     "10001:10001",
 		}
 
@@ -347,7 +347,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Default image for the DA network
 		defaultImage := container.Image{
 			Repository: "ghcr.io/celestiaorg/celestia-node",
-			Version:    "main",
+			Version:    "pr-4283",
 			UIDGID:     "10001:10001",
 		}
 
