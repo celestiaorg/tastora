@@ -34,6 +34,7 @@ const (
 // Node is a docker implementation of a celestia da node.
 type Node struct {
 	*container.Node
+	// cfg is the config for the entire Network.
 	cfg                 Config
 	mu                  sync.Mutex
 	hasBeenStarted      bool
@@ -49,16 +50,17 @@ type Node struct {
 	hostP2PPort string
 }
 
-func NewNode(cfg Config, testName string, image container.Image, index int, nodeType types.DANodeType, additionalStartArgs []string, configModifications map[string]tomlutil.Toml) *Node {
+func NewNode(cfg Config, testName string, image container.Image, index int, nodeConfig NodeConfig) *Node {
 	logger := cfg.Logger.With(
-		zap.String("node_type", nodeType.String()),
+		zap.String("node_type", nodeConfig.NodeType.String()),
 	)
 	node := &Node{
 		cfg:                 cfg,
-		nodeType:            nodeType,
-		additionalStartArgs: additionalStartArgs,
-		configModifications: configModifications,
-		Node:                container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", index, nodeType, logger),
+		nodeType:            nodeConfig.NodeType,
+		additionalStartArgs: nodeConfig.AdditionalStartArgs,
+		configModifications: nodeConfig.ConfigModifications,
+		customPorts:         nodeConfig.CustomPorts,
+		Node:                container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", index, nodeConfig.NodeType, logger),
 	}
 
 	node.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, node.Name()))

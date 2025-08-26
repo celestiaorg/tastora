@@ -171,12 +171,20 @@ func (b *NetworkBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, ind
 		DockerClient:    b.dockerClient,
 		DockerNetworkID: b.dockerNetworkID,
 		ChainID:         b.chainID,
-		Env:             b.getEnv(nodeConfig),
+		Env:             b.env, // Will be overridden by nodeConfig.Env after fallback logic below
 		Bin:             b.binaryName,
 		Image:           imageToUse,
 	}
 
-	node := NewNode(cfg, b.testName, imageToUse, index, nodeConfig.NodeType, b.getAdditionalStartArgs(nodeConfig), nodeConfig.ConfigModifications)
+	// Apply fallback logic for node config
+	if len(nodeConfig.AdditionalStartArgs) == 0 {
+		nodeConfig.AdditionalStartArgs = b.additionalStartArgs
+	}
+	if len(nodeConfig.Env) == 0 {
+		nodeConfig.Env = b.env
+	}
+
+	node := NewNode(cfg, b.testName, imageToUse, index, nodeConfig)
 
 	// Create and setup volume using shared logic
 	if err := node.CreateAndSetupVolume(ctx, node.Name()); err != nil {
@@ -203,20 +211,4 @@ func (b *NetworkBuilder) getImage(nodeConfig NodeConfig) container.Image {
 		return *b.dockerImage
 	}
 	panic("no image specified: neither node-specific nor network default image provided")
-}
-
-// getEnv returns the appropriate environment variables for a node
-func (b *NetworkBuilder) getEnv(nodeConfig NodeConfig) []string {
-	if len(nodeConfig.Env) > 0 {
-		return nodeConfig.Env
-	}
-	return b.env
-}
-
-// getAdditionalStartArgs returns the appropriate additional start arguments for a node
-func (b *NetworkBuilder) getAdditionalStartArgs(nodeConfig NodeConfig) []string {
-	if len(nodeConfig.AdditionalStartArgs) > 0 {
-		return nodeConfig.AdditionalStartArgs
-	}
-	return b.additionalStartArgs
 }
