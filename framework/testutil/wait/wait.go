@@ -3,7 +3,7 @@ package wait
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/dataavailability"
+	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
 	"golang.org/x/sync/errgroup"
 	"time"
 )
@@ -162,7 +162,7 @@ func ForCondition(ctx context.Context, timeoutAfter, pollingInterval time.Durati
 // ForDANodeToReachHeight waits for a data availability node to reach a target block height within a given context.
 // It periodically checks the node's current height and returns nil when the target height is reached.
 // Returns an error if the context times out or if retrieving the header fails persistently.
-func ForDANodeToReachHeight(ctx context.Context, node *dataavailability.Node, targetHeight uint64, timeout time.Duration) error {
+func ForDANodeToReachHeight(ctx context.Context, node *da.Node, targetHeight uint64, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

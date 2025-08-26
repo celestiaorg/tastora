@@ -8,7 +8,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/types"
 )
 
-// NodeConfig defines the configuration for a single dataavailability Node
+// NodeConfig defines the configuration for a single da Node
 type NodeConfig struct {
 	// NodeType specifies the type of DA node (bridge, light, full)
 	NodeType types.DANodeType
@@ -29,7 +29,7 @@ type NodeConfig struct {
 // PortConfig allows customization of node ports
 type PortConfig struct {
 	RPCPort      string // Internal RPC port (default: "26658")
-	P2PPort      string // Internal P2P port (default: "2121")  
+	P2PPort      string // Internal P2P port (default: "2121")
 	CoreRPCPort  string // Port to connect to celestia-app RPC (default: "26657")
 	CoreGRPCPort string // Port to connect to celestia-app GRPC (default: "9090")
 }

@@ -10,7 +10,7 @@ import (
 type Config struct {
 	// Logger is the logger instance used for all operations
 	Logger *zap.Logger
-	// DockerClient is the docker client instance  
+	// DockerClient is the docker client instance
 	DockerClient *client.Client
 	// DockerNetworkID is the ID of the docker network to use
 	DockerNetworkID string

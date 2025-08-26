@@ -5,13 +5,13 @@ import (
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/celestiaorg/tastora/framework/docker/dataavailability"
+	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/stretchr/testify/require"
 )
 
-// TestDANetworkCreation tests the creation of a DataAvailabilityNetwork with one of each type of node.
+// TestDANetworkCreation tests the creation of a daNetwork with one of each type of node.
 func TestDANetworkCreation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")
@@ -42,12 +42,12 @@ func TestDANetworkCreation(t *testing.T) {
 	}
 
 	// Create node configurations with different images
-	bridgeNodeConfig := dataavailability.NewNodeBuilder().
+	bridgeNodeConfig := da.NewNodeBuilder().
 		WithNodeType(types.BridgeNode).
 		WithImage(bridgeImage).
 		Build()
 
-	fullNodeConfig := dataavailability.NewNodeBuilder().
+	fullNodeConfig := da.NewNodeBuilder().
 		WithNodeType(types.FullNode).
 		WithImage(fullImage).
 		Build()
@@ -60,12 +60,12 @@ func TestDANetworkCreation(t *testing.T) {
 	}
 
 	// Add light node config for testing
-	lightNodeConfig := dataavailability.NewNodeBuilder().
+	lightNodeConfig := da.NewNodeBuilder().
 		WithNodeType(types.LightNode).
 		Build()
 
 	// Create DA network with all node types (default configuration uses 1/1/1 for Bridge/Light/Full da nodes)
-	daNetwork, err := dataavailability.NewNetworkBuilder(t).
+	daNetwork, err := da.NewNetworkBuilder(t).
 		WithChainID(chain.GetChainID()).
 		WithImage(defaultImage).
 		WithDockerClient(testCfg.DockerClient).
@@ -75,9 +75,9 @@ func TestDANetworkCreation(t *testing.T) {
 	require.NoError(t, err)
 
 	var (
-		bridgeNodes []*dataavailability.Node
-		lightNodes  []*dataavailability.Node
-		fullNodes   []*dataavailability.Node
+		bridgeNodes []*da.Node
+		lightNodes  []*da.Node
+		fullNodes   []*da.Node
 	)
 
 	t.Run("da nodes can be created", func(t *testing.T) {
@@ -105,9 +105,9 @@ func TestDANetworkCreation(t *testing.T) {
 
 	t.Run("bridge node can be started", func(t *testing.T) {
 		err = bridgeNode.Start(testCfg.Ctx,
-			dataavailability.WithChainID(chainID),
-			dataavailability.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
-			dataavailability.WithEnvironmentVariables(
+			da.WithChainID(chainID),
+			da.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
+			da.WithEnvironmentVariables(
 				map[string]string{
 					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, ""),
 					"P2P_NETWORK":     chainID,
@@ -125,9 +125,9 @@ func TestDANetworkCreation(t *testing.T) {
 		require.NoError(t, err, "failed to get bridge node p2p address")
 
 		err = fullNode.Start(testCfg.Ctx,
-			dataavailability.WithChainID(chainID),
-			dataavailability.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
-			dataavailability.WithEnvironmentVariables(
+			da.WithChainID(chainID),
+			da.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
+			da.WithEnvironmentVariables(
 				map[string]string{
 					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, p2pAddr),
 					"P2P_NETWORK":     chainID,
@@ -145,9 +145,9 @@ func TestDANetworkCreation(t *testing.T) {
 		require.NoError(t, err, "failed to get full node p2p address")
 
 		err = lightNode.Start(testCfg.Ctx,
-			dataavailability.WithChainID(chainID),
-			dataavailability.WithAdditionalStartArguments("--p2p.network", chainID, "--rpc.addr", "0.0.0.0"),
-			dataavailability.WithEnvironmentVariables(
+			da.WithChainID(chainID),
+			da.WithAdditionalStartArguments("--p2p.network", chainID, "--rpc.addr", "0.0.0.0"),
+			da.WithEnvironmentVariables(
 				map[string]string{
 					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, p2pAddr),
 					"P2P_NETWORK":     chainID,
@@ -186,12 +186,12 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 	}
 
 	// Create bridge node config for testing
-	bridgeNodeConfig := dataavailability.NewNodeBuilder().
+	bridgeNodeConfig := da.NewNodeBuilder().
 		WithNodeType(types.BridgeNode).
 		Build()
 
 	// Create DA network with bridge node
-	daNetwork, err := dataavailability.NewNetworkBuilder(t).
+	daNetwork, err := da.NewNetworkBuilder(t).
 		WithChainID(chain.GetChainID()).
 		WithImage(defaultImage).
 		WithDockerClient(testCfg.DockerClient).
@@ -200,7 +200,7 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 		Build(testCfg.Ctx)
 	require.NoError(t, err)
 
-	var bridgeNodes []*dataavailability.Node
+	var bridgeNodes []*da.Node
 	t.Run("da nodes can be created", func(t *testing.T) {
 		bridgeNodes = daNetwork.GetBridgeNodes()
 		require.Len(t, bridgeNodes, 1)
@@ -218,9 +218,9 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 
 	t.Run("bridge node can be started", func(t *testing.T) {
 		err = bridgeNode.Start(testCfg.Ctx,
-			dataavailability.WithChainID(chainID),
-			dataavailability.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
-			dataavailability.WithEnvironmentVariables(
+			da.WithChainID(chainID),
+			da.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
+			da.WithEnvironmentVariables(
 				map[string]string{
 					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, ""),
 					"P2P_NETWORK":     chainID,
@@ -250,7 +250,7 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 }
 
 // setAuth modifies the node's configuration to enable or disable authentication and restarts the node to apply changes.
-func setAuth(t *testing.T, ctx context.Context, daNode *dataavailability.Node, auth bool) {
+func setAuth(t *testing.T, ctx context.Context, daNode *da.Node, auth bool) {
 	modifications := map[string]toml.Toml{
 		"config.toml": {
 			"RPC": toml.Toml{
@@ -269,7 +269,7 @@ func setAuth(t *testing.T, ctx context.Context, daNode *dataavailability.Node, a
 	require.NoErrorf(t, err, "failed to re-start %s node", daNode.GetType().String())
 }
 
-// TestDANetworkCustomPorts tests the configuration of custom ports for DA nodes using the new builder pattern
+// TestDANetworkCustomPorts tests the configuration of custom ports for DA nodes.
 func TestDANetworkCustomPorts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")
@@ -296,13 +296,13 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		}
 
 		// Create bridge node config with custom ports
-		bridgeNodeConfig := dataavailability.NewNodeBuilder().
+		bridgeNodeConfig := da.NewNodeBuilder().
 			WithNodeType(types.BridgeNode).
 			WithPorts("27000", "3000", "27001", "9095").
 			Build()
 
 		// Create DA network with custom port bridge node
-		daNetwork, err := dataavailability.NewNetworkBuilder(t).
+		daNetwork, err := da.NewNetworkBuilder(t).
 			WithChainID(chain.GetChainID()).
 			WithImage(defaultImage).
 			WithDockerClient(testCfg.DockerClient).
@@ -352,12 +352,12 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		}
 
 		// Create bridge node config with default ports (no custom ports specified)
-		bridgeNodeConfig := dataavailability.NewNodeBuilder().
+		bridgeNodeConfig := da.NewNodeBuilder().
 			WithNodeType(types.BridgeNode).
 			Build()
 
 		// Create DA network with default port bridge node
-		daNetwork, err := dataavailability.NewNetworkBuilder(t).
+		daNetwork, err := da.NewNetworkBuilder(t).
 			WithChainID(chain.GetChainID()).
 			WithImage(defaultImage).
 			WithDockerClient(testCfg.DockerClient).

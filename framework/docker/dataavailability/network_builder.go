@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-// NetworkBuilder defines a builder for configuring and initializing a dataavailability Network for testing purposes
+// NetworkBuilder defines a builder for configuring and initializing a da Network for testing purposes
 type NetworkBuilder struct {
 	// t is the testing context used for test assertions, container naming, and test lifecycle management
 	t *testing.T
