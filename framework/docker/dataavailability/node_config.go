@@ -5,12 +5,13 @@ import (
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/testutil/toml"
+	"github.com/celestiaorg/tastora/framework/types"
 )
 
 // NodeConfig defines the configuration for a single dataavailability Node
 type NodeConfig struct {
 	// NodeType specifies the type of DA node (bridge, light, full)
-	NodeType NodeType
+	NodeType types.DANodeType
 	// Image overrides the network's default image for this specific node (optional)
 	Image *container.Image
 	// AdditionalStartArgs overrides the network-level AdditionalStartArgs for this specific node
@@ -42,7 +43,7 @@ type NodeBuilder struct {
 func NewNodeBuilder() *NodeBuilder {
 	return &NodeBuilder{
 		config: &NodeConfig{
-			NodeType:            BridgeNodeType,
+			NodeType:            types.BridgeNode,
 			AdditionalStartArgs: make([]string, 0),
 			Env:                 make([]string, 0),
 			ConfigModifications: make(map[string]toml.Toml),
@@ -51,7 +52,7 @@ func NewNodeBuilder() *NodeBuilder {
 }
 
 // WithNodeType sets the node type (bridge, light, full)
-func (b *NodeBuilder) WithNodeType(nodeType NodeType) *NodeBuilder {
+func (b *NodeBuilder) WithNodeType(nodeType types.DANodeType) *NodeBuilder {
 	b.config.NodeType = nodeType
 	return b
 }

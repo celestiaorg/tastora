@@ -40,13 +40,12 @@ type TestSetupConfig struct {
 	Logger       *zap.Logger
 	EncConfig    testutil.TestEncodingConfig
 	Builder      *ChainBuilder
-	Provider     *Provider
 	Chain        *Chain
 	Ctx          context.Context
 }
 
 // setupDockerTest creates an isolated Docker test environment
-func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
+func setupDockerTest(t *testing.T) *TestSetupConfig {
 	t.Helper()
 
 	// ensure Bech32 prefix is configured once globally
@@ -85,29 +84,6 @@ func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
 		).
 		WithNode(NewChainNodeConfigBuilder().Build())
 
-	// Create provider config
-	cfg := Config{
-		Logger:          logger,
-		DockerClient:    dockerClient,
-		DockerNetworkID: networkID,
-		DataAvailabilityNetworkConfig: &DataAvailabilityNetworkConfig{
-			FullNodeCount:   1,
-			BridgeNodeCount: 1,
-			LightNodeCount:  1,
-			Image: container.Image{
-				Repository: "ghcr.io/celestiaorg/celestia-node",
-				Version:    "pr-4283",
-				UIDGID:     "10001:10001",
-			},
-		},
-	}
-
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-
-	provider := NewProviderWithTestName(cfg, t, uniqueTestName)
-
 	return &TestSetupConfig{
 		DockerClient: dockerClient,
 		NetworkID:    networkID,
@@ -115,7 +91,6 @@ func setupDockerTest(t *testing.T, opts ...ConfigOption) *TestSetupConfig {
 		Logger:       logger,
 		EncConfig:    encConfig,
 		Builder:      builder,
-		Provider:     provider,
 		Ctx:          ctx,
 	}
 }

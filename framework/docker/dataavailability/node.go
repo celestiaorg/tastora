@@ -37,7 +37,7 @@ type Node struct {
 	cfg                 Config
 	mu                  sync.Mutex
 	hasBeenStarted      bool
-	nodeType            NodeType
+	nodeType            types.DANodeType
 	additionalStartArgs []string
 	configModifications map[string]tomlutil.Toml
 	customPorts         *PortConfig
@@ -49,7 +49,7 @@ type Node struct {
 	hostP2PPort string
 }
 
-func NewNode(cfg Config, testName string, image container.Image, index int, nodeType NodeType, additionalStartArgs []string, configModifications map[string]tomlutil.Toml) *Node {
+func NewNode(cfg Config, testName string, image container.Image, index int, nodeType types.DANodeType, additionalStartArgs []string, configModifications map[string]tomlutil.Toml) *Node {
 	logger := cfg.Logger.With(
 		zap.String("node_type", nodeType.String()),
 	)
@@ -76,7 +76,7 @@ func (n *Node) HostName() string {
 }
 
 // GetType returns the type of the Node.
-func (n *Node) GetType() NodeType {
+func (n *Node) GetType() types.DANodeType {
 	return n.nodeType
 }
 
@@ -213,7 +213,7 @@ func (n *Node) GetPortInfo() PortInfo {
 		rpcPort = n.customPorts.RPCPort
 	}
 
-	// P2P Port logic  
+	// P2P Port logic
 	p2pPort := defaultDANodeP2PPort
 	if n.customPorts != nil && n.customPorts.P2PPort != "" {
 		p2pPort = n.customPorts.P2PPort
@@ -353,7 +353,7 @@ func (n *Node) ModifyConfigFiles(ctx context.Context, configModifications map[st
 func disableRPCAuthModification() map[string]tomlutil.Toml {
 	return map[string]tomlutil.Toml{
 		"config.toml": {
-			"RPC": map[string]interface{}{
+			"RPC": tomlutil.Toml{
 				"SkipAuth": true,
 			},
 		},

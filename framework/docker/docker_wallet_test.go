@@ -127,7 +127,7 @@ func TestCreateWalletBackwardCompatibility(t *testing.T) {
 }
 
 // testFaucetBroadcast helper function to test broadcasting a bank send transaction using the faucet wallet on a specific node
-func testFaucetBroadcast(chain *Chain, node *ChainNode, faucetWallet, recipientWallet types.Wallet) error {
+func testFaucetBroadcast(chain *Chain, node *ChainNode, faucetWallet, recipientWallet *types.Wallet) error {
 	// create a bank send message
 	sendAmount := sdk.NewCoins(sdk.NewCoin(chain.cfg.ChainConfig.Denom, math.NewInt(1000)))
 	msg := &banktypes.MsgSend{

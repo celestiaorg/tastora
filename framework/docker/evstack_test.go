@@ -39,7 +39,7 @@ func TestEvstack(t *testing.T) {
 	}
 
 	bridgeNodeConfig := dataavailability.NewNodeBuilder().
-		WithNodeType(dataavailability.BridgeNodeType).
+		WithNodeType(types.BridgeNode).
 		Build()
 
 	daNetwork, err := dataavailability.NewNetworkBuilder(t).

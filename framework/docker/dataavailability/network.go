@@ -1,6 +1,7 @@
 package dataavailability
 
 import (
+	"github.com/celestiaorg/tastora/framework/types"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +18,7 @@ func (n *Network) GetNodes() []*Node {
 }
 
 // GetNodesByType returns nodes filtered by the specified node type.
-func (n *Network) GetNodesByType(nodeType NodeType) []*Node {
+func (n *Network) GetNodesByType(nodeType types.DANodeType) []*Node {
 	return filterNodes(n.nodes, func(node *Node) bool {
 		return node.nodeType == nodeType
 	})
@@ -36,15 +37,15 @@ func filterNodes(nodes []*Node, predicate func(*Node) bool) []*Node {
 
 // GetBridgeNodes returns only the bridge nodes in the network.
 func (n *Network) GetBridgeNodes() []*Node {
-	return n.GetNodesByType(BridgeNodeType)
+	return n.GetNodesByType(types.BridgeNode)
 }
 
 // GetFullNodes returns only the full nodes in the network.
 func (n *Network) GetFullNodes() []*Node {
-	return n.GetNodesByType(FullNodeType)
+	return n.GetNodesByType(types.FullNode)
 }
 
 // GetLightNodes returns only the light nodes in the network.
 func (n *Network) GetLightNodes() []*Node {
-	return n.GetNodesByType(LightNodeType)
+	return n.GetNodesByType(types.LightNode)
 }

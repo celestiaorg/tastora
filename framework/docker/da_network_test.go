@@ -21,7 +21,7 @@ func TestDANetworkCreation(t *testing.T) {
 
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
-	
+
 	chain, err := testCfg.Builder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
@@ -34,7 +34,7 @@ func TestDANetworkCreation(t *testing.T) {
 		Version:    "pr-4283",
 		UIDGID:     "10001:10001",
 	}
-	
+
 	fullImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
 		Version:    "pr-4283",
@@ -43,25 +43,25 @@ func TestDANetworkCreation(t *testing.T) {
 
 	// Create node configurations with different images
 	bridgeNodeConfig := dataavailability.NewNodeBuilder().
-		WithNodeType(dataavailability.BridgeNodeType).
+		WithNodeType(types.BridgeNode).
 		WithImage(bridgeImage).
 		Build()
 
 	fullNodeConfig := dataavailability.NewNodeBuilder().
-		WithNodeType(dataavailability.FullNodeType).
+		WithNodeType(types.FullNode).
 		WithImage(fullImage).
 		Build()
 
 	// Default image for the network
 	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "main",
+		Version:    "pr-4283",
 		UIDGID:     "10001:10001",
 	}
 
 	// Add light node config for testing
 	lightNodeConfig := dataavailability.NewNodeBuilder().
-		WithNodeType(dataavailability.LightNodeType).
+		WithNodeType(types.LightNode).
 		Build()
 
 	// Create DA network with all node types (default configuration uses 1/1/1 for Bridge/Light/Full da nodes)
@@ -171,7 +171,7 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
-	
+
 	chain, err := testCfg.Builder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
@@ -181,13 +181,13 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 	// Default image for the DA network
 	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "main",
+		Version:    "pr-4283",
 		UIDGID:     "10001:10001",
 	}
 
 	// Create bridge node config for testing
 	bridgeNodeConfig := dataavailability.NewNodeBuilder().
-		WithNodeType(dataavailability.BridgeNodeType).
+		WithNodeType(types.BridgeNode).
 		Build()
 
 	// Create DA network with bridge node
@@ -250,7 +250,7 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 }
 
 // setAuth modifies the node's configuration to enable or disable authentication and restarts the node to apply changes.
-func setAuth(t *testing.T, ctx context.Context, daNode types.DANode, auth bool) {
+func setAuth(t *testing.T, ctx context.Context, daNode *dataavailability.Node, auth bool) {
 	modifications := map[string]toml.Toml{
 		"config.toml": {
 			"RPC": toml.Toml{
@@ -280,7 +280,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 	t.Run("test custom ports using builder pattern", func(t *testing.T) {
 		// Setup isolated docker environment for this test
 		testCfg := setupDockerTest(t)
-		
+
 		chain, err := testCfg.Builder.Build(testCfg.Ctx)
 		require.NoError(t, err)
 
@@ -297,7 +297,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 		// Create bridge node config with custom ports
 		bridgeNodeConfig := dataavailability.NewNodeBuilder().
-			WithNodeType(dataavailability.BridgeNodeType).
+			WithNodeType(types.BridgeNode).
 			WithPorts("27000", "3000", "27001", "9095").
 			Build()
 
@@ -336,7 +336,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 	t.Run("test default ports behavior", func(t *testing.T) {
 		// Setup isolated docker environment for this test
 		testCfg := setupDockerTest(t)
-		
+
 		chain, err := testCfg.Builder.Build(testCfg.Ctx)
 		require.NoError(t, err)
 
@@ -353,7 +353,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 		// Create bridge node config with default ports (no custom ports specified)
 		bridgeNodeConfig := dataavailability.NewNodeBuilder().
-			WithNodeType(dataavailability.BridgeNodeType).
+			WithNodeType(types.BridgeNode).
 			Build()
 
 		// Create DA network with default port bridge node
