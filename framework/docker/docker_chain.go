@@ -92,6 +92,9 @@ func (c *Chain) BroadcastMessages(ctx context.Context, signingWallet *types.Wall
 // BroadcastBlobMessage broadcasts the given messages signed on behalf of the provided user. The transaction bytes are wrapped
 // using the MarshalBlobTx function before broadcasting.
 func (c *Chain) BroadcastBlobMessage(ctx context.Context, signingWallet *types.Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error) {
+	if signingWallet == nil {
+		return sdk.TxResponse{}, fmt.Errorf("signing wallet is nil")
+	}
 	return c.getBroadcaster().BroadcastBlobMessage(ctx, signingWallet, msg, blobs...)
 }
 
