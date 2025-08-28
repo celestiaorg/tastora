@@ -49,7 +49,7 @@ func EnsureBusybox(ctx context.Context, cli *client.Client) error {
 	err = wait.ForCondition(ctx, 60*time.Second, 5*time.Second, func() (bool, error) {
 		rc, err := cli.ImagePull(ctx, BusyboxRef, dockerimagetypes.PullOptions{})
 		if err != nil {
-			return false, fmt.Errorf("pulling busybox image: %w", err)
+			return false, nil
 		}
 
 		_, _ = io.Copy(io.Discard, rc)
