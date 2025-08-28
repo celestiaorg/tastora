@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/docker/docker/api/types/filters"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
 	"github.com/moby/moby/client"
@@ -22,49 +23,7 @@ var (
 	hasBusybox      bool
 )
 
-const (
-	BusyboxRef = "busybox:stable"
-
-	// Retry configuration for busybox image pull
-	maxRetryAttempts  = 3
-	initialRetryDelay = 1 * time.Second
-	maxRetryDelay     = 10 * time.Second
-)
-
-// retryWithBackoff executes the given function with exponential backoff retry logic
-func retryWithBackoff(ctx context.Context, operation func() error) error {
-	var lastErr error
-	delay := initialRetryDelay
-
-	for attempt := 0; attempt < maxRetryAttempts; attempt++ {
-		if err := operation(); err == nil {
-			return nil
-		} else {
-			lastErr = err
-		}
-
-		// Don't retry on the last attempt
-		if attempt == maxRetryAttempts-1 {
-			break
-		}
-
-		// Check if context is cancelled
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
-			// Continue to next attempt
-		}
-
-		// Exponential backoff with max delay cap
-		delay *= 2
-		if delay > maxRetryDelay {
-			delay = maxRetryDelay
-		}
-	}
-
-	return fmt.Errorf("operation failed after %d attempts: %w", maxRetryAttempts, lastErr)
-}
+const BusyboxRef = "busybox:stable"
 
 func EnsureBusybox(ctx context.Context, cli *client.Client) error {
 	ensureBusyboxMu.Lock()
@@ -86,20 +45,20 @@ func EnsureBusybox(ctx context.Context, cli *client.Client) error {
 		return nil
 	}
 
-	// Use retry mechanism for pulling the busybox image
-	err = retryWithBackoff(ctx, func() error {
+	// Use wait.ForCondition to retry pulling the busybox image
+	err = wait.ForCondition(ctx, 60*time.Second, 5*time.Second, func() (bool, error) {
 		rc, err := cli.ImagePull(ctx, BusyboxRef, dockerimagetypes.PullOptions{})
 		if err != nil {
-			return fmt.Errorf("pulling busybox image: %w", err)
+			return false, fmt.Errorf("pulling busybox image: %w", err)
 		}
 
 		_, _ = io.Copy(io.Discard, rc)
 		_ = rc.Close()
-		return nil
+		return true, nil
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to pull busybox image after retries: %w", err)
+		return fmt.Errorf("failed to pull busybox image: %w", err)
 	}
 
 	hasBusybox = true
