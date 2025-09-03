@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
+	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/docker/docker/api/types/filters"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
 	"github.com/moby/moby/client"
@@ -43,13 +45,21 @@ func EnsureBusybox(ctx context.Context, cli *client.Client) error {
 		return nil
 	}
 
-	rc, err := cli.ImagePull(ctx, BusyboxRef, dockerimagetypes.PullOptions{})
-	if err != nil {
-		return err
-	}
+	// Use wait.ForCondition to retry pulling the busybox image
+	err = wait.ForCondition(ctx, 60*time.Second, 5*time.Second, func() (bool, error) {
+		rc, err := cli.ImagePull(ctx, BusyboxRef, dockerimagetypes.PullOptions{})
+		if err != nil {
+			return false, nil
+		}
 
-	_, _ = io.Copy(io.Discard, rc)
-	_ = rc.Close()
+		_, _ = io.Copy(io.Discard, rc)
+		_ = rc.Close()
+		return true, nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to pull busybox image: %w", err)
+	}
 
 	hasBusybox = true
 	return nil
