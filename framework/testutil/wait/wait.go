@@ -3,14 +3,21 @@ package wait
 import (
 	"context"
 	"fmt"
-	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
-	"golang.org/x/sync/errgroup"
 	"time"
+
+	"golang.org/x/sync/errgroup"
+
+	"github.com/celestiaorg/tastora/framework/types"
 )
 
 // Heighter fetches the current chain block height.
 type Heighter interface {
 	Height(ctx context.Context) (int64, error)
+}
+
+// HeaderGetter can retrieve headers by height (implemented by DA nodes)
+type HeaderGetter interface {
+	GetHeader(ctx context.Context, height uint64) (types.Header, error)
 }
 
 // ForBlocks blocks until all chains reach a block height delta equal to or greater than the delta argument.
@@ -162,7 +169,7 @@ func ForCondition(ctx context.Context, timeoutAfter, pollingInterval time.Durati
 // ForDANodeToReachHeight waits for a data availability node to reach a target block height within a given context.
 // It periodically checks the node's current height and returns nil when the target height is reached.
 // Returns an error if the context times out or if retrieving the header fails persistently.
-func ForDANodeToReachHeight(ctx context.Context, node *da.Node, targetHeight uint64, timeout time.Duration) error {
+func ForDANodeToReachHeight(ctx context.Context, node HeaderGetter, targetHeight uint64, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
