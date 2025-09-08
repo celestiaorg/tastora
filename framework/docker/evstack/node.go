@@ -20,7 +20,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-
 const (
 	p2pPort         = "26656/tcp"
 	grpcPort        = "9090/tcp"
@@ -158,7 +157,6 @@ func (n *Node) createEvstackContainer(ctx context.Context, additionalStartArgs .
 
 	// add stored additional start args from the node configuration
 	startCmd = append(startCmd, n.additionalStartArgs...)
-
 	// any custom arguments passed in on top of the required ones.
 	startCmd = append(startCmd, additionalStartArgs...)
 

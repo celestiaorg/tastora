@@ -4,6 +4,7 @@ import (
 	"context"
 	sdkmath "cosmossdk.io/math"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	"github.com/celestiaorg/tastora/framework/docker/ibc"
 	"github.com/celestiaorg/tastora/framework/docker/ibc/relayer"
 	"github.com/celestiaorg/tastora/framework/testutil/query"
@@ -186,7 +187,7 @@ func TestIBCTransfer(t *testing.T) {
 // getBalance queries the balance of an address for a specific denom
 func getBalance(t *testing.T, ctx context.Context, chain types.Chain, address sdk.AccAddress, denom string) sdkmath.Int {
 	// Get the first node to create a client context
-	dockerChain, ok := chain.(*Chain)
+	dockerChain, ok := chain.(*cosmos.Chain)
 	if !ok {
 		t.Logf("Chain is not a docker Chain, returning zero balance")
 		return sdkmath.ZeroInt()

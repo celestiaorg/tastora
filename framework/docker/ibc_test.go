@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	"github.com/celestiaorg/tastora/framework/docker/ibc"
 	"github.com/celestiaorg/tastora/framework/docker/ibc/relayer"
 	"github.com/celestiaorg/tastora/framework/testutil/config"
@@ -16,7 +17,7 @@ import (
 
 // createCelestiaChain creates a celestia-app chain for IBC testing
 func createCelestiaChain(t *testing.T, ctx context.Context, client *dockerclient.Client, networkID string, encConfig testutil.TestEncodingConfig, testName string) (types.Chain, error) {
-	builder := NewChainBuilderWithTestName(t, testName).
+	builder := cosmos.NewChainBuilderWithTestName(t, testName).
 		WithDockerClient(client).
 		WithDockerNetworkID(networkID).
 		WithChainID("chain-a").
@@ -32,7 +33,7 @@ func createCelestiaChain(t *testing.T, ctx context.Context, client *dockerclient
 			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
 			"--timeout-commit", "1s",
 		).
-		WithPostInit(func(ctx context.Context, node *ChainNode) error {
+		WithPostInit(func(ctx context.Context, node *cosmos.ChainNode) error {
 			return config.Modify(ctx, node, "config/app.toml", func(cfg *servercfg.Config) {
 				cfg.MinGasPrices = "0.000001utia"
 				cfg.GRPC.Enable = true
@@ -41,14 +42,14 @@ func createCelestiaChain(t *testing.T, ctx context.Context, client *dockerclient
 				cfg.MinGasPrices = "0.0utia"
 			})
 		}).
-		WithNode(NewChainNodeConfigBuilder().Build())
+		WithNode(cosmos.NewChainNodeConfigBuilder().Build())
 
 	return builder.Build(ctx)
 }
 
 // createSimappChain creates an IBC-Go simapp chain for IBC testing
 func createSimappChain(t *testing.T, ctx context.Context, client *dockerclient.Client, networkID string, encConfig testutil.TestEncodingConfig, testName string) (types.Chain, error) {
-	builder := NewChainBuilderWithTestName(t, testName).
+	builder := cosmos.NewChainBuilderWithTestName(t, testName).
 		WithDockerClient(client).
 		WithDockerNetworkID(networkID).
 		WithChainID("chain-b").
@@ -62,7 +63,7 @@ func createSimappChain(t *testing.T, ctx context.Context, client *dockerclient.C
 		WithDenom("stake").
 		WithGasPrices("0.000001stake").
 		WithEncodingConfig(&encConfig).
-		WithPostInit(func(ctx context.Context, node *ChainNode) error {
+		WithPostInit(func(ctx context.Context, node *cosmos.ChainNode) error {
 			return config.Modify(ctx, node, "config/app.toml", func(cfg *servercfg.Config) {
 				cfg.MinGasPrices = "0.000001stake"
 				cfg.GRPC.Enable = true
@@ -70,7 +71,7 @@ func createSimappChain(t *testing.T, ctx context.Context, client *dockerclient.C
 				cfg.API.EnableUnsafeCORS = true
 			})
 		}).
-		WithNode(NewChainNodeConfigBuilder().Build())
+		WithNode(cosmos.NewChainNodeConfigBuilder().Build())
 
 	return builder.Build(ctx)
 }

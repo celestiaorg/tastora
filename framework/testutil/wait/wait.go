@@ -3,11 +3,9 @@ package wait
 import (
 	"context"
 	"fmt"
-	"time"
-
-	"golang.org/x/sync/errgroup"
-
 	"github.com/celestiaorg/tastora/framework/types"
+	"golang.org/x/sync/errgroup"
+	"time"
 )
 
 // Heighter fetches the current chain block height.
@@ -169,7 +167,7 @@ func ForCondition(ctx context.Context, timeoutAfter, pollingInterval time.Durati
 // ForDANodeToReachHeight waits for a data availability node to reach a target block height within a given context.
 // It periodically checks the node's current height and returns nil when the target height is reached.
 // Returns an error if the context times out or if retrieving the header fails persistently.
-func ForDANodeToReachHeight(ctx context.Context, node HeaderGetter, targetHeight uint64, timeout time.Duration) error {
+func ForDANodeToReachHeight(ctx context.Context, hg HeaderGetter, targetHeight uint64, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -181,7 +179,7 @@ func ForDANodeToReachHeight(ctx context.Context, node HeaderGetter, targetHeight
 		case <-ctx.Done():
 			return fmt.Errorf("timed out waiting for node to reach height %d: %w", targetHeight, ctx.Err())
 		case <-ticker.C:
-			header, err := node.GetHeader(ctx, targetHeight)
+			header, err := hg.GetHeader(ctx, targetHeight)
 			if err == nil {
 				if header.Height >= targetHeight {
 					return nil

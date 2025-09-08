@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"cosmossdk.io/math"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -24,9 +25,9 @@ func TestCreateWalletOnSpecificNode(t *testing.T) {
 
 	// create chain with 2 validators and 1 full node
 	builder := testCfg.ChainBuilder.WithNodes(
-		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
-		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
-		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeConsensusFull).Build(),
+		cosmos.NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
+		cosmos.NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
+		cosmos.NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeConsensusFull).Build(),
 	)
 
 	chain, err := builder.Build(testCfg.Ctx)
@@ -36,14 +37,14 @@ func TestCreateWalletOnSpecificNode(t *testing.T) {
 	require.NoError(t, err)
 
 	// test creating wallet on validator[0]
-	wallet1, err := chain.Validators[0].CreateWallet(testCfg.Ctx, "test-key-1", chain.cfg.ChainConfig.Bech32Prefix)
+	wallet1, err := chain.Validators[0].CreateWallet(testCfg.Ctx, "test-key-1", chain.Config.Bech32Prefix)
 	require.NoError(t, err)
 	require.NotNil(t, wallet1)
 	require.Equal(t, "test-key-1", wallet1.GetKeyName())
 	require.NotEmpty(t, wallet1.GetFormattedAddress())
 
 	// test creating wallet on validator[1]
-	wallet2, err := chain.Validators[1].CreateWallet(testCfg.Ctx, "test-key-2", chain.cfg.ChainConfig.Bech32Prefix)
+	wallet2, err := chain.Validators[1].CreateWallet(testCfg.Ctx, "test-key-2", chain.Config.Bech32Prefix)
 	require.NoError(t, err)
 	require.NotNil(t, wallet2)
 	require.Equal(t, "test-key-2", wallet2.GetKeyName())
@@ -53,7 +54,7 @@ func TestCreateWalletOnSpecificNode(t *testing.T) {
 	require.NotEqual(t, wallet1.GetFormattedAddress(), wallet2.GetFormattedAddress())
 
 	// test creating wallet on full node
-	wallet3, err := chain.FullNodes[0].CreateWallet(testCfg.Ctx, "test-key-3", chain.cfg.ChainConfig.Bech32Prefix)
+	wallet3, err := chain.FullNodes[0].CreateWallet(testCfg.Ctx, "test-key-3", chain.Config.Bech32Prefix)
 	require.NoError(t, err)
 	require.NotNil(t, wallet3)
 	require.Equal(t, "test-key-3", wallet3.GetKeyName())
@@ -73,8 +74,8 @@ func TestGetFaucetWalletOnNodes(t *testing.T) {
 
 	// create chain with 2 validators
 	builder := testCfg.ChainBuilder.WithNodes(
-		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
-		NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
+		cosmos.NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
+		cosmos.NewChainNodeConfigBuilder().WithNodeType(types.NodeTypeValidator).Build(),
 	)
 
 	chain, err := builder.Build(testCfg.Ctx)
@@ -98,7 +99,7 @@ func TestGetFaucetWalletOnNodes(t *testing.T) {
 
 	// verify faucet wallet can be used for broadcasting transactions on each node
 	// create a test recipient wallet
-	testWallet, err := chain.Validators[0].CreateWallet(testCfg.Ctx, "test-recipient", chain.cfg.ChainConfig.Bech32Prefix)
+	testWallet, err := chain.Validators[0].CreateWallet(testCfg.Ctx, "test-recipient", chain.Config.Bech32Prefix)
 	require.NoError(t, err)
 
 	// test broadcasting from validator[0] using faucet wallet
@@ -136,9 +137,9 @@ func TestCreateWallet(t *testing.T) {
 }
 
 // testFaucetBroadcast helper function to test broadcasting a bank send transaction using the faucet wallet on a specific node
-func testFaucetBroadcast(chain *Chain, node *ChainNode, faucetWallet, recipientWallet *types.Wallet) error {
+func testFaucetBroadcast(chain *cosmos.Chain, node *cosmos.ChainNode, faucetWallet, recipientWallet *types.Wallet) error {
 	// create a bank send message
-	sendAmount := sdk.NewCoins(sdk.NewCoin(chain.cfg.ChainConfig.Denom, math.NewInt(1000)))
+	sendAmount := sdk.NewCoins(sdk.NewCoin(chain.Config.Denom, math.NewInt(1000)))
 	msg := &banktypes.MsgSend{
 		FromAddress: faucetWallet.GetFormattedAddress(),
 		ToAddress:   recipientWallet.GetFormattedAddress(),

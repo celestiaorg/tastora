@@ -1,4 +1,4 @@
-package docker
+package cosmos
 
 import (
 	"bytes"
@@ -144,7 +144,7 @@ func (b *broadcaster) GetTxResponseBytes(ctx context.Context, wallet *types.Wall
 // instance of sdk.TxResponse.
 func (b *broadcaster) UnmarshalTxResponseBytes(ctx context.Context, bytes []byte) (sdk.TxResponse, error) {
 	resp := sdk.TxResponse{}
-	if err := b.chain.cfg.ChainConfig.EncodingConfig.Codec.UnmarshalJSON(bytes, &resp); err != nil {
+	if err := b.chain.Config.EncodingConfig.Codec.UnmarshalJSON(bytes, &resp); err != nil {
 		return sdk.TxResponse{}, err
 	}
 
@@ -179,15 +179,15 @@ func (b *broadcaster) defaultClientContext(fromWallet *types.Wallet, sdkAdd sdk.
 		WithFromAddress(sdkAdd).
 		WithFromName(fromWallet.GetKeyName()).
 		WithSkipConfirmation(true).
-		WithAccountRetriever(AccountRetriever{chain: b.chain, prefix: b.chain.cfg.ChainConfig.Bech32Prefix}).
+		WithAccountRetriever(AccountRetriever{chain: b.chain, prefix: b.chain.Config.Bech32Prefix}).
 		WithKeyring(kr).
 		WithBroadcastMode(flags.BroadcastSync).
-		WithCodec(b.chain.cfg.ChainConfig.EncodingConfig.Codec)
+		WithCodec(b.chain.Config.EncodingConfig.Codec)
 }
 
 // defaultTxFactory creates a new Factory with default configuration.
 func (b *broadcaster) defaultTxFactory(clientCtx client.Context, account client.Account) sdktx.Factory {
-	chainConfig := b.chain.cfg.ChainConfig
+	chainConfig := b.chain.Config
 	return sdktx.Factory{}.
 		WithAccountNumber(account.GetAccountNumber()).
 		WithSequence(account.GetSequence()).

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	"go.uber.org/zap/zaptest"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	dockerclient "github.com/moby/moby/client"
@@ -18,7 +19,7 @@ func TestChainNodeHostName(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	// Create nodes with different indices
-	chainParams1 := ChainNodeParams{
+	chainParams1 := cosmos.ChainNodeParams{
 		Validator:       true,
 		ChainID:         chainID,
 		BinaryName:      "test-binary",
@@ -29,9 +30,9 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
 	}
-	node1 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 0, chainParams1)
+	node1 := cosmos.NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 0, chainParams1)
 
-	chainParams2 := ChainNodeParams{
+	chainParams2 := cosmos.ChainNodeParams{
 		Validator:       true,
 		ChainID:         chainID,
 		BinaryName:      "test-binary",
@@ -42,9 +43,9 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
 	}
-	node2 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 1, chainParams2)
+	node2 := cosmos.NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 1, chainParams2)
 
-	chainParams3 := ChainNodeParams{
+	chainParams3 := cosmos.ChainNodeParams{
 		Validator:       false,
 		ChainID:         chainID,
 		BinaryName:      "test-binary",
@@ -55,7 +56,7 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:  &testutil.TestEncodingConfig{},
 	}
-	node3 := NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 2, chainParams3)
+	node3 := cosmos.NewChainNode(logger, &dockerclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 2, chainParams3)
 
 	// get hostnames
 	hostname1 := node1.HostName()

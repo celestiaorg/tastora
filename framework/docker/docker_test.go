@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -41,9 +42,9 @@ type TestSetupConfig struct {
 	TestName         string
 	Logger           *zap.Logger
 	EncConfig        testutil.TestEncodingConfig
-	ChainBuilder     *ChainBuilder
+	ChainBuilder     *cosmos.ChainBuilder
 	DANetworkBuilder *da.NetworkBuilder
-	Chain            *Chain
+	Chain            *cosmos.Chain
 	Ctx              context.Context
 }
 
@@ -72,7 +73,7 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 		UIDGID:     "10001:10001",
 	}
 
-	builder := NewChainBuilderWithTestName(t, uniqueTestName).
+	builder := cosmos.NewChainBuilderWithTestName(t, uniqueTestName).
 		WithDockerClient(dockerClient).
 		WithDockerNetworkID(networkID).
 		WithImage(defaultImage).
@@ -85,7 +86,7 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 			"--timeout-commit", "1s",
 			"--minimum-gas-prices", "0utia",
 		).
-		WithNode(NewChainNodeConfigBuilder().Build())
+		WithNode(cosmos.NewChainNodeConfigBuilder().Build())
 
 	// default image for the DA network
 	defaultDAImage := container.Image{
@@ -126,7 +127,7 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 }
 
 // getGenesisHash returns the genesis hash of the given chain node.
-func getGenesisHash(ctx context.Context, chain *Chain) (string, error) {
+func getGenesisHash(ctx context.Context, chain *cosmos.Chain) (string, error) {
 	node := chain.GetNodes()[0]
 	c, err := node.GetRPCClient()
 	if err != nil {
@@ -164,7 +165,7 @@ func TestPerNodeDifferentImages(t *testing.T) {
 	}
 
 	// create node configs with different images and settings
-	validator0Config := NewChainNodeConfigBuilder().
+	validator0Config := cosmos.NewChainNodeConfigBuilder().
 		WithAdditionalStartArgs(
 			"--force-no-bbr",
 			"--grpc.enable",
@@ -175,7 +176,7 @@ func TestPerNodeDifferentImages(t *testing.T) {
 		).
 		Build() // uses default image
 
-	validator1Config := NewChainNodeConfigBuilder().
+	validator1Config := cosmos.NewChainNodeConfigBuilder().
 		WithImage(alternativeImage). // override with different image
 		WithAdditionalStartArgs(
 			"--force-no-bbr",

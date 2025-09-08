@@ -1,4 +1,4 @@
-package docker
+package cosmos
 
 import (
 	"context"
@@ -177,7 +177,7 @@ func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
 
 // NewChainBuilderFromChain initializes and returns a new ChainBuilder that copies the values from the given chain.
 func NewChainBuilderFromChain(chain *Chain) *ChainBuilder {
-	cfg := chain.cfg.ChainConfig
+	cfg := &chain.Config
 	return NewChainBuilder(chain.t).
 		WithLogger(chain.log).
 		WithEncodingConfig(cfg.EncodingConfig).
@@ -191,8 +191,8 @@ func NewChainBuilderFromChain(chain *Chain) *ChainBuilder {
 		WithDenom(cfg.Denom).
 		WithGenesis(cfg.GenesisFileBz).
 		WithImage(cfg.Image).
-		WithDockerClient(chain.cfg.DockerClient).
-		WithDockerNetworkID(chain.cfg.DockerNetworkID).
+		WithDockerClient(chain.Config.DockerClient).
+		WithDockerNetworkID(chain.Config.DockerNetworkID).
 		WithAdditionalStartArgs(cfg.AdditionalStartArgs...).
 		WithEnv(cfg.Env...)
 }
@@ -395,26 +395,24 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 	}
 
 	chain := &Chain{
-		cfg: Config{
-			Logger:          b.logger,
-			DockerClient:    b.dockerClient,
-			DockerNetworkID: b.dockerNetworkID,
-			ChainConfig: &ChainConfig{
-				Name:                b.name,
-				ChainID:             b.chainID,
-				Image:               *b.dockerImage, // default image must be provided, can be overridden per node.
-				Bin:                 b.binaryName,
-				Bech32Prefix:        b.bech32Prefix,
-				Denom:               b.denom,
-				CoinType:            b.coinType,
-				GasPrices:           b.gasPrices,
-				GasAdjustment:       b.gasAdjustment,
-				PostInit:            b.postInits,
-				EncodingConfig:      b.encodingConfig,
-				AdditionalStartArgs: b.additionalStartArgs,
-				Env:                 b.env,
-				GenesisFileBz:       b.genesisBz,
-			},
+		Config: ChainConfig{
+			Logger:              b.logger,
+			DockerClient:        b.dockerClient,
+			DockerNetworkID:     b.dockerNetworkID,
+			Name:                b.name,
+			ChainID:             b.chainID,
+			Image:               *b.dockerImage, // default image must be provided, can be overridden per node.
+			Bin:                 b.binaryName,
+			Bech32Prefix:        b.bech32Prefix,
+			Denom:               b.denom,
+			CoinType:            b.coinType,
+			GasPrices:           b.gasPrices,
+			GasAdjustment:       b.gasAdjustment,
+			PostInit:            b.postInits,
+			EncodingConfig:      b.encodingConfig,
+			AdditionalStartArgs: b.additionalStartArgs,
+			Env:                 b.env,
+			GenesisFileBz:       b.genesisBz,
 		},
 		t:            b.t,
 		Validators:   validators,

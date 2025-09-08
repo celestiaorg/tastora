@@ -1,4 +1,4 @@
-package docker
+package cosmos
 
 import (
 	"bytes"
@@ -34,7 +34,7 @@ var sentryPorts = nat.PortMap{
 
 type Chain struct {
 	t          *testing.T
-	cfg        Config
+	Config     ChainConfig
 	Validators ChainNodes
 	FullNodes  ChainNodes
 	cdc        *codec.ProtoCodec
@@ -54,9 +54,9 @@ type Chain struct {
 func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
 	return types.ChainRelayerConfig{
 		ChainID:      c.GetChainID(),
-		Denom:        c.cfg.ChainConfig.Denom,
-		GasPrices:    c.cfg.ChainConfig.GasPrices,
-		Bech32Prefix: c.cfg.ChainConfig.Bech32Prefix,
+		Denom:        c.Config.Denom,
+		GasPrices:    c.Config.GasPrices,
+		Bech32Prefix: c.Config.Bech32Prefix,
 		RPCAddress:   "http://" + c.GetNode().Name() + ":26657",
 		GRPCAddress:  "http://" + c.GetNode().Name() + ":9090",
 	}
@@ -69,7 +69,7 @@ func (c *Chain) GetFaucetWallet() *types.Wallet {
 
 // GetChainID returns the chain ID.
 func (c *Chain) GetChainID() string {
-	return c.cfg.ChainConfig.ChainID
+	return c.Config.ChainID
 }
 
 // getBroadcaster returns a broadcaster that can broadcast messages to this chain.
@@ -194,8 +194,8 @@ func (c *Chain) Start(ctx context.Context) error {
 // startAndInitializeNodes initializes and starts all chain nodes, configures genesis files, and ensures proper setup for the chain.
 func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	c.started = true
-	defaultGenesisAmount := sdk.NewCoins(sdk.NewCoin(c.cfg.ChainConfig.Denom, sdkmath.NewInt(10_000_000_000_000)))
-	defaultGenesisSelfDelegation := sdk.NewCoin(c.cfg.ChainConfig.Denom, sdkmath.NewInt(5_000_000))
+	defaultGenesisAmount := sdk.NewCoins(sdk.NewCoin(c.Config.Denom, sdkmath.NewInt(10_000_000_000_000)))
+	defaultGenesisSelfDelegation := sdk.NewCoin(c.Config.Denom, sdkmath.NewInt(5_000_000))
 
 	eg := new(errgroup.Group)
 	// initialize config and sign gentx for each validator.
@@ -340,7 +340,7 @@ func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdk
 	}
 	c.faucetWallet = wallet
 
-	if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.cfg.ChainConfig.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
+	if err := validator0.addGenesisAccount(ctx, wallet.GetFormattedAddress(), []sdk.Coin{{Denom: c.Config.Denom, Amount: sdkmath.NewInt(10_000_000_000_000)}}); err != nil {
 		return nil, err
 	}
 
@@ -352,7 +352,7 @@ func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdk
 	if err != nil {
 		return nil, err
 	}
-	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.cfg.ChainConfig.Denom)))
+	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.Config.Denom)))
 	return genbz, nil
 }
 
@@ -400,7 +400,7 @@ func (c *Chain) Stop(ctx context.Context) error {
 
 // UpgradeVersion updates the chain's version across all components, including validators and full nodes, and pulls new images.
 func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
-	c.cfg.ChainConfig.Image.Version = version
+	c.Config.Image.Version = version
 	for _, n := range c.Validators {
 		n.Image.Version = version
 	}
@@ -420,7 +420,7 @@ func (c *Chain) pullImages(ctx context.Context) {
 		}
 
 		pulled[image.Ref()] = struct{}{}
-		rc, err := c.cfg.DockerClient.ImagePull(
+		rc, err := c.Config.DockerClient.ImagePull(
 			ctx,
 			image.Ref(),
 			dockerimagetypes.PullOptions{},
@@ -440,7 +440,7 @@ func (c *Chain) pullImages(ctx context.Context) {
 
 // CreateWallet creates a new wallet using Validator[0] to maintain backward compatibility.
 func (c *Chain) CreateWallet(ctx context.Context, keyName string) (*types.Wallet, error) {
-	return c.GetNode().CreateWallet(ctx, keyName, c.cfg.ChainConfig.Bech32Prefix)
+	return c.GetNode().CreateWallet(ctx, keyName, c.Config.Bech32Prefix)
 }
 
 // copyFaucetKeyToValidator copies the faucet key from validator[0] to the specified validator.
@@ -475,8 +475,8 @@ func (c *Chain) copyFaucetKeyToValidator(faucetWallet *types.Wallet, targetValid
 
 // getGenesisFileBz retrieves the genesis file bytes for the chain, generating a default genesis if none is specified.
 func (c *Chain) getGenesisFileBz(ctx context.Context, defaultGenesisAmount sdk.Coins) ([]byte, error) {
-	if c.cfg.ChainConfig.GenesisFileBz != nil {
-		return c.cfg.ChainConfig.GenesisFileBz, nil
+	if c.Config.GenesisFileBz != nil {
+		return c.Config.GenesisFileBz, nil
 	}
 	// only perform initial genesis and faucet account creation if no genesis keyring is provided.
 	if len(c.Validators) > 0 && c.Validators[0].GenesisKeyring == nil {
