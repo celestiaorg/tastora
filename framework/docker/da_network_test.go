@@ -312,6 +312,8 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 		bridgeNode := bridgeNodes[0]
 
+		require.NoError(t, bridgeNode.Start(testCfg.Ctx))
+
 		// Verify that internal addresses use the custom ports
 		bridgeNetworkInfo, err := bridgeNode.GetNetworkInfo(context.Background())
 		require.NoError(t, err)
@@ -366,6 +368,8 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		require.Len(t, bridgeNodes, 1)
 
 		bridgeNode := bridgeNodes[0]
+
+		require.NoError(t, bridgeNode.Start(testCfg.Ctx))
 
 		// Verify that internal addresses use the default ports
 		bridgeNetworkInfo, err := bridgeNode.GetNetworkInfo(context.Background())
