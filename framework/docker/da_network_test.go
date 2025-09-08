@@ -279,7 +279,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Setup isolated docker environment for this test
 		testCfg := setupDockerTest(t)
 
-		chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
+		chain, err := testCfg.ChainBuilder.WithChainID("celestia").Build(testCfg.Ctx)
 		require.NoError(t, err)
 
 		err = chain.Start(testCfg.Ctx)
@@ -337,7 +337,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Setup isolated docker environment for this test
 		testCfg := setupDockerTest(t)
 
-		chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
+		chain, err := testCfg.ChainBuilder.WithChainID("celestia").Build(testCfg.Ctx)
 		require.NoError(t, err)
 
 		err = chain.Start(testCfg.Ctx)
