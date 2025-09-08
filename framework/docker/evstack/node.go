@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -20,14 +19,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
-
-// extractPort extracts the port number from a "host:port" address
-func extractPort(address string) string {
-	if idx := strings.LastIndex(address, ":"); idx != -1 {
-		return address[idx+1:]
-	}
-	return address
-}
 
 const (
 	p2pPort         = "26656/tcp"
@@ -60,12 +51,8 @@ type Node struct {
 	// additionalStartArgs are additional command-line arguments for this node
 	additionalStartArgs []string
 
-	// Ports set during startContainer.
-	hostRPCPort  string
-	hostAPIPort  string
-	hostGRPCPort string
-	hostP2PPort  string
-	hostHTTPPort string
+	// External ports set during startContainer.
+	externalPorts types.Ports
 }
 
 func NewNode(cfg Config, testName string, image container.Image, index int, isAggregator bool, additionalStartArgs []string) *Node {
@@ -184,14 +171,16 @@ func (n *Node) startContainer(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// Extract just the port numbers (strip "0.0.0.0:" prefix)
-	n.hostRPCPort = extractPort(hostPorts[0])
-	n.hostGRPCPort = extractPort(hostPorts[1])
-	n.hostAPIPort = extractPort(hostPorts[2])
-	n.hostP2PPort = extractPort(hostPorts[3])
-	n.hostHTTPPort = extractPort(hostPorts[4])
+	// Extract just the port numbers and store in structured format
+	n.externalPorts = types.Ports{
+		RPC:  internal.ExtractPort(hostPorts[0]),
+		GRPC: internal.ExtractPort(hostPorts[1]),
+		API:  internal.ExtractPort(hostPorts[2]),
+		P2P:  internal.ExtractPort(hostPorts[3]),
+		HTTP: internal.ExtractPort(hostPorts[4]),
+	}
 
-	err = n.initGRPCConnection("tcp://0.0.0.0:" + n.hostRPCPort)
+	err = n.initGRPCConnection("tcp://0.0.0.0:" + n.externalPorts.RPC)
 	if err != nil {
 		return err
 	}
@@ -211,7 +200,7 @@ func (n *Node) initGRPCConnection(addr string) error {
 
 	httpClient.Timeout = 10 * time.Second
 	grpcConn, err := grpc.NewClient(
-		n.hostGRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		n.externalPorts.GRPC, grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return fmt.Errorf("grpc dial: %w", err)
@@ -232,7 +221,7 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 	if err != nil {
 		return types.NetworkInfo{}, err
 	}
-	
+
 	return types.NetworkInfo{
 		Internal: types.Network{
 			Hostname: n.HostName(),
@@ -247,20 +236,14 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 		},
 		External: types.Network{
 			Hostname: "0.0.0.0",
-			Ports: types.Ports{
-				RPC:  n.hostRPCPort,
-				GRPC: n.hostGRPCPort,
-				API:  n.hostAPIPort,
-				P2P:  n.hostP2PPort,
-				HTTP: n.hostHTTPPort,
-			},
+			Ports:    n.externalPorts,
 		},
 	}, nil
 }
 
 // waitForNodeReady polls the health endpoint until the node is ready or timeout is reached
 func (n *Node) waitForNodeReady(ctx context.Context, timeout time.Duration) error {
-	healthURL := fmt.Sprintf("http://0.0.0.0:%s/evnode.v1.HealthService/Livez", n.hostRPCPort)
+	healthURL := fmt.Sprintf("http://0.0.0.0:%s/evnode.v1.HealthService/Livez", n.externalPorts.RPC)
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	timeoutCh := time.After(timeout)

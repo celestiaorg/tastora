@@ -46,13 +46,12 @@ const (
 	privValPort = "1234/tcp"
 )
 
-
 func (cn *ChainNode) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 	internalIP, err := internal.GetContainerInternalIP(ctx, cn.DockerClient, cn.ContainerLifecycle.ContainerID())
 	if err != nil {
 		return types.NetworkInfo{}, err
 	}
-	
+
 	return types.NetworkInfo{
 		Internal: types.Network{
 			Hostname: cn.HostName(),
@@ -66,12 +65,7 @@ func (cn *ChainNode) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, err
 		},
 		External: types.Network{
 			Hostname: "0.0.0.0",
-			Ports: types.Ports{
-				RPC:  cn.hostRPCPort,
-				GRPC: cn.hostGRPCPort,
-				API:  cn.hostAPIPort,
-				P2P:  cn.hostP2PPort,
-			},
+			Ports:    cn.externalPorts,
 		},
 	}, nil
 }
@@ -86,11 +80,8 @@ type ChainNode struct {
 
 	lock sync.Mutex
 
-	// Ports set during startContainer.
-	hostRPCPort  string
-	hostAPIPort  string
-	hostGRPCPort string
-	hostP2PPort  string
+	// External ports set during startContainer.
+	externalPorts types.Ports
 
 	// faucetWallet stores the faucet wallet for this node
 	faucetWallet *types.Wallet
@@ -153,7 +144,6 @@ func NewChainNode(
 
 	return tn
 }
-
 
 // HostName returns the condensed hostname for the ChainNode, truncating if the name is 64 characters or longer.
 func (cn *ChainNode) HostName() string {
@@ -298,9 +288,14 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	cn.hostRPCPort, cn.hostGRPCPort, cn.hostAPIPort, cn.hostP2PPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3]
+	cn.externalPorts = types.Ports{
+		RPC:  internal.ExtractPort(hostPorts[0]),
+		GRPC: internal.ExtractPort(hostPorts[1]),
+		API:  internal.ExtractPort(hostPorts[2]),
+		P2P:  internal.ExtractPort(hostPorts[3]),
+	}
 
-	return cn.initClient("tcp://" + cn.hostRPCPort)
+	return cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC)
 }
 
 // initClient creates and assigns a new Tendermint RPC client to the ChainNode.
@@ -319,7 +314,7 @@ func (cn *ChainNode) initClient(addr string) error {
 	cn.Client = rpcClient
 
 	grpcConn, err := grpc.NewClient(
-		cn.hostGRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		cn.externalPorts.GRPC, grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return fmt.Errorf("grpc dial: %w", err)
