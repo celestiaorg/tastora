@@ -46,22 +46,34 @@ const (
 	privValPort = "1234/tcp"
 )
 
-// GetInternalPeerAddress retrieves the internal peer address for the ChainNode using its ID, hostname, and default port.
-func (cn *ChainNode) GetInternalPeerAddress(ctx context.Context) (string, error) {
-	id, err := cn.NodeID(ctx)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s@%s:%d", id, cn.HostName(), 26656), nil
-}
 
-// GetInternalRPCAddress returns the internal RPC address of the chain node in the format "nodeID@hostname:port".
-func (cn *ChainNode) GetInternalRPCAddress(ctx context.Context) (string, error) {
-	id, err := cn.NodeID(ctx)
+func (cn *ChainNode) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	internalIP, err := internal.GetContainerInternalIP(ctx, cn.DockerClient, cn.ContainerLifecycle.ContainerID())
 	if err != nil {
-		return "", err
+		return types.NetworkInfo{}, err
 	}
-	return fmt.Sprintf("%s@%s:%d", id, cn.HostName(), 26657), nil
+	
+	return types.NetworkInfo{
+		Internal: types.Network{
+			Hostname: cn.HostName(),
+			IP:       internalIP,
+			Ports: types.Ports{
+				RPC:  "26657",
+				GRPC: "9090",
+				API:  "1317",
+				P2P:  "26656",
+			},
+		},
+		External: types.Network{
+			Hostname: "0.0.0.0",
+			Ports: types.Ports{
+				RPC:  cn.hostRPCPort,
+				GRPC: cn.hostGRPCPort,
+				API:  cn.hostAPIPort,
+				P2P:  cn.hostP2PPort,
+			},
+		},
+	}, nil
 }
 
 type ChainNodes []*ChainNode
@@ -142,35 +154,6 @@ func NewChainNode(
 	return tn
 }
 
-// GetInternalHostName retrieves the internal host name of the ChainNode instance. Returns the host name and an error if any.
-func (cn *ChainNode) GetInternalHostName(ctx context.Context) (string, error) {
-	return cn.HostName(), nil
-}
-
-// GetInternalIP returns the internal IP address of the chain node container within the docker network.
-func (cn *ChainNode) GetInternalIP(ctx context.Context) (string, error) {
-	inspect, err := cn.DockerClient.ContainerInspect(ctx, cn.ContainerLifecycle.ContainerID())
-	if err != nil {
-		return "", fmt.Errorf("inspecting container: %w", err)
-	}
-
-	if inspect.NetworkSettings == nil {
-		return "", fmt.Errorf("container network settings not available")
-	}
-
-	networks := inspect.NetworkSettings.Networks
-	if networks == nil {
-		return "", fmt.Errorf("container networks not available")
-	}
-
-	for _, network := range networks {
-		if network.IPAddress != "" {
-			return network.IPAddress, nil
-		}
-	}
-
-	return "", fmt.Errorf("no IP address found for container")
-}
 
 // HostName returns the condensed hostname for the ChainNode, truncating if the name is 64 characters or longer.
 func (cn *ChainNode) HostName() string {

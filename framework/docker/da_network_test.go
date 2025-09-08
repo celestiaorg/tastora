@@ -92,8 +92,9 @@ func TestDANetworkCreation(t *testing.T) {
 	genesisHash, err := getGenesisHash(testCfg.Ctx, chain)
 	require.NoError(t, err)
 
-	hostname, err := chain.GetNodes()[0].GetInternalHostName(testCfg.Ctx)
-	require.NoError(t, err, "failed to get internal hostname")
+	chainNetworkInfo, err := chain.GetNodes()[0].GetNetworkInfo(testCfg.Ctx)
+	require.NoError(t, err, "failed to get network info")
+	hostname := chainNetworkInfo.Internal.Hostname
 
 	bridgeNode := bridgeNodes[0]
 	fullNode := fullNodes[0]
@@ -205,8 +206,9 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 	genesisHash, err := getGenesisHash(testCfg.Ctx, chain)
 	require.NoError(t, err)
 
-	hostname, err := chain.GetNodes()[0].GetInternalHostName(testCfg.Ctx)
-	require.NoError(t, err, "failed to get internal hostname")
+	chainNetworkInfo, err := chain.GetNodes()[0].GetNetworkInfo(testCfg.Ctx)
+	require.NoError(t, err, "failed to get network info")
+	hostname := chainNetworkInfo.Internal.Hostname
 
 	bridgeNode := bridgeNodes[0]
 
@@ -311,12 +313,14 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		bridgeNode := bridgeNodes[0]
 
 		// Verify that internal addresses use the custom ports
-		rpcAddr, err := bridgeNode.GetInternalRPCAddress()
+		bridgeNetworkInfo, err := bridgeNode.GetNetworkInfo(context.Background())
 		require.NoError(t, err)
+		rpcAddr := bridgeNetworkInfo.Internal.RPCAddress()
 		require.Contains(t, rpcAddr, ":27000", "RPC address should use custom port 27000")
 
-		p2pAddr, err := bridgeNode.GetInternalP2PAddress()
+		bridgeP2PNetworkInfo, err := bridgeNode.GetNetworkInfo(context.Background())
 		require.NoError(t, err)
+		p2pAddr := bridgeP2PNetworkInfo.Internal.P2PAddress()
 		require.Contains(t, p2pAddr, ":3000", "P2P address should use custom port 3000")
 
 		// Verify all custom ports using GetPortInfo
@@ -364,12 +368,13 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		bridgeNode := bridgeNodes[0]
 
 		// Verify that internal addresses use the default ports
-		rpcAddr, err := bridgeNode.GetInternalRPCAddress()
+		bridgeNetworkInfo, err := bridgeNode.GetNetworkInfo(context.Background())
 		require.NoError(t, err)
+		rpcAddr := bridgeNetworkInfo.Internal.RPCAddress()
 		require.Contains(t, rpcAddr, ":26658", "RPC address should use default port 26658")
 
-		p2pAddr, err := bridgeNode.GetInternalP2PAddress()
 		require.NoError(t, err)
+		p2pAddr := bridgeNetworkInfo.Internal.P2PAddress()
 		require.Contains(t, p2pAddr, ":2121", "P2P address should use default port 2121")
 
 		// Verify all default ports using GetPortInfo

@@ -103,26 +103,33 @@ func (n *Node) GetAuthToken() (string, error) {
 	return n.adminAuthToken, nil
 }
 
-// GetInternalHostName returns the hostname resolvable within the network.
-func (n *Node) GetInternalHostName() (string, error) {
-	return n.HostName(), nil
-}
-
-// GetInternalRPCAddress returns the internal RPC address resolvable within the network
-func (n *Node) GetInternalRPCAddress() (string, error) {
+// GetNetworkInfo returns the network information for the DA node.
+func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	internalIP, err := internal.GetContainerInternalIP(ctx, n.DockerClient, n.ContainerLifecycle.ContainerID())
+	if err != nil {
+		return types.NetworkInfo{}, err
+	}
+	
 	rpcPort := strings.TrimSuffix(n.getRPCPort(), "/tcp")
-	return fmt.Sprintf("%s:%s", n.HostName(), rpcPort), nil
-}
-
-// GetInternalP2PAddress returns the internal P2P address resolvable within the network
-func (n *Node) GetInternalP2PAddress() (string, error) {
 	p2pPort := strings.TrimSuffix(n.getP2PPort(), "/tcp")
-	return fmt.Sprintf("%s:%s", n.HostName(), p2pPort), nil
-}
-
-// GetHostRPCAddress returns the externally resolvable RPC address of the node.
-func (n *Node) GetHostRPCAddress() string {
-	return n.hostRPCPort
+	
+	return types.NetworkInfo{
+		Internal: types.Network{
+			Hostname: n.HostName(),
+			IP:       internalIP,
+			Ports: types.Ports{
+				RPC: rpcPort,
+				P2P: p2pPort,
+			},
+		},
+		External: types.Network{
+			Hostname: "0.0.0.0",
+			Ports: types.Ports{
+				RPC: n.hostRPCPort,
+				P2P: n.hostP2PPort,
+			},
+		},
+	}, nil
 }
 
 // Stop terminates the Node by stopping its associated container gracefully using the provided context.

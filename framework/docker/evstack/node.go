@@ -13,12 +13,21 @@ import (
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/types"
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// extractPort extracts the port number from a "host:port" address
+func extractPort(address string) string {
+	if idx := strings.LastIndex(address, ":"); idx != -1 {
+		return address[idx+1:]
+	}
+	return address
+}
 
 const (
 	p2pPort         = "26656/tcp"
@@ -175,9 +184,14 @@ func (n *Node) startContainer(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	n.hostRPCPort, n.hostGRPCPort, n.hostAPIPort, n.hostP2PPort, n.hostHTTPPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3], hostPorts[4]
+	// Extract just the port numbers (strip "0.0.0.0:" prefix)
+	n.hostRPCPort = extractPort(hostPorts[0])
+	n.hostGRPCPort = extractPort(hostPorts[1])
+	n.hostAPIPort = extractPort(hostPorts[2])
+	n.hostP2PPort = extractPort(hostPorts[3])
+	n.hostHTTPPort = extractPort(hostPorts[4])
 
-	err = n.initGRPCConnection("tcp://" + n.hostRPCPort)
+	err = n.initGRPCConnection("tcp://0.0.0.0:" + n.hostRPCPort)
 	if err != nil {
 		return err
 	}
@@ -212,34 +226,41 @@ func (n *Node) GetHostName() string {
 	return n.HostName()
 }
 
-// GetHostRPCPort returns the host RPC port
-func (n *Node) GetHostRPCPort() string {
-	return strings.ReplaceAll(n.hostRPCPort, "0.0.0.0:", "")
-}
-
-// GetHostAPIPort returns the host API port
-func (n *Node) GetHostAPIPort() string {
-	return strings.ReplaceAll(n.hostAPIPort, "0.0.0.0:", "")
-}
-
-// GetHostGRPCPort returns the host GRPC port
-func (n *Node) GetHostGRPCPort() string {
-	return strings.ReplaceAll(n.hostGRPCPort, "0.0.0.0:", "")
-}
-
-// GetHostP2PPort returns the host P2P port
-func (n *Node) GetHostP2PPort() string {
-	return strings.ReplaceAll(n.hostP2PPort, "0.0.0.0:", "")
-}
-
-// GetHostHTTPPort returns the host HTTP port
-func (n *Node) GetHostHTTPPort() string {
-	return strings.ReplaceAll(n.hostHTTPPort, "0.0.0.0:", "")
+// GetNetworkInfo returns the network information for the evstack node.
+func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	internalIP, err := internal.GetContainerInternalIP(ctx, n.DockerClient, n.ContainerLifecycle.ContainerID())
+	if err != nil {
+		return types.NetworkInfo{}, err
+	}
+	
+	return types.NetworkInfo{
+		Internal: types.Network{
+			Hostname: n.HostName(),
+			IP:       internalIP,
+			Ports: types.Ports{
+				RPC:  "7331",
+				GRPC: "9090",
+				API:  "1317",
+				P2P:  "26656",
+				HTTP: "8080",
+			},
+		},
+		External: types.Network{
+			Hostname: "0.0.0.0",
+			Ports: types.Ports{
+				RPC:  n.hostRPCPort,
+				GRPC: n.hostGRPCPort,
+				API:  n.hostAPIPort,
+				P2P:  n.hostP2PPort,
+				HTTP: n.hostHTTPPort,
+			},
+		},
+	}, nil
 }
 
 // waitForNodeReady polls the health endpoint until the node is ready or timeout is reached
 func (n *Node) waitForNodeReady(ctx context.Context, timeout time.Duration) error {
-	healthURL := fmt.Sprintf("http://%s/evnode.v1.HealthService/Livez", n.hostRPCPort)
+	healthURL := fmt.Sprintf("http://0.0.0.0:%s/evnode.v1.HealthService/Livez", n.hostRPCPort)
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	timeoutCh := time.After(timeout)

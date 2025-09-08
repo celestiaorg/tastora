@@ -165,18 +165,13 @@ func (c *Chain) GetNodes() []types.ChainNode {
 	return nodes
 }
 
-func (c *Chain) GetGRPCAddress() string {
-	return c.GetNode().hostGRPCPort
+func (c *Chain) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	node := c.GetNode()
+	return node.GetNetworkInfo(ctx)
 }
 
 func (c *Chain) GetVolumeName() string {
 	return c.GetNode().VolumeName
-}
-
-// GetHostRPCAddress returns the address of the RPC server accessible by the host.
-// This will not return a valid address until the chain has been started.
-func (c *Chain) GetHostRPCAddress() string {
-	return "http://" + c.GetNode().hostRPCPort
 }
 
 func (c *Chain) Height(ctx context.Context) (int64, error) {
