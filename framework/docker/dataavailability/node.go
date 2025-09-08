@@ -380,7 +380,7 @@ func disableRPCAuthModification() map[string]tomlutil.Toml {
 
 // GetHeader fetches a header for the given block height from the DANode via an RPC call and returns it.
 func (n *Node) GetHeader(ctx context.Context, height uint64) (types.Header, error) {
-	url := fmt.Sprintf("http://%s", n.externalPorts.RPC)
+	url := fmt.Sprintf("http://0.0.0.0:%s", n.externalPorts.RPC)
 
 	result, err := callRPC[HeaderResult](ctx, url, "header.GetByHeight", []uint64{height})
 	if err != nil {
@@ -397,7 +397,7 @@ func (n *Node) GetHeader(ctx context.Context, height uint64) (types.Header, erro
 
 // GetAllBlobs retrieves all blobs from the node for the specified height and namespaces via an RPC call.
 func (n *Node) GetAllBlobs(ctx context.Context, height uint64, namespaces []share.Namespace) ([]types.Blob, error) {
-	url := fmt.Sprintf("http://%s", n.externalPorts.RPC)
+	url := fmt.Sprintf("http://0.0.0.0:%s", n.externalPorts.RPC)
 	result, err := callRPC[[]types.Blob](ctx, url, "blob.GetAll", []any{height, namespaces})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch blobs: %w", err)
@@ -407,7 +407,7 @@ func (n *Node) GetAllBlobs(ctx context.Context, height uint64, namespaces []shar
 
 // GetP2PInfo retrieves the p2p information of the node, such as PeerID and Addresses, via an RPC call.
 func (n *Node) GetP2PInfo(ctx context.Context) (types.P2PInfo, error) {
-	url := fmt.Sprintf("http://%s", n.externalPorts.RPC)
+	url := fmt.Sprintf("http://0.0.0.0:%s", n.externalPorts.RPC)
 	p2pInfo, err := callRPC[types.P2PInfo](ctx, url, "p2p.Info", []any{})
 	if err != nil {
 		return types.P2PInfo{}, fmt.Errorf("failed to fetch p2p info: %w", err)

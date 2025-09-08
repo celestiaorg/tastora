@@ -313,8 +313,14 @@ func (cn *ChainNode) initClient(addr string) error {
 
 	cn.Client = rpcClient
 
+	networkInfo, err := cn.GetNetworkInfo(context.TODO())
+	if err != nil {
+		return fmt.Errorf("failed to get network info: %w", err)
+	}
+
 	grpcConn, err := grpc.NewClient(
-		cn.externalPorts.GRPC, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		networkInfo.External.GRPCAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return fmt.Errorf("grpc dial: %w", err)

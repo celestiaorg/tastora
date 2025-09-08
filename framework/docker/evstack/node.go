@@ -198,10 +198,16 @@ func (n *Node) initGRPCConnection(addr string) error {
 		return err
 	}
 
+	networkInfo, err := n.GetNetworkInfo(context.TODO())
+	if err != nil {
+		return fmt.Errorf("failed to get network info: %w", err)
+	}
+
 	httpClient.Timeout = 10 * time.Second
 	grpcConn, err := grpc.NewClient(
-		n.externalPorts.GRPC, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		networkInfo.External.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
+
 	if err != nil {
 		return fmt.Errorf("grpc dial: %w", err)
 	}
