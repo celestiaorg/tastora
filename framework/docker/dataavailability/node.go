@@ -83,14 +83,6 @@ func (n *Node) GetType() types.DANodeType {
 
 // GetWallet returns the wallet associated with the node.
 func (n *Node) GetWallet() (*types.Wallet, error) {
-	if n.wallet == nil {
-		// Safely handle the case where the node might not be fully initialized
-		nodeName := "uninitialized-node"
-		if n.Node != nil {
-			nodeName = n.Name()
-		}
-		return nil, fmt.Errorf("wallet not initialized for node %s", nodeName)
-	}
 	return n.wallet, nil
 }
 

@@ -124,8 +124,8 @@ func (b *NetworkBuilder) WithNodes(nodeConfigs ...NodeConfig) *NetworkBuilder {
 
 // Build creates and returns a new Network instance
 func (b *NetworkBuilder) Build(ctx context.Context) (*Network, error) {
-	if err := b.validate(); err != nil {
-		return nil, fmt.Errorf("invalid builder configuration: %w", err)
+	if b.dockerImage == nil {
+		return nil, fmt.Errorf("docker image must be specified")
 	}
 
 	nodes, err := b.initializeNodes(ctx)
@@ -146,29 +146,6 @@ func (b *NetworkBuilder) Build(ctx context.Context) (*Network, error) {
 		log:   b.logger,
 		nodes: nodes,
 	}, nil
-}
-
-// validate checks the builder configuration for common errors
-func (b *NetworkBuilder) validate() error {
-	if b.dockerImage == nil {
-		return fmt.Errorf("docker image must be specified")
-	}
-	if b.dockerClient == nil {
-		return fmt.Errorf("docker client must be specified")
-	}
-	if b.dockerNetworkID == "" {
-		return fmt.Errorf("docker network ID must be specified")
-	}
-	if len(b.nodes) == 0 {
-		return fmt.Errorf("at least one node configuration must be specified")
-	}
-	if b.chainID == "" {
-		return fmt.Errorf("chain ID must be specified")
-	}
-	if b.binaryName == "" {
-		return fmt.Errorf("binary name must be specified")
-	}
-	return nil
 }
 
 func (b *NetworkBuilder) initializeNodes(ctx context.Context) ([]*Node, error) {
