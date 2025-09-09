@@ -46,11 +46,13 @@ func (n Network) HTTPAddress() string {
 
 // Ports contains port information for various services
 type Ports struct {
-	RPC  string
-	GRPC string
-	API  string
-	P2P  string
-	HTTP string
+	RPC      string
+	GRPC     string
+	API      string
+	P2P      string
+	HTTP     string
+	CoreRPC  string // Only needed for DA nodes - port to connect to celestia-app RPC
+	CoreGRPC string // Only needed for DA nodes - port to connect to celestia-app GRPC
 }
 
 // NetworkInfoProvider is an interface for types that can provide network information

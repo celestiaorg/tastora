@@ -10,7 +10,6 @@ import (
 	"path"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/celestiaorg/go-square/v2/share"
@@ -31,6 +30,33 @@ const (
 	defaultCoreGRPCPort  = "9090"  // Default GRPC port for Core
 )
 
+// initializeDANodePorts initializes internal ports with defaults and applies custom overrides
+func initializeDANodePorts(customPorts types.Ports) types.Ports {
+	// Start with defaults
+	ports := types.Ports{
+		RPC:      defaultDANodeRPCPort,
+		P2P:      defaultDANodeP2PPort,
+		CoreRPC:  defaultCoreRPCPort,
+		CoreGRPC: defaultCoreGRPCPort,
+	}
+
+	// Apply custom overrides if provided
+	if customPorts.RPC != "" {
+		ports.RPC = customPorts.RPC
+	}
+	if customPorts.P2P != "" {
+		ports.P2P = customPorts.P2P
+	}
+	if customPorts.CoreRPC != "" {
+		ports.CoreRPC = customPorts.CoreRPC
+	}
+	if customPorts.CoreGRPC != "" {
+		ports.CoreGRPC = customPorts.CoreGRPC
+	}
+
+	return ports
+}
+
 // Node is a docker implementation of a celestia da node.
 type Node struct {
 	*container.Node
@@ -41,8 +67,9 @@ type Node struct {
 	nodeType            types.DANodeType
 	additionalStartArgs []string
 	configModifications map[string]tomlutil.Toml
-	customPorts         *PortConfig
-	wallet              *types.Wallet
+	// internalPorts contains any overrides for the internal ports used by the node.
+	internalPorts types.Ports
+	wallet        *types.Wallet
 	// adminAuthToken is a token that has admin access, it should be generated after init.
 	adminAuthToken string
 	// External ports that are resolvable from the test runners themselves.
@@ -58,7 +85,7 @@ func NewNode(cfg Config, testName string, image container.Image, index int, node
 		nodeType:            nodeConfig.NodeType,
 		additionalStartArgs: nodeConfig.AdditionalStartArgs,
 		configModifications: nodeConfig.ConfigModifications,
-		customPorts:         nodeConfig.CustomPorts,
+		internalPorts:       initializeDANodePorts(nodeConfig.InternalPorts),
 		Node:                container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", index, nodeConfig.NodeType, logger),
 	}
 
@@ -109,16 +136,15 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 		return types.NetworkInfo{}, err
 	}
 
-	rpcPort := strings.TrimSuffix(n.getRPCPort(), "/tcp")
-	p2pPort := strings.TrimSuffix(n.getP2PPort(), "/tcp")
-
 	return types.NetworkInfo{
 		Internal: types.Network{
 			Hostname: n.HostName(),
 			IP:       internalIP,
 			Ports: types.Ports{
-				RPC: rpcPort,
-				P2P: p2pPort,
+				RPC:      n.internalPorts.RPC,
+				P2P:      n.internalPorts.P2P,
+				CoreRPC:  n.internalPorts.CoreRPC,
+				CoreGRPC: n.internalPorts.CoreGRPC,
 			},
 		},
 		External: types.Network{
@@ -194,64 +220,6 @@ func (n *Node) startAndInitialize(ctx context.Context, opts ...StartOption) erro
 	return nil
 }
 
-// getRPCPort returns the RPC port for the node type.
-func (n *Node) getRPCPort() string {
-	if n.customPorts != nil && n.customPorts.RPCPort != "" {
-		return n.customPorts.RPCPort + "/tcp"
-	}
-	return defaultDANodeRPCPort + "/tcp"
-}
-
-// getP2PPort returns the P2P port for the node type.
-func (n *Node) getP2PPort() string {
-	if n.customPorts != nil && n.customPorts.P2PPort != "" {
-		return n.customPorts.P2PPort + "/tcp"
-	}
-	return defaultDANodeP2PPort + "/tcp"
-}
-
-// PortInfo contains all port information for a DA node
-type PortInfo struct {
-	RPCPort      string // Internal RPC port
-	P2PPort      string // Internal P2P port
-	CoreRPCPort  string // Core RPC port to connect to
-	CoreGRPCPort string // Core GRPC port to connect to
-}
-
-// GetPortInfo returns all port information for the node
-func (n *Node) GetPortInfo() PortInfo {
-	// RPC Port logic
-	rpcPort := defaultDANodeRPCPort
-	if n.customPorts != nil && n.customPorts.RPCPort != "" {
-		rpcPort = n.customPorts.RPCPort
-	}
-
-	// P2P Port logic
-	p2pPort := defaultDANodeP2PPort
-	if n.customPorts != nil && n.customPorts.P2PPort != "" {
-		p2pPort = n.customPorts.P2PPort
-	}
-
-	// Core RPC Port logic
-	coreRPCPort := defaultCoreRPCPort
-	if n.customPorts != nil && n.customPorts.CoreRPCPort != "" {
-		coreRPCPort = n.customPorts.CoreRPCPort
-	}
-
-	// Core GRPC Port logic
-	coreGRPCPort := defaultCoreGRPCPort
-	if n.customPorts != nil && n.customPorts.CoreGRPCPort != "" {
-		coreGRPCPort = n.customPorts.CoreGRPCPort
-	}
-
-	return PortInfo{
-		RPCPort:      rpcPort,
-		P2PPort:      p2pPort,
-		CoreRPCPort:  coreRPCPort,
-		CoreGRPCPort: coreGRPCPort,
-	}
-}
-
 // initNode initializes the Node by running the "init" command for the specified Node type, network, and keyring settings.
 func (n *Node) initNode(ctx context.Context, chainID string, env []string) error {
 	if err := n.createWallet(ctx); err != nil {
@@ -304,7 +272,7 @@ func (n *Node) startNode(ctx context.Context, additionalStartArgs []string, conf
 	}
 
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.getRPCPort(), n.getP2PPort())
+	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.internalPorts.RPC+"/tcp", n.internalPorts.P2P+"/tcp")
 	if err != nil {
 		return err
 	}
@@ -342,8 +310,8 @@ func (n *Node) initAuthToken(ctx context.Context) error {
 // getPortMap returns the port mapping for the node type.
 func (n *Node) getPortMap() nat.PortMap {
 	return nat.PortMap{
-		nat.Port(n.getRPCPort()): {},
-		nat.Port(n.getP2PPort()): {},
+		nat.Port(n.internalPorts.RPC + "/tcp"): {},
+		nat.Port(n.internalPorts.P2P + "/tcp"): {},
 	}
 }
 

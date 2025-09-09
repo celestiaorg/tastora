@@ -296,7 +296,12 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Create bridge node config with custom ports
 		bridgeNodeConfig := da.NewNodeBuilder().
 			WithNodeType(types.BridgeNode).
-			WithPorts("27000", "3000", "27001", "9095").
+			WithInternalPorts(types.Ports{
+				RPC:      "27000",
+				P2P:      "3000",
+				CoreRPC:  "27001",
+				CoreGRPC: "9095",
+			}).
 			Build()
 
 		// Create DA network with custom port bridge node
@@ -326,11 +331,11 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		require.Contains(t, p2pAddr, ":3000", "P2P address should use custom port 3000")
 
 		// Verify all custom ports using GetPortInfo
-		portInfo := bridgeNode.GetPortInfo()
-		require.Equal(t, "27000", portInfo.RPCPort, "RPC port should be custom port 27000")
-		require.Equal(t, "3000", portInfo.P2PPort, "P2P port should be custom port 3000")
-		require.Equal(t, "27001", portInfo.CoreRPCPort, "Core RPC port should be custom port 27001")
-		require.Equal(t, "9095", portInfo.CoreGRPCPort, "Core GRPC port should be custom port 9095")
+		portInfo := bridgeP2PNetworkInfo.Internal.Ports
+		require.Equal(t, "27000", portInfo.RPC, "RPC port should be custom port 27000")
+		require.Equal(t, "3000", portInfo.P2P, "P2P port should be custom port 3000")
+		require.Equal(t, "27001", portInfo.CoreRPC, "Core RPC port should be custom port 27001")
+		require.Equal(t, "9095", portInfo.CoreGRPC, "Core GRPC port should be custom port 9095")
 	})
 
 	t.Run("test default ports behavior", func(t *testing.T) {
@@ -382,10 +387,10 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		require.Contains(t, p2pAddr, ":2121", "P2P address should use default port 2121")
 
 		// Verify all default ports using GetPortInfo
-		portInfo := bridgeNode.GetPortInfo()
-		require.Equal(t, "26658", portInfo.RPCPort, "RPC port should be default port 26658")
-		require.Equal(t, "2121", portInfo.P2PPort, "P2P port should be default port 2121")
-		require.Equal(t, "26657", portInfo.CoreRPCPort, "Core RPC port should be default port 26657")
-		require.Equal(t, "9090", portInfo.CoreGRPCPort, "Core GRPC port should be default port 9090")
+		portInfo := bridgeNetworkInfo.Internal.Ports
+		require.Equal(t, "26658", portInfo.RPC, "RPC port should be default port 26658")
+		require.Equal(t, "2121", portInfo.P2P, "P2P port should be default port 2121")
+		require.Equal(t, "26657", portInfo.CoreRPC, "Core RPC port should be default port 26657")
+		require.Equal(t, "9090", portInfo.CoreGRPC, "Core GRPC port should be default port 9090")
 	})
 }
