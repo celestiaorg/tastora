@@ -279,7 +279,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Setup isolated docker environment for this test
 		testCfg := setupDockerTest(t)
 
-		chain, err := testCfg.ChainBuilder.WithChainID("celestia").Build(testCfg.Ctx)
+		chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 		require.NoError(t, err)
 
 		err = chain.Start(testCfg.Ctx)
@@ -317,7 +317,22 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 		bridgeNode := bridgeNodes[0]
 
-		require.NoError(t, bridgeNode.Start(testCfg.Ctx))
+		chainNetworkInfo, err := chain.GetNetworkInfo(context.Background())
+		require.NoError(t, err)
+
+		chainID := chain.GetChainID()
+		genesisHash, err := getGenesisHash(testCfg.Ctx, chain)
+		require.NoError(t, err)
+
+		require.NoError(t, bridgeNode.Start(testCfg.Ctx,
+			da.WithChainID(chainID),
+			da.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", chainNetworkInfo.Internal.Hostname, "--rpc.addr", "0.0.0.0"),
+			da.WithEnvironmentVariables(
+				map[string]string{
+					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, ""),
+					"P2P_NETWORK":     chainID,
+				},
+			)))
 
 		// Verify that internal addresses use the custom ports
 		bridgeNetworkInfo, err := bridgeNode.GetNetworkInfo(context.Background())
@@ -342,7 +357,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Setup isolated docker environment for this test
 		testCfg := setupDockerTest(t)
 
-		chain, err := testCfg.ChainBuilder.WithChainID("celestia").Build(testCfg.Ctx)
+		chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 		require.NoError(t, err)
 
 		err = chain.Start(testCfg.Ctx)
@@ -374,7 +389,22 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 		bridgeNode := bridgeNodes[0]
 
-		require.NoError(t, bridgeNode.Start(testCfg.Ctx))
+		chainNetworkInfo, err := chain.GetNetworkInfo(context.Background())
+		require.NoError(t, err)
+
+		chainID := chain.GetChainID()
+		genesisHash, err := getGenesisHash(testCfg.Ctx, chain)
+		require.NoError(t, err)
+
+		require.NoError(t, bridgeNode.Start(testCfg.Ctx,
+			da.WithChainID(chainID),
+			da.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", chainNetworkInfo.Internal.Hostname, "--rpc.addr", "0.0.0.0"),
+			da.WithEnvironmentVariables(
+				map[string]string{
+					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, ""),
+					"P2P_NETWORK":     chainID,
+				},
+			)))
 
 		// Verify that internal addresses use the default ports
 		bridgeNetworkInfo, err := bridgeNode.GetNetworkInfo(context.Background())
