@@ -140,12 +140,7 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 		Internal: types.Network{
 			Hostname: n.HostName(),
 			IP:       internalIP,
-			Ports: types.Ports{
-				RPC:      n.internalPorts.RPC,
-				P2P:      n.internalPorts.P2P,
-				CoreRPC:  n.internalPorts.CoreRPC,
-				CoreGRPC: n.internalPorts.CoreGRPC,
-			},
+			Ports:    n.internalPorts,
 		},
 		External: types.Network{
 			Hostname: "0.0.0.0",
