@@ -310,8 +310,8 @@ func (n *Node) startNode(ctx context.Context, additionalStartArgs []string, conf
 	}
 
 	n.externalPorts = types.Ports{
-		RPC: internal.ExtractPort(hostPorts[0]),
-		P2P: internal.ExtractPort(hostPorts[1]),
+		RPC: internal.MustExtractPort(hostPorts[0]),
+		P2P: internal.MustExtractPort(hostPorts[1]),
 	}
 	return nil
 }

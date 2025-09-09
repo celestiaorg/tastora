@@ -3,9 +3,8 @@ package internal
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	dockerclient "github.com/moby/moby/client"
+	"net"
 )
 
 // GetContainerInternalIP returns the internal IP address of a container within the docker network.
@@ -22,7 +21,7 @@ func GetContainerInternalIP(ctx context.Context, client dockerclient.APIClient, 
 	if networks == nil {
 		return "", nil
 	}
-	
+
 	for _, network := range networks {
 		if network.IPAddress != "" {
 			return network.IPAddress, nil
@@ -32,9 +31,17 @@ func GetContainerInternalIP(ctx context.Context, client dockerclient.APIClient, 
 }
 
 // ExtractPort extracts the port number from a "host:port" address
-func ExtractPort(address string) string {
-	if idx := strings.LastIndex(address, ":"); idx != -1 {
-		return address[idx+1:]
+func ExtractPort(address string) (string, error) {
+	_, port, err := net.SplitHostPort(address)
+	return port, err
+}
+
+// MustExtractPort extracts the port number from a "host:port" address.
+// It panics if the address is not in the correct format.
+func MustExtractPort(address string) string {
+	port, err := ExtractPort(address)
+	if err != nil {
+		panic(err)
 	}
-	return address
+	return port
 }

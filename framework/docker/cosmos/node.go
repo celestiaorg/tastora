@@ -80,7 +80,7 @@ type ChainNode struct {
 
 	lock sync.Mutex
 
-	// External ports set during startContainer.
+	// externalPorts are set during startContainer.
 	externalPorts types.Ports
 
 	// faucetWallet stores the faucet wallet for this node
@@ -289,10 +289,10 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 		return err
 	}
 	cn.externalPorts = types.Ports{
-		RPC:  internal.ExtractPort(hostPorts[0]),
-		GRPC: internal.ExtractPort(hostPorts[1]),
-		API:  internal.ExtractPort(hostPorts[2]),
-		P2P:  internal.ExtractPort(hostPorts[3]),
+		RPC:  internal.MustExtractPort(hostPorts[0]),
+		GRPC: internal.MustExtractPort(hostPorts[1]),
+		API:  internal.MustExtractPort(hostPorts[2]),
+		P2P:  internal.MustExtractPort(hostPorts[3]),
 	}
 
 	return cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC)

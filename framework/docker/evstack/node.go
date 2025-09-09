@@ -51,7 +51,7 @@ type Node struct {
 	// additionalStartArgs are additional command-line arguments for this node
 	additionalStartArgs []string
 
-	// External ports set during startContainer.
+	// externalPorts are set during startContainer.
 	externalPorts types.Ports
 }
 
@@ -173,11 +173,11 @@ func (n *Node) startContainer(ctx context.Context) error {
 	}
 	// Extract just the port numbers and store in structured format
 	n.externalPorts = types.Ports{
-		RPC:  internal.ExtractPort(hostPorts[0]),
-		GRPC: internal.ExtractPort(hostPorts[1]),
-		API:  internal.ExtractPort(hostPorts[2]),
-		P2P:  internal.ExtractPort(hostPorts[3]),
-		HTTP: internal.ExtractPort(hostPorts[4]),
+		RPC:  internal.MustExtractPort(hostPorts[0]),
+		GRPC: internal.MustExtractPort(hostPorts[1]),
+		API:  internal.MustExtractPort(hostPorts[2]),
+		P2P:  internal.MustExtractPort(hostPorts[3]),
+		HTTP: internal.MustExtractPort(hostPorts[4]),
 	}
 
 	err = n.initGRPCConnection("tcp://0.0.0.0:" + n.externalPorts.RPC)
