@@ -108,7 +108,7 @@ func (n *Node) Init(ctx context.Context, initArguments ...string) error {
 		cmd = append(cmd,
 			"--evnode.node.aggregator",
 			"--evnode.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
-			"--evnode.signer.path="+signerPath)
+			"--evnode.signer.signer_path="+signerPath)
 	}
 
 	cmd = append(cmd, initArguments...)
@@ -152,7 +152,7 @@ func (n *Node) createEvstackContainer(ctx context.Context, additionalStartArgs .
 		startCmd = append(startCmd,
 			"--evnode.node.aggregator",
 			"--evnode.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
-			"--evnode.signer.path="+signerPath)
+			"--evnode.signer.signer_path="+signerPath)
 	}
 
 	// add stored additional start args from the node configuration
