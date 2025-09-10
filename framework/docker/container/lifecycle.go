@@ -211,7 +211,12 @@ func (c *Lifecycle) StopContainer(ctx context.Context) error {
 	timeoutSec := 30
 	timeout.Timeout = &timeoutSec
 
-	return c.client.ContainerStop(ctx, c.id, timeout)
+	err := c.client.ContainerStop(ctx, c.id, timeout)
+	if err != nil && errdefs.IsNotModified(err) {
+		// container is already stopped, this is not an error
+		return nil
+	}
+	return err
 }
 
 func (c *Lifecycle) RemoveContainer(ctx context.Context) error {

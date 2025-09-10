@@ -137,7 +137,7 @@ func (n *Network) RemoveNode(ctx context.Context, nodeNames ...string) error {
 		node := n.nodeMap[nodeName]
 		// remove all nodes concurrently
 		eg.Go(func() error {
-			return node.Stop(egCtx)
+			return node.Remove(egCtx)
 		})
 	}
 
