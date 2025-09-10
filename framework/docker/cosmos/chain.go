@@ -392,19 +392,26 @@ func (c *Chain) Stop(ctx context.Context) error {
 }
 
 // Remove stops and removes all nodes in the chain.
-func (c *Chain) Remove(ctx context.Context) error {
+func (c *Chain) Remove(ctx context.Context, opts ...types.RemoveOption) error {
 	var eg errgroup.Group
 	for _, n := range c.Nodes() {
 		n := n
 		eg.Go(func() error {
-			return n.Remove(ctx)
+			return n.Remove(ctx, opts...)
 		})
 	}
 	return eg.Wait()
 }
 
 // UpgradeVersion updates the chain's version across all components, including validators and full nodes, and pulls new images.
-func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
+// It removes containers while preserving volumes, updates images, and restarts the chain with the new version.
+func (c *Chain) UpgradeVersion(ctx context.Context, version string) error {
+	// remove containers but preserve volumes for upgrade
+	if err := c.Remove(ctx, types.WithPreserveVolumes()); err != nil {
+		return fmt.Errorf("failed to remove containers for upgrade: %w", err)
+	}
+
+	// Update image versions
 	c.Config.Image.Version = version
 	for _, n := range c.Validators {
 		n.Image.Version = version
@@ -412,7 +419,16 @@ func (c *Chain) UpgradeVersion(ctx context.Context, version string) {
 	for _, n := range c.FullNodes {
 		n.Image.Version = version
 	}
+
+	// Pull new images
 	c.pullImages(ctx)
+
+	// Start the chain with the new version
+	if err := c.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start chain after upgrade: %w", err)
+	}
+
+	return nil
 }
 
 // pullImages pulls all images used by the chain chains.
