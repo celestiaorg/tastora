@@ -21,16 +21,13 @@ type ChainRelayerConfig struct {
 }
 
 type Chain interface {
+	NetworkInfoProvider
 	// Height returns the current height of the chain.
 	Height(ctx context.Context) (int64, error)
 	// Start starts the chain.
 	Start(ctx context.Context) error
 	// Stop stops the chain.
 	Stop(ctx context.Context) error
-	// GetHostRPCAddress returns the RPC address of the chain resolvable by the test runner.
-	GetHostRPCAddress() string
-	// GetGRPCAddress returns the internal GRPC address.
-	GetGRPCAddress() string
 	// GetVolumeName is a docker specific field, it is the name of the docker volume the chain nodes are mounted to.
 	GetVolumeName() string
 	// GetNodes returns a slice of ChainNodes.
@@ -52,16 +49,11 @@ type Chain interface {
 }
 
 type ChainNode interface {
+	NetworkInfoProvider
 	// GetType returns if the node is a fullnode or a validator. NodeTypeConsensusFull or NodeTypeValidator
 	GetType() ConsensusNodeType
 	// GetRPCClient retrieves the RPC client associated with the chain node, returning the client instance or an error.
 	GetRPCClient() (rpcclient.Client, error)
-	// GetInternalPeerAddress returns the peer address resolvable within the network.
-	GetInternalPeerAddress(ctx context.Context) (string, error)
-	// GetInternalRPCAddress returns the rpc address resolvable within the network.
-	GetInternalRPCAddress(ctx context.Context) (string, error)
-	// GetInternalHostName returns the hostname resolvable within the network.
-	GetInternalHostName(ctx context.Context) (string, error)
 	// ReadFile reads the contents of a file specified by a relative filePath and returns its byte data or an error on failure.
 	ReadFile(ctx context.Context, filePath string) ([]byte, error)
 	// WriteFile writes the provided byte data to the specified relative filePath. An error is returned if the write operation fails.
@@ -70,6 +62,4 @@ type ChainNode interface {
 	GetKeyring() (keyring.Keyring, error)
 	// Exec executes a command in the specified context with the given environment variables, returning stdout, stderr, and an error.
 	Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error)
-	// GetInternalIP returns the internal IP address of the chain node container within the docker network.
-	GetInternalIP(ctx context.Context) (string, error)
 }

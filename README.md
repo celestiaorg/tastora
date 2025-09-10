@@ -65,47 +65,38 @@ func TestCelestiaNodes(t *testing.T) {
 }
 ```
 
-### Configurable Ports Setup
+### Network Information
 
-For complex setups or when running multiple networks, you can configure custom ports:
+All nodes provide standardized network information through `GetNetworkInfo()`:
 
 ```go
-// Use predefined default ports
-daNetwork, err := docker.NewDANetwork(
-    ctx,
-    "test-network",
-    docker.WithDefaultPorts(), // Uses ports 26668, 2131, 26667, 9091
-)
+// Get network info from any node
+networkInfo, err := node.GetNetworkInfo(ctx)
+if err != nil {
+    t.Fatal(err)
+}
 
-// Or configure specific ports
-daNetwork, err := docker.NewDANetwork(
-    ctx,
-    "test-network",
-    docker.WithDANodeCoreConnection("192.168.1.100", 26657, 9090),
-    docker.WithDANodePorts(26658, 2121),
-)
-
-// Configure different node types with specific ports
-daNetwork, err := docker.NewDANetwork(
-    ctx,
-    "test-network",
-    docker.WithNodePorts(types.BridgeNode, 0, 26658, 2121),
-    docker.WithNodePorts(types.LightNode, 0, 26659, 2122),
-)
+// Access network details
+internalRPCAddr := networkInfo.Internal.RPCAddress()  // "hostname:26657"
+externalRPCAddr := networkInfo.External.RPCAddress()  // "0.0.0.0:32145"
 ```
 
-## Port Configuration
+DA nodes support custom port configuration:
 
-Tastora supports configurable internal ports for DA nodes, solving connectivity issues in complex deployments where celestia-app runs on different servers or uses non-default ports.
+```go
+// Configure DA node with custom ports
+customPorts := types.Ports{
+    RPC:      "27000",  // DA node RPC port
+    P2P:      "3000",   // DA node P2P port  
+    CoreRPC:  "26657",  // celestia-app RPC port
+    CoreGRPC: "9090",   // celestia-app GRPC port
+}
 
-### Available Configuration Options
-
-- `WithDefaultPorts()` - Quick setup with predefined ports (26668, 2131, 26667, 9091)
-- `WithDANodePorts(rpc, p2p)` - Configure DA node internal ports
-- `WithDANodeCoreConnection(rpc, grpc)` - Configure connection to celestia-app
-- `WithNodePorts(nodeType, nodeIndex, rpc, p2p)` - Configure ports for specific node type and index
-
-This addresses the issue where celestia bridge nodes fail to start when trying to connect to hardcoded `localhost:26657` in multi-server setups.
+bridgeNodeConfig := da.NewNodeBuilder().
+    WithNodeType(types.BridgeNode).
+    WithInternalPorts(customPorts).
+    Build()
+```
 
 ## Fine-Grained Wallet Control
 

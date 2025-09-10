@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/types"
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
@@ -51,12 +51,8 @@ type Node struct {
 	// additionalStartArgs are additional command-line arguments for this node
 	additionalStartArgs []string
 
-	// Ports set during startContainer.
-	hostRPCPort  string
-	hostAPIPort  string
-	hostGRPCPort string
-	hostP2PPort  string
-	hostHTTPPort string
+	// externalPorts are set during startContainer.
+	externalPorts types.Ports
 }
 
 func NewNode(cfg Config, testName string, image container.Image, index int, isAggregator bool, additionalStartArgs []string) *Node {
@@ -175,9 +171,16 @@ func (n *Node) startContainer(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	n.hostRPCPort, n.hostGRPCPort, n.hostAPIPort, n.hostP2PPort, n.hostHTTPPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3], hostPorts[4]
+	// Extract just the port numbers and store in structured format
+	n.externalPorts = types.Ports{
+		RPC:  internal.MustExtractPort(hostPorts[0]),
+		GRPC: internal.MustExtractPort(hostPorts[1]),
+		API:  internal.MustExtractPort(hostPorts[2]),
+		P2P:  internal.MustExtractPort(hostPorts[3]),
+		HTTP: internal.MustExtractPort(hostPorts[4]),
+	}
 
-	err = n.initGRPCConnection("tcp://" + n.hostRPCPort)
+	err = n.initGRPCConnection("tcp://0.0.0.0:" + n.externalPorts.RPC)
 	if err != nil {
 		return err
 	}
@@ -195,10 +198,16 @@ func (n *Node) initGRPCConnection(addr string) error {
 		return err
 	}
 
+	networkInfo, err := n.GetNetworkInfo(context.TODO())
+	if err != nil {
+		return fmt.Errorf("failed to get network info: %w", err)
+	}
+
 	httpClient.Timeout = 10 * time.Second
 	grpcConn, err := grpc.NewClient(
-		n.hostGRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		networkInfo.External.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
+
 	if err != nil {
 		return fmt.Errorf("grpc dial: %w", err)
 	}
@@ -212,34 +221,35 @@ func (n *Node) GetHostName() string {
 	return n.HostName()
 }
 
-// GetHostRPCPort returns the host RPC port
-func (n *Node) GetHostRPCPort() string {
-	return strings.ReplaceAll(n.hostRPCPort, "0.0.0.0:", "")
-}
+// GetNetworkInfo returns the network information for the evstack node.
+func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	internalIP, err := internal.GetContainerInternalIP(ctx, n.DockerClient, n.ContainerLifecycle.ContainerID())
+	if err != nil {
+		return types.NetworkInfo{}, err
+	}
 
-// GetHostAPIPort returns the host API port
-func (n *Node) GetHostAPIPort() string {
-	return strings.ReplaceAll(n.hostAPIPort, "0.0.0.0:", "")
-}
-
-// GetHostGRPCPort returns the host GRPC port
-func (n *Node) GetHostGRPCPort() string {
-	return strings.ReplaceAll(n.hostGRPCPort, "0.0.0.0:", "")
-}
-
-// GetHostP2PPort returns the host P2P port
-func (n *Node) GetHostP2PPort() string {
-	return strings.ReplaceAll(n.hostP2PPort, "0.0.0.0:", "")
-}
-
-// GetHostHTTPPort returns the host HTTP port
-func (n *Node) GetHostHTTPPort() string {
-	return strings.ReplaceAll(n.hostHTTPPort, "0.0.0.0:", "")
+	return types.NetworkInfo{
+		Internal: types.Network{
+			Hostname: n.HostName(),
+			IP:       internalIP,
+			Ports: types.Ports{
+				RPC:  "7331",
+				GRPC: "9090",
+				API:  "1317",
+				P2P:  "26656",
+				HTTP: "8080",
+			},
+		},
+		External: types.Network{
+			Hostname: "0.0.0.0",
+			Ports:    n.externalPorts,
+		},
+	}, nil
 }
 
 // waitForNodeReady polls the health endpoint until the node is ready or timeout is reached
 func (n *Node) waitForNodeReady(ctx context.Context, timeout time.Duration) error {
-	healthURL := fmt.Sprintf("http://%s/evnode.v1.HealthService/Livez", n.hostRPCPort)
+	healthURL := fmt.Sprintf("http://0.0.0.0:%s/evnode.v1.HealthService/Livez", n.externalPorts.RPC)
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	timeoutCh := time.After(timeout)

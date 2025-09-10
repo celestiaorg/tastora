@@ -52,8 +52,9 @@ func TestEvstack(t *testing.T) {
 	genesisHash, err := getGenesisHash(testCfg.Ctx, chain)
 	require.NoError(t, err)
 
-	hostname, err := chain.GetNodes()[0].GetInternalHostName(testCfg.Ctx)
-	require.NoError(t, err, "failed to get internal hostname")
+	networkInfo, err := chain.GetNodes()[0].GetNetworkInfo(testCfg.Ctx)
+	require.NoError(t, err, "failed to get network info")
+	hostname := networkInfo.Internal.Hostname
 
 	bridgeNode := daNetwork.GetBridgeNodes()[0]
 	chainID := chain.GetChainID()
@@ -120,8 +121,9 @@ func TestEvstack(t *testing.T) {
 	require.NoError(t, err)
 
 	// Use the configured RPC port instead of hardcoded 26658
-	bridgeRPCAddress, err := bridgeNode.GetInternalRPCAddress()
+	bridgeNetworkInfo, err := bridgeNode.GetNetworkInfo(testCfg.Ctx)
 	require.NoError(t, err)
+	bridgeRPCAddress := bridgeNetworkInfo.Internal.RPCAddress()
 	daAddress := fmt.Sprintf("http://%s", bridgeRPCAddress)
 	err = aggregatorNode.Start(testCfg.Ctx,
 		"--evnode.da.address", daAddress,

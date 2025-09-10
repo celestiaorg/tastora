@@ -9,8 +9,9 @@ import (
 )
 
 type PeerAddresser interface {
-	GetInternalPeerAddress(ctx context.Context) (string, error)
+	types.NetworkInfoProvider
 	GetType() types.ConsensusNodeType
+	NodeID(ctx context.Context) (string, error)
 }
 
 // BuildInternalPeerAddressList constructs a comma-separated list of internal peer addresses from the given nodes.
@@ -19,11 +20,18 @@ func BuildInternalPeerAddressList[T PeerAddresser](ctx context.Context, peers []
 	addrs := make([]string, 0, len(peers))
 
 	for _, p := range peers {
-		addr, err := p.GetInternalPeerAddress(ctx)
+		networkInfo, err := p.GetNetworkInfo(ctx)
 		if err != nil {
-			return "", fmt.Errorf("failed to get peer address from node of type %s: %w", p.GetType().String(), err)
+			return "", fmt.Errorf("failed to get network info from node of type %s: %w", p.GetType().String(), err)
 		}
-		addrs = append(addrs, addr)
+		
+		nodeID, err := p.NodeID(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to get node ID from node of type %s: %w", p.GetType().String(), err)
+		}
+		
+		peerAddr := fmt.Sprintf("%s@%s", nodeID, networkInfo.Internal.P2PAddress())
+		addrs = append(addrs, peerAddr)
 	}
 
 	return strings.Join(addrs, ","), nil
@@ -34,11 +42,11 @@ func BuildInternalPeerAddressList[T PeerAddresser](ctx context.Context, peers []
 func BuildInternalRPCAddressList(ctx context.Context, nodes []types.ChainNode) (string, error) {
 	addrs := make([]string, 0, len(nodes))
 	for _, node := range nodes {
-		addr, err := node.GetInternalRPCAddress(ctx)
+		networkInfo, err := node.GetNetworkInfo(ctx)
 		if err != nil {
-			return "", fmt.Errorf("failed to get rpc address from node of type %s: %w", node.GetType().String(), err)
+			return "", fmt.Errorf("failed to get network info from node of type %s: %w", node.GetType().String(), err)
 		}
-		addrs = append(addrs, addr)
+		addrs = append(addrs, networkInfo.Internal.RPCAddress())
 	}
 	return strings.Join(addrs, ","), nil
 }

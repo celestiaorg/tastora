@@ -46,22 +46,28 @@ const (
 	privValPort = "1234/tcp"
 )
 
-// GetInternalPeerAddress retrieves the internal peer address for the ChainNode using its ID, hostname, and default port.
-func (cn *ChainNode) GetInternalPeerAddress(ctx context.Context) (string, error) {
-	id, err := cn.NodeID(ctx)
+func (cn *ChainNode) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	internalIP, err := internal.GetContainerInternalIP(ctx, cn.DockerClient, cn.ContainerLifecycle.ContainerID())
 	if err != nil {
-		return "", err
+		return types.NetworkInfo{}, err
 	}
-	return fmt.Sprintf("%s@%s:%d", id, cn.HostName(), 26656), nil
-}
 
-// GetInternalRPCAddress returns the internal RPC address of the chain node in the format "nodeID@hostname:port".
-func (cn *ChainNode) GetInternalRPCAddress(ctx context.Context) (string, error) {
-	id, err := cn.NodeID(ctx)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s@%s:%d", id, cn.HostName(), 26657), nil
+	return types.NetworkInfo{
+		Internal: types.Network{
+			Hostname: cn.HostName(),
+			IP:       internalIP,
+			Ports: types.Ports{
+				RPC:  "26657",
+				GRPC: "9090",
+				API:  "1317",
+				P2P:  "26656",
+			},
+		},
+		External: types.Network{
+			Hostname: "0.0.0.0",
+			Ports:    cn.externalPorts,
+		},
+	}, nil
 }
 
 type ChainNodes []*ChainNode
@@ -74,11 +80,8 @@ type ChainNode struct {
 
 	lock sync.Mutex
 
-	// Ports set during startContainer.
-	hostRPCPort  string
-	hostAPIPort  string
-	hostGRPCPort string
-	hostP2PPort  string
+	// externalPorts are set during startContainer.
+	externalPorts types.Ports
 
 	// faucetWallet stores the faucet wallet for this node
 	faucetWallet *types.Wallet
@@ -140,36 +143,6 @@ func NewChainNode(
 	tn.SetContainerLifecycle(container.NewLifecycle(logger, dockerClient, tn.Name()))
 
 	return tn
-}
-
-// GetInternalHostName retrieves the internal host name of the ChainNode instance. Returns the host name and an error if any.
-func (cn *ChainNode) GetInternalHostName(ctx context.Context) (string, error) {
-	return cn.HostName(), nil
-}
-
-// GetInternalIP returns the internal IP address of the chain node container within the docker network.
-func (cn *ChainNode) GetInternalIP(ctx context.Context) (string, error) {
-	inspect, err := cn.DockerClient.ContainerInspect(ctx, cn.ContainerLifecycle.ContainerID())
-	if err != nil {
-		return "", fmt.Errorf("inspecting container: %w", err)
-	}
-
-	if inspect.NetworkSettings == nil {
-		return "", fmt.Errorf("container network settings not available")
-	}
-
-	networks := inspect.NetworkSettings.Networks
-	if networks == nil {
-		return "", fmt.Errorf("container networks not available")
-	}
-
-	for _, network := range networks {
-		if network.IPAddress != "" {
-			return network.IPAddress, nil
-		}
-	}
-
-	return "", fmt.Errorf("no IP address found for container")
 }
 
 // HostName returns the condensed hostname for the ChainNode, truncating if the name is 64 characters or longer.
@@ -315,9 +288,14 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	cn.hostRPCPort, cn.hostGRPCPort, cn.hostAPIPort, cn.hostP2PPort = hostPorts[0], hostPorts[1], hostPorts[2], hostPorts[3]
+	cn.externalPorts = types.Ports{
+		RPC:  internal.MustExtractPort(hostPorts[0]),
+		GRPC: internal.MustExtractPort(hostPorts[1]),
+		API:  internal.MustExtractPort(hostPorts[2]),
+		P2P:  internal.MustExtractPort(hostPorts[3]),
+	}
 
-	return cn.initClient("tcp://" + cn.hostRPCPort)
+	return cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC)
 }
 
 // initClient creates and assigns a new Tendermint RPC client to the ChainNode.
@@ -335,8 +313,14 @@ func (cn *ChainNode) initClient(addr string) error {
 
 	cn.Client = rpcClient
 
+	networkInfo, err := cn.GetNetworkInfo(context.TODO())
+	if err != nil {
+		return fmt.Errorf("failed to get network info: %w", err)
+	}
+
 	grpcConn, err := grpc.NewClient(
-		cn.hostGRPCPort, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		networkInfo.External.GRPCAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return fmt.Errorf("grpc dial: %w", err)

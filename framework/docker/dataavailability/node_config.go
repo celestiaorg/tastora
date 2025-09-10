@@ -20,18 +20,10 @@ type NodeConfig struct {
 	Env []string
 	// ConfigModifications specifies modifications to be applied to config files
 	ConfigModifications map[string]toml.Toml
-	// CustomPorts allows overriding default port configuration
-	CustomPorts *PortConfig
+	// InternalPorts allows overriding default port configuration
+	InternalPorts types.Ports
 	// postInit functions are executed sequentially after the node is initialized
 	postInit []func(ctx context.Context, node *Node) error
-}
-
-// PortConfig allows customization of node ports
-type PortConfig struct {
-	RPCPort      string // Internal RPC port (default: "26658")
-	P2PPort      string // Internal P2P port (default: "2121")
-	CoreRPCPort  string // Port to connect to celestia-app RPC (default: "26657")
-	CoreGRPCPort string // Port to connect to celestia-app GRPC (default: "9090")
 }
 
 // NodeBuilder provides a fluent interface for building NodeConfig
@@ -81,20 +73,9 @@ func (b *NodeBuilder) WithConfigModifications(modifications map[string]toml.Toml
 	return b
 }
 
-// WithCustomPorts sets custom port configuration
-func (b *NodeBuilder) WithCustomPorts(ports *PortConfig) *NodeBuilder {
-	b.config.CustomPorts = ports
-	return b
-}
-
-// WithPorts sets custom ports using individual values
-func (b *NodeBuilder) WithPorts(rpcPort, p2pPort, coreRPCPort, coreGRPCPort string) *NodeBuilder {
-	b.config.CustomPorts = &PortConfig{
-		RPCPort:      rpcPort,
-		P2PPort:      p2pPort,
-		CoreRPCPort:  coreRPCPort,
-		CoreGRPCPort: coreGRPCPort,
-	}
+// WithInternalPorts sets custom internal port configuration
+func (b *NodeBuilder) WithInternalPorts(ports types.Ports) *NodeBuilder {
+	b.config.InternalPorts = ports
 	return b
 }
 
