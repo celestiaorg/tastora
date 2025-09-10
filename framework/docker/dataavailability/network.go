@@ -74,29 +74,47 @@ func (n *Network) GetLightNodes() []*Node {
 	return n.GetNodesByType(types.LightNode)
 }
 
-// AddNode adds a single node to the DA network with the given configuration.
-// The node is created and initialized but not started - call Start() on the returned node to start it.
-func (n *Network) AddNode(ctx context.Context, nodeConfig NodeConfig) (*Node, error) {
+// AddNodes adds one or more nodes to the DA network with the given configurations.
+// The nodes are created and initialized but not started - call Start() on the returned nodes to start them.
+func (n *Network) AddNodes(ctx context.Context, nodeConfigs ...NodeConfig) ([]*Node, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	nodeIndex := n.nextNodeIdx
-
-	// node index is always unique and incrementing and does not decrement if nodes are removed.
-	// this ensures all created containers are given unique names.
-	n.nextNodeIdx++
-
-	// create a builder that will build nodes associated with this network.
-	builder := NewNetworkBuilderFromNetwork(n)
-	node, err := builder.newNode(ctx, nodeConfig, nodeIndex)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create node: %w", err)
+	if len(nodeConfigs) == 0 {
+		return nil, fmt.Errorf("at least one node configuration must be provided")
 	}
 
-	// node names will be unique due to the incrementing index
-	n.nodeMap[node.Name()] = node
+	// get unique indices for all nodes upfront
+	startIndex := n.nextNodeIdx
+	n.nextNodeIdx += len(nodeConfigs)
 
-	return node, nil
+	eg, egCtx := errgroup.WithContext(ctx)
+	createdNodes := make([]*Node, len(nodeConfigs))
+
+	for i, nodeConfig := range nodeConfigs {
+		i, nodeConfig := i, nodeConfig // capture loop variables
+		nodeIndex := startIndex + i
+
+		eg.Go(func() error {
+			builder := NewNetworkBuilderFromNetwork(n)
+			node, err := builder.newNode(egCtx, nodeConfig, nodeIndex)
+			if err != nil {
+				return fmt.Errorf("failed to create node %d: %w", i, err)
+			}
+			createdNodes[i] = node // unique index per goroutine as slice is pre-sized
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, fmt.Errorf("failed to create nodes: %w", err)
+	}
+
+	for _, node := range createdNodes {
+		n.nodeMap[node.Name()] = node
+	}
+
+	return createdNodes, nil
 }
 
 // RemoveNode removes a node from the DA network by name, stopping and cleaning up its resources.

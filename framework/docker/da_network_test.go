@@ -497,8 +497,10 @@ func TestDANetworkAddNode(t *testing.T) {
 			Build()
 
 		// Dynamically add the full node to the network
-		newNode, err := daNetwork.AddNode(testCfg.Ctx, fullNodeConfig)
+		newNodes, err := daNetwork.AddNodes(testCfg.Ctx, fullNodeConfig)
 		require.NoError(t, err, "should be able to add a full node dynamically")
+		require.Len(t, newNodes, 1, "should return 1 node")
+		newNode := newNodes[0]
 		require.NotNil(t, newNode, "new node should not be nil")
 		require.Equal(t, types.FullNode, newNode.GetType(), "new node should be a full node")
 
@@ -536,8 +538,10 @@ func TestDANetworkAddNode(t *testing.T) {
 			Build()
 
 		// Dynamically add the light node to the network
-		newNode, err := daNetwork.AddNode(testCfg.Ctx, lightNodeConfig)
+		newNodes, err := daNetwork.AddNodes(testCfg.Ctx, lightNodeConfig)
 		require.NoError(t, err, "should be able to add a light node dynamically")
+		require.Len(t, newNodes, 1, "should return 1 node")
+		newNode := newNodes[0]
 		require.NotNil(t, newNode, "new node should not be nil")
 		require.Equal(t, types.LightNode, newNode.GetType(), "new node should be a light node")
 
@@ -569,6 +573,51 @@ func TestDANetworkAddNode(t *testing.T) {
 		require.Len(t, daNetwork.GetFullNodes(), 1, "should still have 1 full node")
 		require.Len(t, daNetwork.GetLightNodes(), 1, "should now have 1 light node")
 		require.Len(t, daNetwork.GetNodes(), 3, "should now have 3 total nodes")
+	})
+
+	t.Run("can add multiple nodes concurrently", func(t *testing.T) {
+		// Create multiple node configurations
+		fullNodeConfig1 := da.NewNodeBuilder().WithNodeType(types.FullNode).Build()
+		fullNodeConfig2 := da.NewNodeBuilder().WithNodeType(types.FullNode).Build()
+		lightNodeConfig := da.NewNodeBuilder().WithNodeType(types.LightNode).Build()
+
+		// Add multiple nodes simultaneously using varargs
+		newNodes, err := daNetwork.AddNodes(testCfg.Ctx, fullNodeConfig1, fullNodeConfig2, lightNodeConfig)
+		require.NoError(t, err, "should be able to add multiple nodes concurrently")
+		require.Len(t, newNodes, 3, "should return 3 nodes")
+
+		// Verify node types
+		nodeTypes := make([]types.DANodeType, len(newNodes))
+		for i, node := range newNodes {
+			nodeTypes[i] = node.GetType()
+		}
+		require.Contains(t, nodeTypes, types.FullNode, "should contain full nodes")
+		require.Contains(t, nodeTypes, types.LightNode, "should contain light node")
+
+		// Verify all nodes were added to the network
+		require.Len(t, daNetwork.GetNodes(), 6, "should now have 6 total nodes")
+		require.Len(t, daNetwork.GetBridgeNodes(), 1, "should still have 1 bridge node")
+		require.Len(t, daNetwork.GetFullNodes(), 3, "should now have 3 full nodes")
+		require.Len(t, daNetwork.GetLightNodes(), 2, "should now have 2 light nodes")
+
+		// Verify all returned nodes are in the network
+		allNodes := daNetwork.GetNodes()
+		for _, newNode := range newNodes {
+			found := false
+			for _, networkNode := range allNodes {
+				if networkNode.Name() == newNode.Name() {
+					found = true
+					break
+				}
+			}
+			require.True(t, found, "newly added node %s should be found in network", newNode.Name())
+		}
+	})
+
+	t.Run("adding no node configs returns error", func(t *testing.T) {
+		_, err := daNetwork.AddNodes(testCfg.Ctx)
+		require.Error(t, err, "adding no node configs should return error")
+		require.Contains(t, err.Error(), "at least one node configuration must be provided", "error should indicate missing node configs")
 	})
 }
 
@@ -734,8 +783,9 @@ func TestDANetworkRemoveNode(t *testing.T) {
 
 		// add a new full node back
 		newFullNodeConfig := da.NewNodeBuilder().WithNodeType(types.FullNode).Build()
-		newFullNode, err := daNetwork.AddNode(testCfg.Ctx, newFullNodeConfig)
+		newFullNodes, err := daNetwork.AddNodes(testCfg.Ctx, newFullNodeConfig)
 		require.NoError(t, err, "should be able to add full node back")
+		newFullNode := newFullNodes[0]
 
 		// verify network state after adding back
 		require.Len(t, daNetwork.GetNodes(), 2, "should now have 2 total nodes")
