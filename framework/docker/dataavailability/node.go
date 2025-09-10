@@ -151,7 +151,13 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 
 // Stop terminates the Node by stopping its associated container gracefully using the provided context.
 func (n *Node) Stop(ctx context.Context) error {
-	return n.StopContainer(ctx)
+	if err := n.StopContainer(ctx); err != nil {
+		return fmt.Errorf("failed to stop container: %w", err)
+	}
+	if err := n.RemoveContainer(ctx); err != nil {
+		return fmt.Errorf("failed to remove container: %w", err)
+	}
+	return nil
 }
 
 // Start initializes and starts the Node with the provided options in the given context.

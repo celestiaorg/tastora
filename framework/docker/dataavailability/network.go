@@ -76,10 +76,13 @@ func (n *Network) GetLightNodes() []*Node {
 // AddNode adds a single node to the DA network with the given configuration.
 // The node is created and initialized but not started - call Start() on the returned node to start it.
 func (n *Network) AddNode(ctx context.Context, nodeConfig NodeConfig) (*Node, error) {
-	// Get next unique node index
 	n.mu.Lock()
 	defer n.mu.Unlock()
+
 	nodeIndex := n.nextNodeIdx
+
+	// node index is always unique and incrementing and does not decrement if nodes are removed.
+	// this ensures all created containers are given unique names.
 	n.nextNodeIdx++
 
 	// create a builder that will build nodes associated with this network.
@@ -106,11 +109,7 @@ func (n *Network) RemoveNode(ctx context.Context, nodeName string) error {
 	}
 
 	if err := node.Stop(ctx); err != nil {
-		return fmt.Errorf("failed to stop node %s: %w", nodeName, err)
-	}
-
-	if err := node.RemoveContainer(ctx); err != nil {
-		return fmt.Errorf("failed to remove container for node %s: %w", nodeName, err)
+		return fmt.Errorf("failed to remove node %s: %w", nodeName, err)
 	}
 
 	delete(n.nodeMap, nodeName)
