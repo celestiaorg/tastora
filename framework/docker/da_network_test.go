@@ -570,46 +570,134 @@ func TestDANetworkAddNode(t *testing.T) {
 		require.Len(t, daNetwork.GetLightNodes(), 1, "should now have 1 light node")
 		require.Len(t, daNetwork.GetNodes(), 3, "should now have 3 total nodes")
 	})
+}
 
-	t.Run("can remove nodes dynamically", func(t *testing.T) {
-		// Remove the light node first
+// TestDANetworkRemoveNode tests the dynamic removal of nodes from a DA network
+func TestDANetworkRemoveNode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping due to short mode")
+	}
+	t.Parallel()
+	configureBech32PrefixOnce()
+
+	// Setup isolated docker environment for this test
+	testCfg := setupDockerTest(t)
+
+	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
+	require.NoError(t, err)
+
+	err = chain.Start(testCfg.Ctx)
+	require.NoError(t, err)
+
+	// Default image for the DA network
+	defaultImage := container.Image{
+		Repository: "ghcr.io/celestiaorg/celestia-node",
+		Version:    "pr-4283",
+		UIDGID:     "10001:10001",
+	}
+
+	// Create DA network with multiple nodes initially
+	bridgeNodeConfig := da.NewNodeBuilder().WithNodeType(types.BridgeNode).Build()
+	fullNodeConfig := da.NewNodeBuilder().WithNodeType(types.FullNode).Build()
+	lightNodeConfig := da.NewNodeBuilder().WithNodeType(types.LightNode).Build()
+
+	daNetwork, err := testCfg.DANetworkBuilder.
+		WithChainID(chain.GetChainID()).
+		WithImage(defaultImage).
+		WithNodes(bridgeNodeConfig, fullNodeConfig, lightNodeConfig).
+		Build(testCfg.Ctx)
+	require.NoError(t, err)
+
+	// Verify initial state
+	require.Len(t, daNetwork.GetBridgeNodes(), 1, "should have 1 bridge node initially")
+	require.Len(t, daNetwork.GetFullNodes(), 1, "should have 1 full node initially")
+	require.Len(t, daNetwork.GetLightNodes(), 1, "should have 1 light node initially")
+	require.Len(t, daNetwork.GetNodes(), 3, "should have 3 total nodes initially")
+
+	// Start all nodes so they can be properly stopped/removed
+	bridgeNode := daNetwork.GetBridgeNodes()[0]
+	fullNode := daNetwork.GetFullNodes()[0]
+	lightNode := daNetwork.GetLightNodes()[0]
+
+	chainID := chain.GetChainID()
+	genesisHash, err := getGenesisHash(testCfg.Ctx, chain)
+	require.NoError(t, err)
+
+	chainNetworkInfo, err := chain.GetNodes()[0].GetNetworkInfo(testCfg.Ctx)
+	require.NoError(t, err, "failed to get network info")
+	hostname := chainNetworkInfo.Internal.Hostname
+
+	// Start bridge node
+	err = bridgeNode.Start(testCfg.Ctx,
+		da.WithChainID(chainID),
+		da.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
+		da.WithEnvironmentVariables(
+			map[string]string{
+				"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, ""),
+				"P2P_NETWORK":     chainID,
+			},
+		),
+	)
+	require.NoError(t, err, "should be able to start bridge node")
+
+	// Get bridge P2P info for other nodes
+	p2pInfo, err := bridgeNode.GetP2PInfo(testCfg.Ctx)
+	require.NoError(t, err, "failed to get bridge node p2p info")
+
+	p2pAddr, err := p2pInfo.GetP2PAddress()
+	require.NoError(t, err, "failed to get bridge node p2p address")
+
+	// Start full node
+	err = fullNode.Start(testCfg.Ctx,
+		da.WithChainID(chainID),
+		da.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
+		da.WithEnvironmentVariables(
+			map[string]string{
+				"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, p2pAddr),
+				"P2P_NETWORK":     chainID,
+			},
+		),
+	)
+	require.NoError(t, err, "should be able to start full node")
+
+	// Get full node P2P info for light node
+	fullP2pInfo, err := fullNode.GetP2PInfo(testCfg.Ctx)
+	require.NoError(t, err, "failed to get full node p2p info")
+
+	fullP2pAddr, err := fullP2pInfo.GetP2PAddress()
+	require.NoError(t, err, "failed to get full node p2p address")
+
+	// Start light node
+	err = lightNode.Start(testCfg.Ctx,
+		da.WithChainID(chainID),
+		da.WithAdditionalStartArguments("--p2p.network", chainID, "--rpc.addr", "0.0.0.0"),
+		da.WithEnvironmentVariables(
+			map[string]string{
+				"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, fullP2pAddr),
+				"P2P_NETWORK":     chainID,
+			},
+		),
+	)
+	require.NoError(t, err, "should be able to start light node")
+
+	t.Run("can remove multiple nodes concurrently", func(t *testing.T) {
 		lightNodes := daNetwork.GetLightNodes()
-		require.Len(t, lightNodes, 1, "should have 1 light node before removal")
-		
-		lightNodeName := lightNodes[0].Name()
-		err := daNetwork.RemoveNode(testCfg.Ctx, lightNodeName)
-		require.NoError(t, err, "should be able to remove light node by name")
-
-		// Verify light node was removed
-		require.Len(t, daNetwork.GetBridgeNodes(), 1, "should still have 1 bridge node")
-		require.Len(t, daNetwork.GetFullNodes(), 1, "should still have 1 full node") 
-		require.Len(t, daNetwork.GetLightNodes(), 0, "should now have 0 light nodes")
-		require.Len(t, daNetwork.GetNodes(), 2, "should now have 2 total nodes")
-
-		// Now remove the full node
 		fullNodes := daNetwork.GetFullNodes()
+		require.Len(t, lightNodes, 1, "should have 1 light node before removal")
 		require.Len(t, fullNodes, 1, "should have 1 full node before removal")
-		
-		fullNodeName := fullNodes[0].Name()
-		err = daNetwork.RemoveNode(testCfg.Ctx, fullNodeName)
-		require.NoError(t, err, "should be able to remove full node by name")
 
-		// Verify full node was also removed
+		lightNodeName := lightNodes[0].Name()
+		fullNodeName := fullNodes[0].Name()
+
+		// remove both nodes simultaneously
+		err := daNetwork.RemoveNode(testCfg.Ctx, lightNodeName, fullNodeName)
+		require.NoError(t, err, "should be able to remove multiple nodes concurrently")
+
+		// verify both nodes were removed
 		require.Len(t, daNetwork.GetBridgeNodes(), 1, "should still have 1 bridge node")
 		require.Len(t, daNetwork.GetFullNodes(), 0, "should now have 0 full nodes")
-		require.Len(t, daNetwork.GetLightNodes(), 0, "should still have 0 light nodes")
+		require.Len(t, daNetwork.GetLightNodes(), 0, "should now have 0 light nodes")
 		require.Len(t, daNetwork.GetNodes(), 1, "should now have 1 total node (only bridge)")
-
-		// Verify removed nodes are no longer in any node lists
-		allNodes := daNetwork.GetNodes()
-		for _, node := range allNodes {
-			require.NotEqual(t, lightNodeName, node.Name(), "removed light node should not be in any node list")
-			require.NotEqual(t, fullNodeName, node.Name(), "removed full node should not be in any node list")
-		}
-		
-		// Verify only the bridge node remains
-		require.Equal(t, 1, len(allNodes), "should only have bridge node remaining")
-		require.Equal(t, types.BridgeNode, allNodes[0].GetType(), "remaining node should be bridge node")
 	})
 
 	t.Run("removing non-existent node returns error", func(t *testing.T) {
@@ -618,48 +706,52 @@ func TestDANetworkAddNode(t *testing.T) {
 		require.Contains(t, err.Error(), "not found in network", "error should indicate node not found")
 	})
 
+	t.Run("removing mix of existing and non-existent nodes returns error", func(t *testing.T) {
+		// Current state: only bridge node remains
+		bridgeNodes := daNetwork.GetBridgeNodes()
+		require.Len(t, bridgeNodes, 1, "should have 1 bridge node")
+
+		bridgeNodeName := bridgeNodes[0].Name()
+
+		// Try to remove existing bridge node + non-existent node
+		err := daNetwork.RemoveNode(testCfg.Ctx, bridgeNodeName, "non-existent-node")
+		require.Error(t, err, "removing mix should return error")
+		require.Contains(t, err.Error(), "not found in network", "error should indicate node not found")
+
+		// Verify no nodes were removed (fail-fast behavior)
+		require.Len(t, daNetwork.GetBridgeNodes(), 1, "bridge node should still exist after failed removal")
+		require.Len(t, daNetwork.GetNodes(), 1, "should still have 1 total node")
+	})
+
+	t.Run("removing no node names returns error", func(t *testing.T) {
+		err := daNetwork.RemoveNode(testCfg.Ctx)
+		require.Error(t, err, "removing no nodes should return error")
+		require.Contains(t, err.Error(), "at least one node name must be provided", "error should indicate missing node names")
+	})
+
 	t.Run("can add nodes back after removing them", func(t *testing.T) {
-		// Current state: only bridge node remains (from previous test)
 		require.Len(t, daNetwork.GetNodes(), 1, "should only have bridge node at start")
-		require.Len(t, daNetwork.GetBridgeNodes(), 1, "should have 1 bridge node")
 
-		// Add a new full node back
-		newFullNodeConfig := da.NewNodeBuilder().
-			WithNodeType(types.FullNode).
-			Build()
-
+		// add a new full node back
+		newFullNodeConfig := da.NewNodeBuilder().WithNodeType(types.FullNode).Build()
 		newFullNode, err := daNetwork.AddNode(testCfg.Ctx, newFullNodeConfig)
 		require.NoError(t, err, "should be able to add full node back")
 
-		// Start the new full node
-		p2pInfo, err := bridgeNode.GetP2PInfo(testCfg.Ctx)
-		require.NoError(t, err, "failed to get bridge node p2p info")
-		
-		p2pAddr, err := p2pInfo.GetP2PAddress()
-		require.NoError(t, err, "failed to get bridge node p2p address")
-
-		err = newFullNode.Start(testCfg.Ctx,
-			da.WithChainID(chainID),
-			da.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
-			da.WithEnvironmentVariables(
-				map[string]string{
-					"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, p2pAddr),
-					"P2P_NETWORK":     chainID,
-				},
-			),
-		)
-		require.NoError(t, err, "should be able to start new full node")
-
-		// Verify network state after adding back
+		// verify network state after adding back
 		require.Len(t, daNetwork.GetNodes(), 2, "should now have 2 total nodes")
 		require.Len(t, daNetwork.GetBridgeNodes(), 1, "should still have 1 bridge node")
 		require.Len(t, daNetwork.GetFullNodes(), 1, "should now have 1 full node again")
 		require.Len(t, daNetwork.GetLightNodes(), 0, "should still have 0 light nodes")
 
-		// Verify the nodes are sorted by name in GetNodes()
+		// verify the returned node is in the network
 		allNodes := daNetwork.GetNodes()
-		if len(allNodes) >= 2 {
-			require.True(t, allNodes[0].Name() < allNodes[1].Name(), "nodes should be sorted by name")
+		found := false
+		for _, node := range allNodes {
+			if node.Name() == newFullNode.Name() {
+				found = true
+				break
+			}
 		}
+		require.True(t, found, "newly added node should be found in network")
 	})
 }

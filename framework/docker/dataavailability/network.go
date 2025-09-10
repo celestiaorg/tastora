@@ -3,6 +3,7 @@ package dataavailability
 import (
 	"context"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"sort"
 	"sync"
 
@@ -99,20 +100,37 @@ func (n *Network) AddNode(ctx context.Context, nodeConfig NodeConfig) (*Node, er
 }
 
 // RemoveNode removes a node from the DA network by name, stopping and cleaning up its resources.
-func (n *Network) RemoveNode(ctx context.Context, nodeName string) error {
+func (n *Network) RemoveNode(ctx context.Context, nodeNames ...string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	node, exists := n.nodeMap[nodeName]
-	if !exists {
-		return fmt.Errorf("node with name %s not found in network", nodeName)
+	if len(nodeNames) == 0 {
+		return fmt.Errorf("at least one node name must be provided")
 	}
 
-	if err := node.Stop(ctx); err != nil {
-		return fmt.Errorf("failed to remove node %s: %w", nodeName, err)
+	for _, nodeName := range nodeNames {
+		if _, exists := n.nodeMap[nodeName]; !exists {
+			return fmt.Errorf("node with name %s not found in network", nodeName)
+		}
 	}
 
-	delete(n.nodeMap, nodeName)
+	eg, egCtx := errgroup.WithContext(ctx)
+	for _, nodeName := range nodeNames {
+		node := n.nodeMap[nodeName]
+		// remove all nodes concurrently
+		eg.Go(func() error {
+			return node.Stop(egCtx)
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return fmt.Errorf("failed to remove nodes: %w", err)
+	}
+
+	// remove all stopped nodes from the internal mapping.
+	for _, nodeName := range nodeNames {
+		delete(n.nodeMap, nodeName)
+	}
 
 	return nil
 }
