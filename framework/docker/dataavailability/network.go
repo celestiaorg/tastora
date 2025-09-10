@@ -117,8 +117,8 @@ func (n *Network) AddNodes(ctx context.Context, nodeConfigs ...NodeConfig) ([]*N
 	return createdNodes, nil
 }
 
-// RemoveNode removes a node from the DA network by name, stopping and cleaning up its resources.
-func (n *Network) RemoveNode(ctx context.Context, nodeNames ...string) error {
+// RemoveNodes removes a node from the DA network by name, stopping and cleaning up its resources.
+func (n *Network) RemoveNodes(ctx context.Context, nodeNames ...string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 

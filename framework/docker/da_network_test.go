@@ -739,7 +739,7 @@ func TestDANetworkRemoveNode(t *testing.T) {
 		fullNodeName := fullNodes[0].Name()
 
 		// remove both nodes simultaneously
-		err := daNetwork.RemoveNode(testCfg.Ctx, lightNodeName, fullNodeName)
+		err := daNetwork.RemoveNodes(testCfg.Ctx, lightNodeName, fullNodeName)
 		require.NoError(t, err, "should be able to remove multiple nodes concurrently")
 
 		// verify both nodes were removed
@@ -750,7 +750,7 @@ func TestDANetworkRemoveNode(t *testing.T) {
 	})
 
 	t.Run("removing non-existent node returns error", func(t *testing.T) {
-		err := daNetwork.RemoveNode(testCfg.Ctx, "non-existent-node")
+		err := daNetwork.RemoveNodes(testCfg.Ctx, "non-existent-node")
 		require.Error(t, err, "removing non-existent node should return error")
 		require.Contains(t, err.Error(), "not found in network", "error should indicate node not found")
 	})
@@ -763,7 +763,7 @@ func TestDANetworkRemoveNode(t *testing.T) {
 		bridgeNodeName := bridgeNodes[0].Name()
 
 		// Try to remove existing bridge node + non-existent node
-		err := daNetwork.RemoveNode(testCfg.Ctx, bridgeNodeName, "non-existent-node")
+		err := daNetwork.RemoveNodes(testCfg.Ctx, bridgeNodeName, "non-existent-node")
 		require.Error(t, err, "removing mix should return error")
 		require.Contains(t, err.Error(), "not found in network", "error should indicate node not found")
 
@@ -773,7 +773,7 @@ func TestDANetworkRemoveNode(t *testing.T) {
 	})
 
 	t.Run("removing no node names returns error", func(t *testing.T) {
-		err := daNetwork.RemoveNode(testCfg.Ctx)
+		err := daNetwork.RemoveNodes(testCfg.Ctx)
 		require.Error(t, err, "removing no nodes should return error")
 		require.Contains(t, err.Error(), "at least one node name must be provided", "error should indicate missing node names")
 	})
