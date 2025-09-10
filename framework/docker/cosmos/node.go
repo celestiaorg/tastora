@@ -331,12 +331,6 @@ func (cn *ChainNode) initClient(addr string) error {
 	return nil
 }
 
-// stop stops the underlying container.
-func (cn *ChainNode) stop(ctx context.Context) error {
-	return cn.StopContainer(ctx)
-}
-
-
 // setPeers modifies the config persistent_peers for a node.
 func (cn *ChainNode) setPeers(ctx context.Context, peers string) error {
 	return config.Modify(ctx, cn, "config/config.toml", func(cfg *cometcfg.Config) {
