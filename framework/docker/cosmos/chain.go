@@ -379,15 +379,25 @@ func (c *Chain) startAllNodes(ctx context.Context) error {
 	return eg.Wait()
 }
 
+// Stop stops all nodes in the chain without removing them.
 func (c *Chain) Stop(ctx context.Context) error {
 	var eg errgroup.Group
 	for _, n := range c.Nodes() {
 		n := n
 		eg.Go(func() error {
-			if err := n.stop(ctx); err != nil {
-				return err
-			}
-			return n.RemoveContainer(ctx)
+			return n.Stop(ctx)
+		})
+	}
+	return eg.Wait()
+}
+
+// Remove stops and removes all nodes in the chain.
+func (c *Chain) Remove(ctx context.Context) error {
+	var eg errgroup.Group
+	for _, n := range c.Nodes() {
+		n := n
+		eg.Go(func() error {
+			return n.Remove(ctx)
 		})
 	}
 	return eg.Wait()

@@ -284,7 +284,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 		err = chain.Start(testCfg.Ctx)
 		require.NoError(t, err)
-		defer func() { _ = chain.Stop(testCfg.Ctx) }()
+		defer func() { _ = chain.Remove(testCfg.Ctx) }()
 
 		// Default image for the DA network
 		defaultImage := container.Image{
@@ -362,7 +362,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 
 		err = chain.Start(testCfg.Ctx)
 		require.NoError(t, err)
-		defer func() { _ = chain.Stop(testCfg.Ctx) }()
+		defer func() { _ = chain.Remove(testCfg.Ctx) }()
 
 		// Default image for the DA network
 		defaultImage := container.Image{

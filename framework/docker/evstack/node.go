@@ -294,3 +294,4 @@ func (n *Node) isNodeHealthy(client *http.Client, healthURL string) bool {
 	n.logger().Debug("evstack node not ready yet", zap.String("url", healthURL), zap.Int("status", resp.StatusCode))
 	return false
 }
+

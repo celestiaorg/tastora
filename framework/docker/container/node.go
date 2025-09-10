@@ -101,6 +101,25 @@ func (n *Node) StartContainer(ctx context.Context) error {
 	return n.ContainerLifecycle.StartContainer(ctx)
 }
 
+// Stop stops the Node container gracefully using the provided context.
+func (n *Node) Stop(ctx context.Context) error {
+	if err := n.StopContainer(ctx); err != nil {
+		return fmt.Errorf("failed to stop container: %w", err)
+	}
+	return nil
+}
+
+// Remove stops and removes the Node container and its resources.
+func (n *Node) Remove(ctx context.Context) error {
+	if err := n.StopContainer(ctx); err != nil {
+		return fmt.Errorf("failed to stop container: %w", err)
+	}
+	if err := n.RemoveContainer(ctx); err != nil {
+		return fmt.Errorf("failed to remove container: %w", err)
+	}
+	return nil
+}
+
 func (n *Node) CreateContainer(ctx context.Context,
 	testName string,
 	networkID string,
