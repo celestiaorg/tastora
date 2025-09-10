@@ -56,6 +56,22 @@ func NewNetworkBuilderWithTestName(t *testing.T, testName string) *NetworkBuilde
 	}
 }
 
+// NewNetworkBuilderFromNetwork creates a NetworkBuilder from an existing Network
+// This allows reusing the builder's node creation logic for dynamic node addition
+func NewNetworkBuilderFromNetwork(network *Network) *NetworkBuilder {
+	return &NetworkBuilder{
+		testName:            network.testName,
+		logger:              network.log,
+		dockerClient:        network.cfg.DockerClient,
+		dockerNetworkID:     network.cfg.DockerNetworkID,
+		dockerImage:         &network.cfg.Image,
+		additionalStartArgs: network.cfg.Env,
+		env:                 network.cfg.Env,
+		chainID:             network.cfg.ChainID,
+		binaryName:          network.cfg.Bin,
+	}
+}
+
 // WithTestName sets the test name
 func (b *NetworkBuilder) WithTestName(testName string) *NetworkBuilder {
 	b.testName = testName
@@ -128,7 +144,7 @@ func (b *NetworkBuilder) Build(ctx context.Context) (*Network, error) {
 		return nil, fmt.Errorf("invalid builder configuration: %w", err)
 	}
 
-	nodes, err := b.initializeNodes(ctx)
+	nodeMap, err := b.initializeNodes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Nodes: %w", err)
 	}
@@ -143,8 +159,10 @@ func (b *NetworkBuilder) Build(ctx context.Context) (*Network, error) {
 			Bin:             b.binaryName,
 			Image:           *b.dockerImage,
 		},
-		log:   b.logger,
-		nodes: nodes,
+		log:         b.logger,
+		nodeMap:     nodeMap,
+		nextNodeIdx: len(nodeMap), // start from the number of initial nodes
+		testName:    b.testName,   // store original test name for dynamic node naming
 	}, nil
 }
 
@@ -171,18 +189,18 @@ func (b *NetworkBuilder) validate() error {
 	return nil
 }
 
-func (b *NetworkBuilder) initializeNodes(ctx context.Context) ([]*Node, error) {
-	var nodes []*Node
+func (b *NetworkBuilder) initializeNodes(ctx context.Context) (map[string]*Node, error) {
+	nodeMap := make(map[string]*Node)
 
 	for i, nodeConfig := range b.nodes {
 		node, err := b.newNode(ctx, nodeConfig, i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Node %d: %w", i, err)
 		}
-		nodes = append(nodes, node)
+		nodeMap[node.Name()] = node
 	}
 
-	return nodes, nil
+	return nodeMap, nil
 }
 
 func (b *NetworkBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, index int) (*Node, error) {
