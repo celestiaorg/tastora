@@ -24,7 +24,12 @@ func TestUpgradeVersion(t *testing.T) {
 
 	require.NoError(t, wait.ForBlocks(testCfg.Ctx, 5, chain))
 
-	err = chain.UpgradeVersion(testCfg.Ctx, "v4.0.2-mocha")
+	err = chain.Remove(testCfg.Ctx)
+	require.NoError(t, err)
+
+	chain.UpgradeVersion(testCfg.Ctx, "v4.0.2-mocha")
+
+	err = chain.Start(testCfg.Ctx)
 	require.NoError(t, err)
 
 	// chain is producing blocks at the next version

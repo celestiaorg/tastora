@@ -39,7 +39,7 @@ type Chain interface {
 	// BroadcastBlobMessage broadcasts a transaction that includes a message and associated blobs to the blockchain.
 	BroadcastBlobMessage(ctx context.Context, signingWallet *Wallet, msg sdk.Msg, blobs ...*share.Blob) (sdk.TxResponse, error)
 	// UpgradeVersion upgrades the chain to the specified version.
-	UpgradeVersion(ctx context.Context, version string) error
+	UpgradeVersion(ctx context.Context, version string)
 	// GetFaucetWallet returns the faucet wallet.
 	GetFaucetWallet() *Wallet
 	// GetChainID returns the chain ID.

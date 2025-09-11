@@ -6,7 +6,6 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/docker/port"
-	"github.com/celestiaorg/tastora/framework/types"
 	"io"
 	"regexp"
 	"strings"
@@ -220,19 +219,11 @@ func (c *Lifecycle) StopContainer(ctx context.Context) error {
 	return err
 }
 
-func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOption) error {
-	// default to force removal and remove volumes
-	removeOpts := container.RemoveOptions{
+func (c *Lifecycle) RemoveContainer(ctx context.Context) error {
+	err := c.client.ContainerRemove(ctx, c.id, container.RemoveOptions{
 		Force:         true,
 		RemoveVolumes: true,
-	}
-
-	// Apply functional options
-	for _, opt := range opts {
-		opt(&removeOpts)
-	}
-
-	err := c.client.ContainerRemove(ctx, c.id, removeOpts)
+	})
 	if err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("remove container %s: %w", c.containerName, err)
 	}

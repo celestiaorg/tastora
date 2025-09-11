@@ -1,8 +1,6 @@
 package types
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // NodeType represents any node type that can be converted to a string
 type NodeType interface {
