@@ -420,7 +420,6 @@ func (c *Chain) UpgradeVersion(ctx context.Context, version string) error {
 		n.Image.Version = version
 	}
 
-	// Pull new images
 	c.pullImages(ctx)
 
 	// Start the chain with the new version
