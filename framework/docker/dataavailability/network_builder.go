@@ -65,7 +65,7 @@ func NewNetworkBuilderFromNetwork(network *Network) *NetworkBuilder {
 		dockerClient:        network.cfg.DockerClient,
 		dockerNetworkID:     network.cfg.DockerNetworkID,
 		dockerImage:         &network.cfg.Image,
-		additionalStartArgs: network.cfg.Env,
+		additionalStartArgs: network.cfg.AdditionalStartArgs,
 		env:                 network.cfg.Env,
 		chainID:             network.cfg.ChainID,
 		binaryName:          network.cfg.Bin,
@@ -212,9 +212,12 @@ func (b *NetworkBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, ind
 		DockerClient:    b.dockerClient,
 		DockerNetworkID: b.dockerNetworkID,
 		ChainID:         b.chainID,
-		Env:             b.env, // Will be overridden by nodeConfig.Env after fallback logic below
 		Bin:             b.binaryName,
 		Image:           imageToUse,
+		// Env and AdditionalStartArgs provide default set of values for all nodes, but can
+		// be individually overridden by nodeConfig.
+		Env:                 b.env,
+		AdditionalStartArgs: b.additionalStartArgs,
 	}
 
 	// Apply fallback logic for node config
