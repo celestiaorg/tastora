@@ -22,4 +22,6 @@ type Config struct {
 	Bin string
 	// Image specifies the Docker image used for the nodes.
 	Image container.Image
+	// AdditionalStartArgs are additional arguments passed to all nodes when starting
+	AdditionalStartArgs []string
 }
