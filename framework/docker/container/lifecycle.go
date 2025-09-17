@@ -129,6 +129,8 @@ func (c *Lifecycle) CreateContainer(
 func (c *Lifecycle) StartContainer(ctx context.Context) error {
 	// lock port allocation for the time between freeing the ports from the
 	// temporary listeners to the consumption of the ports by the container
+	internal.LockPortAssignment()
+	defer internal.UnlockPortAssignment()
 
 	c.preStartListeners.CloseAll()
 	c.preStartListeners = port.Listeners{}

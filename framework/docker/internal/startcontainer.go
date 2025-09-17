@@ -2,11 +2,17 @@ package internal
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/moby/moby/client"
 )
+
+// portAssignmentMu prevents race conditions during the critical window between
+// closing temporary listeners and starting containers. Multiple containers starting
+// concurrently could otherwise claim the same ports.
+var portAssignmentMu sync.Mutex
 
 // StartContainer attempts to start the container with the given ID.
 func StartContainer(ctx context.Context, cli *client.Client, id string) error {
@@ -23,4 +29,15 @@ func StartContainer(ctx context.Context, cli *client.Client, id string) error {
 	}
 
 	return nil
+}
+
+// LockPortAssignment locks the port assignment mutex to prevent race conditions
+// during the critical window between closing temporary listeners and starting containers.
+func LockPortAssignment() {
+	portAssignmentMu.Lock()
+}
+
+// UnlockPortAssignment unlocks the port assignment mutex.
+func UnlockPortAssignment() {
+	portAssignmentMu.Unlock()
 }
