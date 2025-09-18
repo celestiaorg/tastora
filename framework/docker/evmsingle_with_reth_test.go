@@ -114,54 +114,12 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	require.NoError(t, err)
 	daAddress := fmt.Sprintf("http://%s:%s", bridgeNI.Internal.IP, bridgeNI.Internal.Ports.RPC)
 
-	// 3) Build a 1-node reth chain
-	rbuilder := reth.NewChainBuilder(t).
-		WithDockerClient(testCfg.DockerClient).
-		WithDockerNetworkID(testCfg.NetworkID).
-		WithGenesis([]byte(`{
-  "config": {
-    "chainId": 1234,
-    "homesteadBlock": 0,
-    "eip150Block": 0,
-    "eip155Block": 0,
-    "eip158Block": 0,
-    "byzantiumBlock": 0,
-    "constantinopleBlock": 0,
-    "petersburgBlock": 0,
-    "istanbulBlock": 0,
-    "berlinBlock": 0,
-    "londonBlock": 0,
-    "mergeNetsplitBlock": 0,
-    "terminalTotalDifficulty": 0,
-    "terminalTotalDifficultyPassed": true,
-    "shanghaiTime": 0,
-    "cancunTime": 0,
-    "pragueTime": 0
-  },
-  "nonce": "0x0",
-  "timestamp": "0x0",
-  "extraData": "0x",
-  "gasLimit": "0x1c9c38000",
-  "difficulty": "0x0",
-  "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "coinbase": "0x0000000000000000000000000000000000000000",
-  "alloc": {
-    "0xd143C405751162d0F96bEE2eB5eb9C61882a736E": {
-      "balance": "0x4a47e3c12448f4ad000000"
-    },
-    "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E": {
-      "balance": "0x4a47e3c12448f4ad000000"
-    },
-    "0x4567BF59F76c18cEa2131BDA24A7b70744308f54": {
-      "balance": "0x4a47e3c12448f4ad000000"
-    }
-  },
-  "number": "0x0",
-  "gasUsed": "0x0",
-  "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "baseFeePerGas": "0x3b9aca00"
-}`)).
-		WithNodes(reth.NewNodeConfigBuilder().Build())
+    // 3) Build a 1-node reth chain using a default evolve genesis helper
+    rbuilder := reth.NewChainBuilder(t).
+        WithDockerClient(testCfg.DockerClient).
+        WithDockerNetworkID(testCfg.NetworkID).
+        WithGenesis([]byte(reth.DefaultEvolveGenesisJSON())).
+        WithNodes(reth.NewNodeConfigBuilder().Build())
 
 	rchain := rbuilder.Build()
 
