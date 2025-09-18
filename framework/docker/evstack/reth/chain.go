@@ -57,6 +57,9 @@ func (c *Chain) StartAll(ctx context.Context) error {
     return nil
 }
 
+// Start starts all nodes in the chain (preferred over StartAll for consistency with other types).
+func (c *Chain) Start(ctx context.Context) error { return c.StartAll(ctx) }
+
 // StopAll stops all nodes
 func (c *Chain) StopAll(ctx context.Context) error {
     var firstErr error
@@ -64,8 +67,11 @@ func (c *Chain) StopAll(ctx context.Context) error {
     return firstErr
 }
 
+// Stop stops all nodes in the chain (preferred over StopAll for consistency with other types).
+func (c *Chain) Stop(ctx context.Context) error { return c.StopAll(ctx) }
+
 // RemoveAll removes all nodes (stopping first) with optional removal options (e.g., preserve volumes)
-func (c *Chain) RemoveAll(ctx context.Context, opts ...types.RemoveOption) error {
+func (c *Chain) Remove(ctx context.Context, opts ...types.RemoveOption) error {
     var firstErr error
     for _, n := range c.GetNodes() { if err := n.Remove(ctx, opts...); err != nil && firstErr == nil { firstErr = err } }
     return firstErr

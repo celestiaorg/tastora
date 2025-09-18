@@ -55,6 +55,9 @@ func (a *App) StartAll(ctx context.Context) error {
     return nil
 }
 
+// Start starts all nodes (preferred over StartAll for consistency with other types)
+func (a *App) Start(ctx context.Context) error { return a.StartAll(ctx) }
+
 // StopAll stops all nodes
 func (a *App) StopAll(ctx context.Context) error {
     var firstErr error
@@ -62,10 +65,12 @@ func (a *App) StopAll(ctx context.Context) error {
     return firstErr
 }
 
+// Stop stops all nodes (preferred over StopAll for consistency with other types)
+func (a *App) Stop(ctx context.Context) error { return a.StopAll(ctx) }
+
 // RemoveAll removes all nodes (stopping first) with optional removal options (e.g., preserve volumes)
-func (a *App) RemoveAll(ctx context.Context, opts ...types.RemoveOption) error {
+func (a *App) Remove(ctx context.Context, opts ...types.RemoveOption) error {
     var firstErr error
     for _, n := range a.GetNodes() { if err := n.Remove(ctx, opts...); err != nil && firstErr == nil { firstErr = err } }
     return firstErr
 }
-

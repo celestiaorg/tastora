@@ -122,12 +122,12 @@ func TestEvmSingle_WithReth(t *testing.T) {
 
 	rchain := rbuilder.Build()
 
-	t.Cleanup(func() {
-		_ = rchain.StopAll(ctx)
-		_ = rchain.RemoveAll(ctx)
-	})
+    t.Cleanup(func() {
+        _ = rchain.Stop(ctx)
+        _ = rchain.Remove(ctx)
+    })
 
-	require.NoError(t, rchain.StartAll(ctx))
+    require.NoError(t, rchain.Start(ctx))
 
 	rnodes := rchain.GetNodes()
 	require.Len(t, rnodes, 1)
@@ -177,12 +177,12 @@ func TestEvmSingle_WithReth(t *testing.T) {
 		)
 
 	eapp := ebuilder.Build()
-	t.Cleanup(func() {
-		_ = eapp.StopAll(ctx)
-		_ = eapp.RemoveAll(ctx)
-	})
+    t.Cleanup(func() {
+        _ = eapp.Stop(ctx)
+        _ = eapp.Remove(ctx)
+    })
 
-	require.NoError(t, eapp.StartAll(ctx))
+    require.NoError(t, eapp.Start(ctx))
 
 	enodes := eapp.GetNodes()
 	require.Len(t, enodes, 1)
