@@ -29,6 +29,8 @@ type NodeConfig struct {
     GenesisBz []byte
     // JWTSecretHex sets the node JWT secret in hex; if empty, it will be generated
     JWTSecretHex string
+    // AdditionalInitArgs are appended to dump-genesis when generating a genesis
+    AdditionalInitArgs []string
 }
 
 // NodeConfigBuilder provides a fluent builder for NodeConfig
@@ -49,6 +51,9 @@ func (b *NodeConfigBuilder) WithGenesis(genesis []byte) *NodeConfigBuilder {
     b.cfg.GenesisBz = genesis; return b
 }
 func (b *NodeConfigBuilder) WithJWTSecretHex(secret string) *NodeConfigBuilder { b.cfg.JWTSecretHex = secret; return b }
+func (b *NodeConfigBuilder) WithAdditionalInitArgs(args ...string) *NodeConfigBuilder {
+    b.cfg.AdditionalInitArgs = args; return b
+}
 func (b *NodeConfigBuilder) Build() NodeConfig { return *b.cfg }
 
 // Node represents a reth node container and its configuration.
@@ -117,9 +122,8 @@ func (n *Node) Start(ctx context.Context) error {
         n.jwtHex = s
     }
 
-    // Prepare genesis
-    if len(n.genesisBz) == 0 {
-        if len(n.cfg.GenesisFileBz) == 0 { return fmt.Errorf("genesis file must be provided (chain or node level)") }
+    // Always use built-in dev chain; skip genesis generation unless explicitly provided.
+    if len(n.genesisBz) == 0 && len(n.cfg.GenesisFileBz) > 0 {
         n.genesisBz = n.cfg.GenesisFileBz
     }
 
@@ -151,15 +155,48 @@ func (n *Node) dataDir() string     { return path.Join(n.HomeDir(), "eth-home") 
 
 func (n *Node) writeNodeFiles(ctx context.Context) error {
     if err := n.WriteFile(ctx, path.Join("jwt", "jwt.hex"), []byte(n.jwtHex)); err != nil { return fmt.Errorf("write jwt: %w", err) }
-    if err := n.WriteFile(ctx, path.Join("chain", "genesis.json"), n.genesisBz); err != nil { return fmt.Errorf("write genesis: %w", err) }
+    if len(n.genesisBz) > 0 {
+        if err := n.WriteFile(ctx, path.Join("chain", "genesis.json"), n.genesisBz); err != nil { return fmt.Errorf("write genesis: %w", err) }
+    }
     return nil
+}
+
+// generateGenesis runs `ev-reth dump-genesis` and returns the JSON bytes.
+func (n *Node) generateGenesis(ctx context.Context) ([]byte, error) {
+    // Build env: chain + node
+    var env []string
+    env = append(env, n.cfg.Env...)
+    env = append(env, n.nodeCfg.Env...)
+
+    // Build args: allow AdditionalInitArgs to be passed through
+    cmd := []string{n.cfg.Bin, "dump-genesis"}
+    if len(n.cfg.AdditionalInitArgs) > 0 { cmd = append(cmd, n.cfg.AdditionalInitArgs...) }
+    if len(n.nodeCfg.AdditionalInitArgs) > 0 { cmd = append(cmd, n.nodeCfg.AdditionalInitArgs...) }
+
+    // Ensure a chain is specified; default to dev if none provided.
+    hasChain := false
+    for _, a := range cmd {
+        if a == "--chain" || len(a) >= 8 && a[:8] == "--chain=" { hasChain = true; break }
+    }
+    if !hasChain {
+        cmd = append(cmd, "--chain", "dev")
+    }
+
+    stdout, stderr, err := n.Exec(ctx, n.Logger, cmd, env)
+    if err != nil {
+        return nil, fmt.Errorf("dump-genesis failed: %w (stderr=%s)", err, string(stderr))
+    }
+    if len(stdout) == 0 || (len(stdout) > 0 && stdout[0] != '{') {
+        return nil, fmt.Errorf("dump-genesis returned unexpected output (len=%d)", len(stdout))
+    }
+    return stdout, nil
 }
 
 func (n *Node) createNodeContainer(ctx context.Context) error {
     // Build command from docker compose example; allow overrides via AdditionalStartArgs
     cmd := []string{
         n.cfg.Bin, "node",
-        "--chain", n.genesisPath(),
+        "--chain", "dev",
         "--datadir", n.dataDir(),
         "--metrics", "0.0.0.0:" + n.internal.Metrics,
         "--authrpc.addr", "0.0.0.0",

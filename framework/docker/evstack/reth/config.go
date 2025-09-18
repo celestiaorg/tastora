@@ -22,6 +22,9 @@ type Config struct {
     // AdditionalStartArgs are default start arguments applied to all nodes
     AdditionalStartArgs []string
 
+    // AdditionalInitArgs are default init/dump-genesis arguments applied when generating a genesis
+    AdditionalInitArgs []string
+
     // GenesisFileBz, if provided, will be written to each node before start at <home>/chain/genesis.json
     // If omitted, Start will return an error until automatic genesis initialization is implemented.
     GenesisFileBz []byte
@@ -31,4 +34,3 @@ type Config struct {
 func DefaultImage() container.Image {
     return container.Image{Repository: "ghcr.io/evstack/ev-reth", Version: "latest"}
 }
-
