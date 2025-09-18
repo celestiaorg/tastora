@@ -40,7 +40,9 @@ type NodeConfig struct {
 // NodeConfigBuilder provides a fluent builder for NodeConfig
 type NodeConfigBuilder struct{ cfg *NodeConfig }
 
-func NewNodeConfigBuilder() *NodeConfigBuilder { return &NodeConfigBuilder{cfg: &NodeConfig{}} }
+func NewNodeConfigBuilder() *NodeConfigBuilder {
+    return &NodeConfigBuilder{cfg: &NodeConfig{}}
+}
 func (b *NodeConfigBuilder) WithImage(img container.Image) *NodeConfigBuilder {
 	b.cfg.Image = &img
 	return b
@@ -49,7 +51,10 @@ func (b *NodeConfigBuilder) WithAdditionalStartArgs(args ...string) *NodeConfigB
 	b.cfg.AdditionalStartArgs = args
 	return b
 }
-func (b *NodeConfigBuilder) WithEnv(env ...string) *NodeConfigBuilder { b.cfg.Env = env; return b }
+func (b *NodeConfigBuilder) WithEnv(env ...string) *NodeConfigBuilder {
+    b.cfg.Env = env
+    return b
+}
 func (b *NodeConfigBuilder) WithInternalPorts(ports types.Ports) *NodeConfigBuilder {
 	b.cfg.InternalPorts = &ports
 	return b
@@ -66,7 +71,9 @@ func (b *NodeConfigBuilder) WithAdditionalInitArgs(args ...string) *NodeConfigBu
 	b.cfg.AdditionalInitArgs = args
 	return b
 }
-func (b *NodeConfigBuilder) Build() NodeConfig { return *b.cfg }
+func (b *NodeConfigBuilder) Build() NodeConfig {
+    return *b.cfg
+}
 
 // Node represents a reth node container and its configuration.
 type Node struct {
@@ -84,21 +91,27 @@ type Node struct {
 }
 
 func newNode(cfg Config, testName string, index int, nodeCfg NodeConfig) *Node {
-	image := cfg.Image
-	if nodeCfg.Image != nil {
-		image = *nodeCfg.Image
-	}
+    image := cfg.Image
+    if nodeCfg.Image != nil {
+        image = *nodeCfg.Image
+    }
 
-	ports := defaultPorts()
-	if nodeCfg.InternalPorts != nil {
-		ports = *nodeCfg.InternalPorts
-	}
+    ports := defaultPorts()
+    if nodeCfg.InternalPorts != nil {
+        ports = *nodeCfg.InternalPorts
+    }
 
 	log := cfg.Logger.With(zap.String("component", "reth-node"), zap.Int("i", index))
 
 	homeDir := "/home/ev-reth"
 
-	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports, genesisBz: nodeCfg.GenesisBz}
+    n := &Node{
+        cfg:       cfg,
+        nodeCfg:   nodeCfg,
+        logger:    log,
+        internal:  ports,
+        genesisBz: nodeCfg.GenesisBz,
+    }
 	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, rethNodeType("node"), log)
 	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
 	return n

@@ -24,7 +24,9 @@ type ChainBuilder struct {
 	nodes        []NodeConfig
 }
 
-func NewChainBuilder(t *testing.T) *ChainBuilder { return NewChainBuilderWithTestName(t, t.Name()) }
+func NewChainBuilder(t *testing.T) *ChainBuilder {
+    return NewChainBuilderWithTestName(t, t.Name())
+}
 
 func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
 	t.Helper()
@@ -36,39 +38,88 @@ func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
 		WithBin("ev-reth")
 }
 
-func (b *ChainBuilder) WithT(t *testing.T) *ChainBuilder       { b.t = t; return b }
-func (b *ChainBuilder) WithTestName(name string) *ChainBuilder { b.testName = name; return b }
-func (b *ChainBuilder) WithLogger(l *zap.Logger) *ChainBuilder { b.logger = l; return b }
+func (b *ChainBuilder) WithT(t *testing.T) *ChainBuilder {
+    b.t = t
+    return b
+}
+
+func (b *ChainBuilder) WithTestName(name string) *ChainBuilder {
+    b.testName = name
+    return b
+}
+
+func (b *ChainBuilder) WithLogger(l *zap.Logger) *ChainBuilder {
+    b.logger = l
+    return b
+}
 func (b *ChainBuilder) WithDockerClient(c *dockerclient.Client) *ChainBuilder {
 	b.dockerClient = c
 	return b
 }
-func (b *ChainBuilder) WithDockerNetworkID(id string) *ChainBuilder { b.networkID = id; return b }
-func (b *ChainBuilder) WithImage(img container.Image) *ChainBuilder { b.image = img; return b }
-func (b *ChainBuilder) WithEnv(env ...string) *ChainBuilder         { b.env = env; return b }
+func (b *ChainBuilder) WithDockerNetworkID(id string) *ChainBuilder {
+    b.networkID = id
+    return b
+}
+
+func (b *ChainBuilder) WithImage(img container.Image) *ChainBuilder {
+    b.image = img
+    return b
+}
+
+func (b *ChainBuilder) WithEnv(env ...string) *ChainBuilder {
+    b.env = env
+    return b
+}
 func (b *ChainBuilder) WithAdditionalStartArgs(args ...string) *ChainBuilder {
 	b.addlArgs = args
 	return b
 }
-func (b *ChainBuilder) WithBin(bin string) *ChainBuilder         { b.bin = bin; return b }
-func (b *ChainBuilder) WithGenesis(genesis []byte) *ChainBuilder { b.genesis = genesis; return b }
-func (b *ChainBuilder) WithNode(cfg NodeConfig) *ChainBuilder {
-	b.nodes = append(b.nodes, cfg)
-	return b
+func (b *ChainBuilder) WithBin(bin string) *ChainBuilder {
+    b.bin = bin
+    return b
 }
-func (b *ChainBuilder) WithNodes(cfgs ...NodeConfig) *ChainBuilder { b.nodes = cfgs; return b }
+
+func (b *ChainBuilder) WithGenesis(genesis []byte) *ChainBuilder {
+    b.genesis = genesis
+    return b
+}
+
+func (b *ChainBuilder) WithNode(cfg NodeConfig) *ChainBuilder {
+    b.nodes = append(b.nodes, cfg)
+    return b
+}
+
+func (b *ChainBuilder) WithNodes(cfgs ...NodeConfig) *ChainBuilder {
+    b.nodes = cfgs
+    return b
+}
 
 // Build constructs a Chain with nodes created (volumes will be created on Start)
 func (b *ChainBuilder) Build() *Chain {
-	cfg := Config{Logger: b.logger, DockerClient: b.dockerClient, DockerNetworkID: b.networkID, Image: b.image, Bin: b.bin, Env: b.env, AdditionalStartArgs: b.addlArgs, GenesisFileBz: b.genesis}
+    cfg := Config{
+        Logger:          b.logger,
+        DockerClient:    b.dockerClient,
+        DockerNetworkID: b.networkID,
+        Image:           b.image,
+        Bin:             b.bin,
+        Env:             b.env,
+        AdditionalStartArgs: b.addlArgs,
+        GenesisFileBz:       b.genesis,
+    }
 
-	chain := &Chain{cfg: cfg, log: b.logger, testName: b.testName, nodes: make(map[string]*Node), nextIndex: 0}
+    chain := &Chain{
+        cfg:       cfg,
+        log:       b.logger,
+        testName:  b.testName,
+        nodes:     make(map[string]*Node),
+        nextIndex: 0,
+    }
 
-	// Pre-create nodes (without starting)
-	for i, nc := range b.nodes {
-		n := newNode(cfg, b.testName, i, nc)
-		chain.nodes[n.Name()] = n
-		chain.nextIndex++
-	}
-	return chain
+    // Pre-create nodes (without starting)
+    for i, nc := range b.nodes {
+        n := newNode(cfg, b.testName, i, nc)
+        chain.nodes[n.Name()] = n
+        chain.nextIndex++
+    }
+    return chain
 }

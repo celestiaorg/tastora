@@ -75,10 +75,16 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 
 // Start creates and starts the container
 func (n *Node) Start(ctx context.Context) error {
-    n.mu.Lock(); defer n.mu.Unlock()
-    if n.started { return n.StartContainer(ctx) }
+    n.mu.Lock()
+    defer n.mu.Unlock()
 
-    if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil { return err }
+    if n.started {
+        return n.StartContainer(ctx)
+    }
+
+    if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
+        return err
+    }
 
     // Ensure config exists by running "evm-single init" if node_key.json not present
     if _, err := n.ReadFile(ctx, "config/node_key.json"); err != nil {
@@ -104,13 +110,22 @@ func (n *Node) Start(ctx context.Context) error {
         }
     }
 
-    if err := n.createNodeContainer(ctx); err != nil { return err }
-    if err := n.ContainerLifecycle.StartContainer(ctx); err != nil { return err }
+    if err := n.createNodeContainer(ctx); err != nil {
+        return err
+    }
+    if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
+        return err
+    }
 
     // Resolve host ports
     hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.internal.RPC+"/tcp", n.internal.P2P+"/tcp")
-    if err != nil { return err }
-    n.external = types.Ports{ RPC: internal.MustExtractPort(hostPorts[0]), P2P: internal.MustExtractPort(hostPorts[1]) }
+    if err != nil {
+        return err
+    }
+    n.external = types.Ports{
+        RPC: internal.MustExtractPort(hostPorts[0]),
+        P2P: internal.MustExtractPort(hostPorts[1]),
+    }
 
     // Wait for the node's own RPC to be responsive using its CLI
     if err := n.waitForSelfReady(ctx); err != nil {

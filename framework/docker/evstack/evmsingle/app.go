@@ -23,10 +23,16 @@ type App struct {
 
 // GetNodes returns nodes sorted by name for consistent ordering
 func (a *App) GetNodes() []*Node {
-    a.mu.Lock(); defer a.mu.Unlock()
+    a.mu.Lock()
+    defer a.mu.Unlock()
+
     out := make([]*Node, 0, len(a.nodes))
-    for _, n := range a.nodes { out = append(out, n) }
-    sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
+    for _, n := range a.nodes {
+        out = append(out, n)
+    }
+    sort.Slice(out, func(i, j int) bool {
+        return out[i].Name() < out[j].Name()
+    })
     return out
 }
 
@@ -34,7 +40,10 @@ func (a *App) GetNodes() []*Node {
 func (a *App) AddNodes(ctx context.Context, nodeConfigs ...NodeConfig) ([]*Node, error) {
     if len(nodeConfigs) == 0 { return nil, fmt.Errorf("at least one node config required") }
 
-    a.mu.Lock(); start := a.nextIndex; a.nextIndex += len(nodeConfigs); a.mu.Unlock()
+    a.mu.Lock()
+    start := a.nextIndex
+    a.nextIndex += len(nodeConfigs)
+    a.mu.Unlock()
 
     created := make([]*Node, 0, len(nodeConfigs))
     for i, nc := range nodeConfigs {
@@ -51,7 +60,11 @@ func (a *App) AddNodes(ctx context.Context, nodeConfigs ...NodeConfig) ([]*Node,
 
 // StartAll starts all nodes
 func (a *App) StartAll(ctx context.Context) error {
-    for _, n := range a.GetNodes() { if err := n.Start(ctx); err != nil { return err } }
+    for _, n := range a.GetNodes() {
+        if err := n.Start(ctx); err != nil {
+            return err
+        }
+    }
     return nil
 }
 
@@ -61,7 +74,11 @@ func (a *App) Start(ctx context.Context) error { return a.StartAll(ctx) }
 // StopAll stops all nodes
 func (a *App) StopAll(ctx context.Context) error {
     var firstErr error
-    for _, n := range a.GetNodes() { if err := n.Stop(ctx); err != nil && firstErr == nil { firstErr = err } }
+    for _, n := range a.GetNodes() {
+        if err := n.Stop(ctx); err != nil && firstErr == nil {
+            firstErr = err
+        }
+    }
     return firstErr
 }
 
@@ -71,6 +88,10 @@ func (a *App) Stop(ctx context.Context) error { return a.StopAll(ctx) }
 // RemoveAll removes all nodes (stopping first) with optional removal options (e.g., preserve volumes)
 func (a *App) Remove(ctx context.Context, opts ...types.RemoveOption) error {
     var firstErr error
-    for _, n := range a.GetNodes() { if err := n.Remove(ctx, opts...); err != nil && firstErr == nil { firstErr = err } }
+    for _, n := range a.GetNodes() {
+        if err := n.Remove(ctx, opts...); err != nil && firstErr == nil {
+            firstErr = err
+        }
+    }
     return firstErr
 }

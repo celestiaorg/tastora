@@ -39,22 +39,63 @@ type NodeConfig struct {
 type NodeConfigBuilder struct{ cfg *NodeConfig }
 
 func NewNodeConfigBuilder() *NodeConfigBuilder { return &NodeConfigBuilder{cfg: &NodeConfig{}} }
-func (b *NodeConfigBuilder) WithRethNode(n *reth.Node) *NodeConfigBuilder { b.cfg.RethNode = n; return b }
-func (b *NodeConfigBuilder) WithEVMEngineURL(v string) *NodeConfigBuilder { b.cfg.EVMEngineURL = v; return b }
-func (b *NodeConfigBuilder) WithEVMETHURL(v string) *NodeConfigBuilder    { b.cfg.EVMETHURL = v; return b }
-func (b *NodeConfigBuilder) WithEVMJWTSecret(v string) *NodeConfigBuilder { b.cfg.EVMJWTSecret = v; return b }
+func (b *NodeConfigBuilder) WithRethNode(n *reth.Node) *NodeConfigBuilder {
+    b.cfg.RethNode = n
+    return b
+}
+
+func (b *NodeConfigBuilder) WithEVMEngineURL(v string) *NodeConfigBuilder {
+    b.cfg.EVMEngineURL = v
+    return b
+}
+
+func (b *NodeConfigBuilder) WithEVMETHURL(v string) *NodeConfigBuilder {
+    b.cfg.EVMETHURL = v
+    return b
+}
+
+func (b *NodeConfigBuilder) WithEVMJWTSecret(v string) *NodeConfigBuilder {
+    b.cfg.EVMJWTSecret = v
+    return b
+}
+
 func (b *NodeConfigBuilder) WithEVMGenesisHash(v string) *NodeConfigBuilder {
-    b.cfg.EVMGenesisHash = v; return b
+    b.cfg.EVMGenesisHash = v
+    return b
 }
-func (b *NodeConfigBuilder) WithEVMBlockTime(v string) *NodeConfigBuilder { b.cfg.EVMBlockTime = v; return b }
-func (b *NodeConfigBuilder) WithEVMSignerPassphrase(v string) *NodeConfigBuilder { b.cfg.EVMSignerPassphrase = v; return b }
-func (b *NodeConfigBuilder) WithDAAddress(v string) *NodeConfigBuilder    { b.cfg.DAAddress = v; return b }
-func (b *NodeConfigBuilder) WithDAAuthToken(v string) *NodeConfigBuilder  { b.cfg.DAAuthToken = v; return b }
-func (b *NodeConfigBuilder) WithDANamespace(v string) *NodeConfigBuilder  { b.cfg.DANamespace = v; return b }
+
+func (b *NodeConfigBuilder) WithEVMBlockTime(v string) *NodeConfigBuilder {
+    b.cfg.EVMBlockTime = v
+    return b
+}
+
+func (b *NodeConfigBuilder) WithEVMSignerPassphrase(v string) *NodeConfigBuilder {
+    b.cfg.EVMSignerPassphrase = v
+    return b
+}
+
+func (b *NodeConfigBuilder) WithDAAddress(v string) *NodeConfigBuilder {
+    b.cfg.DAAddress = v
+    return b
+}
+
+func (b *NodeConfigBuilder) WithDAAuthToken(v string) *NodeConfigBuilder {
+    b.cfg.DAAuthToken = v
+    return b
+}
+
+func (b *NodeConfigBuilder) WithDANamespace(v string) *NodeConfigBuilder {
+    b.cfg.DANamespace = v
+    return b
+}
+
 func (b *NodeConfigBuilder) WithAdditionalStartArgs(args ...string) *NodeConfigBuilder {
-    b.cfg.AdditionalStartArgs = args; return b
+    b.cfg.AdditionalStartArgs = args
+    return b
 }
+
 func (b *NodeConfigBuilder) WithPostStart(hooks ...func(ctx context.Context, n *Node) error) *NodeConfigBuilder {
-    b.cfg.PostStart = hooks; return b
+    b.cfg.PostStart = hooks
+    return b
 }
 func (b *NodeConfigBuilder) Build() NodeConfig { return *b.cfg }
