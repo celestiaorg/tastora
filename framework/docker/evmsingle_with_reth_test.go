@@ -3,7 +3,6 @@ package docker
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -114,12 +113,12 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	require.NoError(t, err)
 	daAddress := fmt.Sprintf("http://%s:%s", bridgeNI.Internal.IP, bridgeNI.Internal.Ports.RPC)
 
-    // 3) Build a 1-node reth chain using a default evolve genesis helper
-    rbuilder := reth.NewChainBuilder(t).
-        WithDockerClient(testCfg.DockerClient).
-        WithDockerNetworkID(testCfg.NetworkID).
-        WithGenesis([]byte(reth.DefaultEvolveGenesisJSON())).
-        WithNodes(reth.NewNodeConfigBuilder().Build())
+	// 3) Build a 1-node reth chain using a default evolve genesis helper
+	rbuilder := reth.NewChainBuilder(t).
+		WithDockerClient(testCfg.DockerClient).
+		WithDockerNetworkID(testCfg.NetworkID).
+		WithGenesis([]byte(reth.DefaultEvolveGenesisJSON())).
+		WithNodes(reth.NewNodeConfigBuilder().Build())
 
 	rchain := rbuilder.Build()
 
@@ -133,27 +132,17 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	rnodes := rchain.GetNodes()
 	require.Len(t, rnodes, 1)
 
-	// Wait until reth JSON-RPC is ready
-	rni, err := rnodes[0].GetNetworkInfo(ctx)
-	require.NoError(t, err)
-	rpcURL := fmt.Sprintf("http://0.0.0.0:%s", rni.External.Ports.RPC)
+	// Wait until reth JSON-RPC is ready using ethclient (fetch latest block number)
 	require.Eventually(t, func() bool {
-		reqBody := map[string]any{
-			"jsonrpc": "2.0",
-			"id":      1,
-			"method":  "web3_clientVersion",
-			"params":  []any{},
-		}
-		b, _ := json.Marshal(reqBody)
-		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, rpcURL, bytes.NewReader(b))
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := http.DefaultClient.Do(req)
+		ec, err := rnodes[0].GetEthClient(ctx)
 		if err != nil {
 			return false
 		}
-		defer func() { _ = resp.Body.Close() }()
-		return resp.StatusCode == http.StatusOK
-	}, 45*time.Second, 1*time.Second, "reth JSON-RPC did not become ready")
+		if _, err := ec.BlockNumber(ctx); err != nil {
+			return false
+		}
+		return true
+	}, 45*time.Second, 1*time.Second, "reth JSON-RPC (ethclient) did not become ready")
 
 	// Fetch genesis block hash from reth via helper
 	genesisHash, err = rnodes[0].GenesisHash(ctx)

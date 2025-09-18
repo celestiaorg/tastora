@@ -6,6 +6,8 @@ import (
     "sort"
     "sync"
 
+    gethrpc "github.com/ethereum/go-ethereum/rpc"
+    "github.com/ethereum/go-ethereum/ethclient"
     "github.com/celestiaorg/tastora/framework/types"
     "go.uber.org/zap"
 )
@@ -69,3 +71,20 @@ func (c *Chain) RemoveAll(ctx context.Context, opts ...types.RemoveOption) error
     return firstErr
 }
 
+// GetRPCClient returns a go-ethereum RPC client for the first node in the chain.
+func (c *Chain) GetRPCClient(ctx context.Context) (*gethrpc.Client, error) {
+    nodes := c.GetNodes()
+    if len(nodes) == 0 { return nil, fmt.Errorf("no reth nodes in chain") }
+    return nodes[0].GetRPCClient(ctx)
+}
+
+// GetEthClient returns a go-ethereum ethclient.Client for the first node in the chain.
+func (c *Chain) GetEthClient(ctx context.Context) (*ethclient.Client, error) {
+    nodes := c.GetNodes()
+    if len(nodes) == 0 { return nil, fmt.Errorf("no reth nodes in chain") }
+    return nodes[0].GetEthClient(ctx)
+}
+
+// GetClient returns a bound Ethereum JSON-RPC client for the first node in the
+// chain. Returns an error if the chain has no nodes or the node is not started.
+// go-ethereum clients are exposed under build tag with_geth (see geth_chain_client.go)

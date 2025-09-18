@@ -1,15 +1,16 @@
 package reth
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"net/http"
+	"math/big"
 	"path"
 	"sync"
+
+	"github.com/ethereum/go-ethereum/ethclient"
+	gethrpc "github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
@@ -136,41 +137,37 @@ func (n *Node) GenesisHash(ctx context.Context) (string, error) {
 	if !n.started {
 		return "", fmt.Errorf("reth node not started")
 	}
+	ec, err := n.GetEthClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	hdr, err := ec.HeaderByNumber(ctx, big.NewInt(0))
+	if err != nil {
+		return "", err
+	}
+	return hdr.Hash().Hex(), nil
+}
+
+// GetRPCClient returns a go-ethereum RPC client connected to this node's host-mapped RPC URL.
+func (n *Node) GetRPCClient(ctx context.Context) (*gethrpc.Client, error) {
+	if !n.started {
+		return nil, fmt.Errorf("reth node not started")
+	}
 	ni, err := n.GetNetworkInfo(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	rpcURL := fmt.Sprintf("http://0.0.0.0:%s", ni.External.Ports.RPC)
-	// Build RPC request
-	body := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "eth_getBlockByNumber",
-		"params":  []any{"0x0", false},
-	}
-	b, _ := json.Marshal(body)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, rpcURL, bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	return gethrpc.DialContext(ctx, rpcURL)
+}
+
+// GetEthClient returns a go-ethereum ethclient.Client constructed from the underlying RPC client.
+func (n *Node) GetEthClient(ctx context.Context) (*ethclient.Client, error) {
+	rpcCli, err := n.GetRPCClient(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("rpc status %d", resp.StatusCode)
-	}
-	var out struct {
-		Result struct {
-			Hash string `json:"hash"`
-		} `json:"result"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
-	}
-	if out.Result.Hash == "" {
-		return "", fmt.Errorf("empty genesis hash")
-	}
-	return out.Result.Hash, nil
+	return ethclient.NewClient(rpcCli), nil
 }
 
 // GetNetworkInfo returns internal/external network addressing for select ports
