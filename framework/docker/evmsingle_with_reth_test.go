@@ -12,7 +12,6 @@ import (
 	sdkmath "cosmossdk.io/math"
 	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
 	evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
-	reth "github.com/celestiaorg/tastora/framework/docker/evstack/reth"
 	sdkacc "github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -50,10 +49,7 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	defer cancel()
 
 	t.Cleanup(func() {
-		// Best-effort teardown
-		_ = chain.Stop(ctx)
 		_ = chain.Remove(ctx)
-		// DA nodes removed by network removal?
 		nodes := danet.GetNodes()
 		for _, n := range nodes {
 			_ = n.Remove(ctx)
@@ -112,21 +108,16 @@ func TestEvmSingle_WithReth(t *testing.T) {
 		}),
 	))
 
-	// Compute DA address for evm-single (use bridge internal RPC)
+	// compute DA address for evm-single (use bridge internal RPC)
 	bridgeNI, err := bridge.GetNetworkInfo(ctx)
 	require.NoError(t, err)
 	daAddress := fmt.Sprintf("http://%s:%s", bridgeNI.Internal.IP, bridgeNI.Internal.Ports.RPC)
 
-	// 3) Build a single reth node using a default evolve genesis helper
-	rnode, err := reth.NewNodeBuilderWithTestName(t, testCfg.TestName).
-		WithDockerClient(testCfg.DockerClient).
-		WithDockerNetworkID(testCfg.NetworkID).
-		WithGenesis([]byte(reth.DefaultEvolveGenesisJSON())).
-		Build(ctx)
+	// 3) Build a single reth node using the pre-configured builder
+	rnode, err := testCfg.RethBuilder.Build(ctx)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		_ = rnode.Stop(ctx)
 		_ = rnode.Remove(ctx)
 	})
 
@@ -166,33 +157,31 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	evmEthURL := fmt.Sprintf("http://%s:%s", rethNetworkInfo.Internal.Hostname, rethNetworkInfo.Internal.Ports.RPC)
 	evmEngineURL := fmt.Sprintf("http://%s:%s", rethNetworkInfo.Internal.Hostname, rethNetworkInfo.Internal.Ports.Engine)
 
-    // 4) Build an evm-single chain linked to reth and DA (explicit config)
-    ebuilder := evmsingle.NewChainBuilder(t).
-        WithDockerClient(testCfg.DockerClient).
-        WithDockerNetworkID(testCfg.NetworkID).
-        WithNode(
-            evmsingle.NewNodeConfigBuilder().
-                WithEVMEngineURL(evmEngineURL).
-                WithEVMETHURL(evmEthURL).
-                WithEVMJWTSecret(rnode.JWTSecretHex()).
-                WithEVMSignerPassphrase("secret").
-                WithEVMBlockTime("1s").
-                WithEVMGenesisHash(genesisHash).
-                WithDAAddress(daAddress).
-                Build(),
-        )
+	// 4) Build an evm-single chain linked to reth and DA (explicit config)
+	ebuilder := testCfg.EVMSingleChainBuilder.
+		WithNode(
+			evmsingle.NewNodeConfigBuilder().
+				WithEVMEngineURL(evmEngineURL).
+				WithEVMETHURL(evmEthURL).
+				WithEVMJWTSecret(rnode.JWTSecretHex()).
+				WithEVMSignerPassphrase("secret").
+				WithEVMBlockTime("1s").
+				WithEVMGenesisHash(genesisHash).
+				WithDAAddress(daAddress).
+				Build(),
+		)
 
-    echain, err := ebuilder.Build(ctx)
-    require.NoError(t, err)
-    t.Cleanup(func() {
-        _ = echain.Stop(ctx)
-        _ = echain.Remove(ctx)
-    })
+	echain, err := ebuilder.Build(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = echain.Stop(ctx)
+		_ = echain.Remove(ctx)
+	})
 
-    require.NoError(t, echain.Start(ctx))
+	require.NoError(t, echain.Start(ctx))
 
-    enodes := echain.Nodes()
-    require.Len(t, enodes, 1)
+	enodes := echain.Nodes()
+	require.Len(t, enodes, 1)
 
 	eni, err := enodes[0].GetNetworkInfo(ctx)
 	require.NoError(t, err)
