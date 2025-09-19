@@ -204,39 +204,38 @@ func (n *Node) Start(ctx context.Context) error {
 		return n.StartContainer(ctx)
 	}
 
-	// Prepare JWT
-	if n.nodeCfg.JWTSecretHex != "" {
-		n.jwtHex = n.nodeCfg.JWTSecretHex
-	} else {
-		s, err := generateJWTSecretHex(32)
-		if err != nil {
-			return fmt.Errorf("generate jwt secret: %w", err)
-		}
-		n.jwtHex = s
+	jetSecretHex, err := n.getJWTSecret()
+	if err != nil {
+		return fmt.Errorf("get jwt secret: %w", err)
 	}
+	n.jwtHex = jetSecretHex
 
 	//  skip genesis generation unless explicitly provided.
 	// TODO: support genesis creation without a fixture.
+	if len(n.cfg.GenesisFileBz) == 0 {
+		return fmt.Errorf("error unimplemented: automatic genesis generation not yet supported")
+	}
+
 	if len(n.cfg.GenesisFileBz) > 0 {
 		n.genesisBz = n.cfg.GenesisFileBz
 	}
 
 	if err := n.writeNodeFiles(ctx); err != nil {
-		return err
+		return fmt.Errorf("write node files: %w", err)
 	}
 
 	if err := n.createNodeContainer(ctx); err != nil {
-		return err
+		return fmt.Errorf("create node container: %w", err)
 	}
 
 	if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
-		return err
+		return fmt.Errorf("start node container: %w", err)
 	}
 
 	// resolve host ports
 	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.internal.RPC+"/tcp", n.internal.P2P+"/tcp", n.internal.API+"/tcp", n.internal.Engine+"/tcp", n.internal.Metrics+"/tcp")
 	if err != nil {
-		return err
+		return fmt.Errorf("get host ports: %w", err)
 	}
 	n.external = types.Ports{RPC: internal.MustExtractPort(hostPorts[0]), P2P: internal.MustExtractPort(hostPorts[1]), API: internal.MustExtractPort(hostPorts[2]), Engine: internal.MustExtractPort(hostPorts[3]), Metrics: internal.MustExtractPort(hostPorts[4])}
 
@@ -244,11 +243,34 @@ func (n *Node) Start(ctx context.Context) error {
 	return nil
 }
 
-// Internal locations for jwt/genesis and datadir within the mounted home
-func (n *Node) jwtPath() string     { return path.Join(n.HomeDir(), "jwt", "jwt.hex") }
-func (n *Node) genesisPath() string { return path.Join(n.HomeDir(), "chain", "genesis.json") }
-func (n *Node) dataDir() string     { return path.Join(n.HomeDir(), "eth-home") }
+func (n *Node) getJWTSecret() (string, error) {
+	s := n.nodeCfg.JWTSecretHex
+	if s != "" {
+		return s, nil
+	}
+	s, err := generateJWTSecretHex(32)
+	if err != nil {
+		return "", fmt.Errorf("generate jwt secret: %w", err)
+	}
+	return s, nil
+}
 
+// jwtPath returns the path to the JWT secret file inside the container.
+func (n *Node) jwtPath() string {
+	return path.Join(n.HomeDir(), "jwt", "jwt.hex")
+}
+
+// genesisPath returns the path to the genesis file inside the container.
+func (n *Node) genesisPath() string {
+	return path.Join(n.HomeDir(), "chain", "genesis.json")
+}
+
+// dataDir returns the path to the node's data directory inside the container.
+func (n *Node) dataDir() string {
+	return path.Join(n.HomeDir(), "eth-home")
+}
+
+// writeNodeFiles writes necessary files (genesis, jwt) to the node's volume.
 func (n *Node) writeNodeFiles(ctx context.Context) error {
 	if err := n.WriteFile(ctx, path.Join("jwt", "jwt.hex"), []byte(n.jwtHex)); err != nil {
 		return fmt.Errorf("write jwt: %w", err)
@@ -261,6 +283,7 @@ func (n *Node) writeNodeFiles(ctx context.Context) error {
 	return nil
 }
 
+// createNodeContainer constructs and creates the docker container for the node.
 func (n *Node) createNodeContainer(ctx context.Context) error {
 	cmd := []string{
 		n.cfg.Bin, "node",
@@ -287,21 +310,19 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 		"--ev-reth.enable",
 	}
 
-	// Merge chain and per-node additional args
-	if len(n.cfg.AdditionalStartArgs) > 0 {
-		cmd = append(cmd, n.cfg.AdditionalStartArgs...)
+	// specifying additional start args at the node level takes precedence over chain-level.
+	additionalInitArgs := n.cfg.AdditionalInitArgs
+	if len(n.nodeCfg.AdditionalInitArgs) > 0 {
+		additionalInitArgs = n.nodeCfg.AdditionalInitArgs
+	}
+	cmd = append(cmd, additionalInitArgs...)
+
+	env := n.cfg.Env
+	if len(n.nodeCfg.Env) > 0 {
+		env = n.nodeCfg.Env
 	}
 
-	if len(n.nodeCfg.AdditionalStartArgs) > 0 {
-		cmd = append(cmd, n.nodeCfg.AdditionalStartArgs...)
-	}
-
-	// Merge env
-	var env []string
-	env = append(env, n.cfg.Env...)
-	env = append(env, n.nodeCfg.Env...)
-
-	// Ports to expose
+	// ports to expose
 	usingPorts := nat.PortMap{
 		nat.Port(n.internal.Metrics + "/tcp"): {},
 		nat.Port(n.internal.P2P + "/tcp"):     {},
@@ -313,6 +334,7 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, env, []string{})
 }
 
+// generateJWTSecretHex generates a random JWT secret of nbytes length and returns it as a hex-encoded string.
 func generateJWTSecretHex(nbytes int) (string, error) {
 	b := make([]byte, nbytes)
 	if _, err := rand.Read(b); err != nil {
