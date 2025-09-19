@@ -166,33 +166,33 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	evmEthURL := fmt.Sprintf("http://%s:%s", rethNetworkInfo.Internal.Hostname, rethNetworkInfo.Internal.Ports.RPC)
 	evmEngineURL := fmt.Sprintf("http://%s:%s", rethNetworkInfo.Internal.Hostname, rethNetworkInfo.Internal.Ports.Engine)
 
-	// 4) Build an evm-single app linked to reth and DA (explicit config)
-	ebuilder := evmsingle.NewBuilder(t).
-		WithDockerClient(testCfg.DockerClient).
-		WithDockerNetworkID(testCfg.NetworkID).
-		WithNode(
-			evmsingle.NewNodeConfigBuilder().
-				WithEVMEngineURL(evmEngineURL).
-				WithEVMETHURL(evmEthURL).
-				WithEVMJWTSecret(rnode.JWTSecretHex()).
-				WithEVMSignerPassphrase("secret").
-				WithEVMBlockTime("1s").
-				WithEVMGenesisHash(genesisHash).
-				WithDAAddress(daAddress).
-				Build(),
-		)
+    // 4) Build an evm-single chain linked to reth and DA (explicit config)
+    ebuilder := evmsingle.NewChainBuilder(t).
+        WithDockerClient(testCfg.DockerClient).
+        WithDockerNetworkID(testCfg.NetworkID).
+        WithNode(
+            evmsingle.NewNodeConfigBuilder().
+                WithEVMEngineURL(evmEngineURL).
+                WithEVMETHURL(evmEthURL).
+                WithEVMJWTSecret(rnode.JWTSecretHex()).
+                WithEVMSignerPassphrase("secret").
+                WithEVMBlockTime("1s").
+                WithEVMGenesisHash(genesisHash).
+                WithDAAddress(daAddress).
+                Build(),
+        )
 
-	eapp, err := ebuilder.Build(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = eapp.Stop(ctx)
-		_ = eapp.Remove(ctx)
-	})
+    echain, err := ebuilder.Build(ctx)
+    require.NoError(t, err)
+    t.Cleanup(func() {
+        _ = echain.Stop(ctx)
+        _ = echain.Remove(ctx)
+    })
 
-	require.NoError(t, eapp.Start(ctx))
+    require.NoError(t, echain.Start(ctx))
 
-	enodes := eapp.GetNodes()
-	require.Len(t, enodes, 1)
+    enodes := echain.Nodes()
+    require.Len(t, enodes, 1)
 
 	eni, err := enodes[0].GetNetworkInfo(ctx)
 	require.NoError(t, err)
@@ -211,4 +211,3 @@ func TestEvmSingle_WithReth(t *testing.T) {
 		return resp.StatusCode == http.StatusOK
 	}, 60*time.Second, 2*time.Second, "evm-single did not become healthy")
 }
-

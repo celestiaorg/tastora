@@ -10,8 +10,8 @@ import (
     "go.uber.org/zap/zaptest"
 )
 
-// AppBuilder constructs a set of ev-node-evm-single nodes
-type AppBuilder struct {
+// ChainBuilder constructs a Chain and pre-creates node volumes
+type ChainBuilder struct {
     t            *testing.T
     testName     string
     logger       *zap.Logger
@@ -23,71 +23,71 @@ type AppBuilder struct {
     nodes        []NodeConfig
 }
 
-func NewBuilder(t *testing.T) *AppBuilder {
-    return NewBuilderWithTestName(t, t.Name())
+func NewChainBuilder(t *testing.T) *ChainBuilder {
+    return NewChainBuilderWithTestName(t, t.Name())
 }
 
-func NewBuilderWithTestName(t *testing.T, testName string) *AppBuilder {
+func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
     t.Helper()
-    return (&AppBuilder{}).
+    return (&ChainBuilder{}).
         WithT(t).
         WithTestName(testName).
         WithLogger(zaptest.NewLogger(t)).
         WithImage(DefaultImage())
 }
 
-func (b *AppBuilder) WithT(t *testing.T) *AppBuilder {
+func (b *ChainBuilder) WithT(t *testing.T) *ChainBuilder {
     b.t = t
     return b
 }
 
-func (b *AppBuilder) WithTestName(name string) *AppBuilder {
+func (b *ChainBuilder) WithTestName(name string) *ChainBuilder {
     b.testName = name
     return b
 }
 
-func (b *AppBuilder) WithLogger(l *zap.Logger) *AppBuilder {
+func (b *ChainBuilder) WithLogger(l *zap.Logger) *ChainBuilder {
     b.logger = l
     return b
 }
 
-func (b *AppBuilder) WithDockerClient(c *dockerclient.Client) *AppBuilder {
+func (b *ChainBuilder) WithDockerClient(c *dockerclient.Client) *ChainBuilder {
     b.dockerClient = c
     return b
 }
 
-func (b *AppBuilder) WithDockerNetworkID(id string) *AppBuilder {
+func (b *ChainBuilder) WithDockerNetworkID(id string) *ChainBuilder {
     b.networkID = id
     return b
 }
 
-func (b *AppBuilder) WithImage(img container.Image) *AppBuilder {
+func (b *ChainBuilder) WithImage(img container.Image) *ChainBuilder {
     b.image = img
     return b
 }
 
-func (b *AppBuilder) WithEnv(env ...string) *AppBuilder {
+func (b *ChainBuilder) WithEnv(env ...string) *ChainBuilder {
     b.env = env
     return b
 }
 
-func (b *AppBuilder) WithAdditionalStartArgs(args ...string) *AppBuilder {
+func (b *ChainBuilder) WithAdditionalStartArgs(args ...string) *ChainBuilder {
     b.addlArgs = args
     return b
 }
 
-func (b *AppBuilder) WithNode(cfg NodeConfig) *AppBuilder {
+func (b *ChainBuilder) WithNode(cfg NodeConfig) *ChainBuilder {
     b.nodes = append(b.nodes, cfg)
     return b
 }
 
-func (b *AppBuilder) WithNodes(cfgs ...NodeConfig) *AppBuilder {
+func (b *ChainBuilder) WithNodes(cfgs ...NodeConfig) *ChainBuilder {
     b.nodes = cfgs
     return b
 }
 
-// Build constructs an App with nodes created and volumes initialized (not started)
-func (b *AppBuilder) Build(ctx context.Context) (*App, error) {
+// Build constructs a Chain with nodes created and volumes initialized (not started)
+func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
     cfg := Config{
         Logger:             b.logger,
         DockerClient:       b.dockerClient,
@@ -98,7 +98,7 @@ func (b *AppBuilder) Build(ctx context.Context) (*App, error) {
         AdditionalStartArgs: b.addlArgs,
     }
 
-    app := &App{
+    chain := &Chain{
         cfg:       cfg,
         log:       b.logger,
         testName:  b.testName,
@@ -111,9 +111,8 @@ func (b *AppBuilder) Build(ctx context.Context) (*App, error) {
         if err != nil {
             return nil, err
         }
-        app.nodes[n.Name()] = n
-        app.nextIndex++
+        chain.nodes[n.Name()] = n
+        chain.nextIndex++
     }
-    return app, nil
+    return chain, nil
 }
-
