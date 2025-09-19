@@ -33,8 +33,6 @@ type NodeConfig struct {
 	GenesisBz []byte
 	// JWTSecretHex sets the node JWT secret in hex; if empty, it will be generated
 	JWTSecretHex string
-	// AdditionalInitArgs are appended to dump-genesis when generating a genesis
-	AdditionalInitArgs []string
 }
 
 // NodeConfigBuilder provides a fluent builder for NodeConfig
@@ -71,11 +69,6 @@ func (b *NodeConfigBuilder) WithGenesis(genesis []byte) *NodeConfigBuilder {
 
 func (b *NodeConfigBuilder) WithJWTSecretHex(secret string) *NodeConfigBuilder {
 	b.cfg.JWTSecretHex = secret
-	return b
-}
-
-func (b *NodeConfigBuilder) WithAdditionalInitArgs(args ...string) *NodeConfigBuilder {
-	b.cfg.AdditionalInitArgs = args
 	return b
 }
 
@@ -311,11 +304,11 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 	}
 
 	// specifying additional start args at the node level takes precedence over chain-level.
-	additionalInitArgs := n.cfg.AdditionalInitArgs
-	if len(n.nodeCfg.AdditionalInitArgs) > 0 {
-		additionalInitArgs = n.nodeCfg.AdditionalInitArgs
+	additionalStartArgs := n.cfg.AdditionalStartArgs
+	if len(n.nodeCfg.AdditionalStartArgs) > 0 {
+		additionalStartArgs = n.nodeCfg.AdditionalStartArgs
 	}
-	cmd = append(cmd, additionalInitArgs...)
+	cmd = append(cmd, additionalStartArgs...)
 
 	env := n.cfg.Env
 	if len(n.nodeCfg.Env) > 0 {
