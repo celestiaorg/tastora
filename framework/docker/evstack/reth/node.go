@@ -164,8 +164,6 @@ func (n *Node) Start(ctx context.Context) error {
 	return nil
 }
 
-// jwt is generated in Start if not preset via builder
-
 // jwtPath returns the path to the JWT secret file inside the container.
 func (n *Node) jwtPath() string {
 	return path.Join(n.HomeDir(), "jwt", "jwt.hex")
