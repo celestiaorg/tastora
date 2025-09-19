@@ -3,14 +3,7 @@ package reth
 // DefaultEvolveGenesisJSON returns a stable EVM genesis JSON used to align
 // ev-node (sequencer) and the execution client (reth) during tests.
 //
-// Why this exists (temporary):
-//   - ev-node’s Engine API flow currently assumes specific chain parameters and
-//     fails with a nil PayloadID on reth’s built-in dev chain, which leads to a
-//     panic in upstream logging. Using a known, fixed genesis keeps forkchoice
-//     coherent and prevents those failures while integration stabilizes.
-//   - Once ev-node reliably accepts reth’s dev chain (or derives all needed
-//     parameters dynamically), this helper can be removed and tests can rely on
-//     the default chain again.
+// using a hard coded genesis to align with the e2e tests in the ev-node repo.
 func DefaultEvolveGenesisJSON() string {
 	return `{
   "config": {
