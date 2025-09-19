@@ -4,34 +4,34 @@ import (
     "context"
     "testing"
 
-	"github.com/celestiaorg/tastora/framework/docker/container"
-	dockerclient "github.com/moby/moby/client"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
+    "github.com/celestiaorg/tastora/framework/docker/container"
+    dockerclient "github.com/moby/moby/client"
+    "go.uber.org/zap"
+    "go.uber.org/zap/zaptest"
 )
 
-// ChainBuilder constructs a Reth Chain and its nodes
-type ChainBuilder struct {
-	t            *testing.T
-	testName     string
-	logger       *zap.Logger
-	dockerClient *dockerclient.Client
-	networkID    string
-	image        container.Image
-	env          []string
-	addlArgs     []string
-	bin          string
-	genesis      []byte
-	nodes        []NodeConfig
+// NodeBuilder constructs a single Reth Node and builds its Docker resources (volume, etc.).
+type NodeBuilder struct {
+	t                   *testing.T
+	testName            string
+	logger              *zap.Logger
+	dockerClient        *dockerclient.Client
+	networkID           string
+	image               container.Image
+	env                 []string
+	additionalStartArgs []string
+	bin                 string
+	genesis             []byte
+    jwtSecretHex        string
 }
 
-func NewChainBuilder(t *testing.T) *ChainBuilder {
-    return NewChainBuilderWithTestName(t, t.Name())
+func NewNodeBuilder(t *testing.T) *NodeBuilder {
+	return NewNodeBuilderWithTestName(t, t.Name())
 }
 
-func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
+func NewNodeBuilderWithTestName(t *testing.T, testName string) *NodeBuilder {
 	t.Helper()
-	return (&ChainBuilder{}).
+	return (&NodeBuilder{}).
 		WithT(t).
 		WithTestName(testName).
 		WithLogger(zaptest.NewLogger(t)).
@@ -39,91 +39,70 @@ func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
 		WithBin("ev-reth")
 }
 
-func (b *ChainBuilder) WithT(t *testing.T) *ChainBuilder {
-    b.t = t
-    return b
+func (b *NodeBuilder) WithT(t *testing.T) *NodeBuilder {
+	b.t = t
+	return b
 }
-
-func (b *ChainBuilder) WithTestName(name string) *ChainBuilder {
-    b.testName = name
-    return b
+func (b *NodeBuilder) WithTestName(name string) *NodeBuilder {
+	b.testName = name
+	return b
 }
-
-func (b *ChainBuilder) WithLogger(l *zap.Logger) *ChainBuilder {
-    b.logger = l
-    return b
+func (b *NodeBuilder) WithLogger(l *zap.Logger) *NodeBuilder {
+	b.logger = l
+	return b
 }
-func (b *ChainBuilder) WithDockerClient(c *dockerclient.Client) *ChainBuilder {
+func (b *NodeBuilder) WithDockerClient(c *dockerclient.Client) *NodeBuilder {
 	b.dockerClient = c
 	return b
 }
-func (b *ChainBuilder) WithDockerNetworkID(id string) *ChainBuilder {
-    b.networkID = id
-    return b
-}
-
-func (b *ChainBuilder) WithImage(img container.Image) *ChainBuilder {
-    b.image = img
-    return b
-}
-
-func (b *ChainBuilder) WithEnv(env ...string) *ChainBuilder {
-    b.env = env
-    return b
-}
-func (b *ChainBuilder) WithAdditionalStartArgs(args ...string) *ChainBuilder {
-	b.addlArgs = args
+func (b *NodeBuilder) WithDockerNetworkID(id string) *NodeBuilder {
+	b.networkID = id
 	return b
 }
-func (b *ChainBuilder) WithBin(bin string) *ChainBuilder {
-    b.bin = bin
+func (b *NodeBuilder) WithImage(img container.Image) *NodeBuilder {
+	b.image = img
+	return b
+}
+func (b *NodeBuilder) WithEnv(env ...string) *NodeBuilder {
+	b.env = env
+	return b
+}
+func (b *NodeBuilder) WithAdditionalStartArgs(args ...string) *NodeBuilder {
+	b.additionalStartArgs = args
+	return b
+}
+func (b *NodeBuilder) WithBin(bin string) *NodeBuilder {
+	b.bin = bin
+	return b
+}
+func (b *NodeBuilder) WithGenesis(genesis []byte) *NodeBuilder {
+	b.genesis = genesis
+	return b
+}
+
+func (b *NodeBuilder) WithJWTSecretHex(secret string) *NodeBuilder {
+    b.jwtSecretHex = secret
     return b
 }
 
-func (b *ChainBuilder) WithGenesis(genesis []byte) *ChainBuilder {
-    b.genesis = genesis
-    return b
-}
-
-func (b *ChainBuilder) WithNode(cfg NodeConfig) *ChainBuilder {
-    b.nodes = append(b.nodes, cfg)
-    return b
-}
-
-func (b *ChainBuilder) WithNodes(cfgs ...NodeConfig) *ChainBuilder {
-    b.nodes = cfgs
-    return b
-}
-
-// Build constructs a Chain with nodes created and volumes initialized.
-func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
+// Build constructs the Node and initializes its Docker volume but does not start the container.
+func (b *NodeBuilder) Build(ctx context.Context) (*Node, error) {
     cfg := Config{
-        Logger:          b.logger,
-        DockerClient:    b.dockerClient,
-        DockerNetworkID: b.networkID,
-        Image:           b.image,
-        Bin:             b.bin,
-        Env:             b.env,
-        AdditionalStartArgs: b.addlArgs,
+        Logger:              b.logger,
+        DockerClient:        b.dockerClient,
+        DockerNetworkID:     b.networkID,
+        Image:               b.image,
+        Bin:                 b.bin,
+        Env:                 b.env,
+        AdditionalStartArgs: b.additionalStartArgs,
+        JWTSecretHex:        b.jwtSecretHex,
         GenesisFileBz:       b.genesis,
     }
 
-    chain := &Chain{
-        cfg:       cfg,
-        log:       b.logger,
-        testName:  b.testName,
-        nodes:     make(map[string]*Node),
-        nextIndex: 0,
-    }
+    n, err := newNode(ctx, cfg, b.testName, 0)
+	if err != nil {
+		return nil, err
+	}
 
-    // Pre-create nodes and volumes (without starting)
-    for i, nc := range b.nodes {
-        n, err := newNode(ctx, cfg, b.testName, i, nc)
-        if err != nil {
-            return nil, err
-        }
-        chain.nodes[n.Name()] = n
-        chain.nextIndex++
-    }
-    return chain, nil
+	return n, nil
 }

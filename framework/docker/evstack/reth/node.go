@@ -19,99 +19,28 @@ import (
 	"go.uber.org/zap"
 )
 
-// NodeConfig is per-node configuration set by the builder.
-type NodeConfig struct {
-	// Image overrides chain-level image
-	Image container.Image
-	// AdditionalStartArgs overrides chain-level AdditionalStartArgs for this node
-	AdditionalStartArgs []string
-	// Env overrides chain-level Env for this node
-	Env []string
-	// InternalPorts allows overriding default container ports used by the node
-	InternalPorts *types.Ports
-	// GenesisBz overrides chain-level genesis for this node (optional)
-	GenesisBz []byte
-	// JWTSecretHex sets the node JWT secret in hex; if empty, it will be generated
-	JWTSecretHex string
-}
-
-// NodeConfigBuilder provides a fluent builder for NodeConfig
-type NodeConfigBuilder struct{ cfg *NodeConfig }
-
-func NewNodeConfigBuilder() *NodeConfigBuilder {
-	return &NodeConfigBuilder{cfg: &NodeConfig{}}
-}
-
-func (b *NodeConfigBuilder) WithImage(img container.Image) *NodeConfigBuilder {
-	b.cfg.Image = img
-	return b
-}
-
-func (b *NodeConfigBuilder) WithAdditionalStartArgs(args ...string) *NodeConfigBuilder {
-	b.cfg.AdditionalStartArgs = args
-	return b
-}
-
-func (b *NodeConfigBuilder) WithEnv(env ...string) *NodeConfigBuilder {
-	b.cfg.Env = env
-	return b
-}
-
-func (b *NodeConfigBuilder) WithInternalPorts(ports types.Ports) *NodeConfigBuilder {
-	b.cfg.InternalPorts = &ports
-	return b
-}
-
-func (b *NodeConfigBuilder) WithGenesis(genesis []byte) *NodeConfigBuilder {
-	b.cfg.GenesisBz = genesis
-	return b
-}
-
-func (b *NodeConfigBuilder) WithJWTSecretHex(secret string) *NodeConfigBuilder {
-	b.cfg.JWTSecretHex = secret
-	return b
-}
-
-func (b *NodeConfigBuilder) Build() NodeConfig {
-	return *b.cfg
-}
-
 // Node represents a reth node container and its configuration.
 type Node struct {
 	*container.Node
 
-	cfg       Config
-	nodeCfg   NodeConfig
-	logger    *zap.Logger
-	started   bool
-	mu        sync.Mutex
-	internal  types.Ports
-	external  types.Ports // RPC, P2P, API(ws), Engine, Metrics
-	jwtHex    string
-	genesisBz []byte
+	cfg      Config
+	logger   *zap.Logger
+	started  bool
+	mu       sync.Mutex
+	external types.Ports // RPC, P2P, API(ws), Engine, Metrics
 }
 
 // newNode creates a new Reth node instance with the provided configuration. This creates the underlying docker resources
 // but does not start the container.
-func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCfg NodeConfig) (*Node, error) {
+func newNode(ctx context.Context, cfg Config, testName string, index int) (*Node, error) {
 	image := cfg.Image
-	if nodeCfg.Image.Repository != "" {
-		image = nodeCfg.Image
-	}
 
-	ports := defaultPorts()
-	if nodeCfg.InternalPorts != nil {
-		ports = *nodeCfg.InternalPorts
-	}
 	log := cfg.Logger.With(zap.String("component", "reth-node"), zap.Int("i", index))
 
 	homeDir := "/home/ev-reth"
 	n := &Node{
-		cfg:       cfg,
-		nodeCfg:   nodeCfg,
-		logger:    log,
-		internal:  ports,
-		genesisBz: nodeCfg.GenesisBz,
+		cfg:    cfg,
+		logger: log,
 	}
 	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, rethNodeType("node"), log)
 	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
@@ -135,7 +64,7 @@ func (n *Node) HostName() string {
 
 // JWTSecretHex returns the JWT secret used by this node in hex encoding.
 func (n *Node) JWTSecretHex() string {
-	return n.jwtHex
+	return n.cfg.JWTSecretHex
 }
 
 // GenesisHash queries the node's JSON-RPC for the genesis block (0x0) hash.
@@ -184,7 +113,7 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 		return types.NetworkInfo{}, err
 	}
 	return types.NetworkInfo{
-		Internal: types.Network{Hostname: n.HostName(), IP: internalIP, Ports: types.Ports{RPC: n.internal.RPC, P2P: n.internal.P2P, API: n.internal.API, Engine: n.internal.Engine, Metrics: n.internal.Metrics}},
+		Internal: types.Network{Hostname: n.HostName(), IP: internalIP, Ports: defaultInternalPorts()},
 		External: types.Network{Hostname: "0.0.0.0", Ports: n.external},
 	}, nil
 }
@@ -197,20 +126,18 @@ func (n *Node) Start(ctx context.Context) error {
 		return n.StartContainer(ctx)
 	}
 
-	jetSecretHex, err := n.getJWTSecret()
-	if err != nil {
-		return fmt.Errorf("get jwt secret: %w", err)
+	if n.cfg.JWTSecretHex == "" {
+		s, err := generateJWTSecretHex(32)
+		if err != nil {
+			return fmt.Errorf("generate jwt secret: %w", err)
+		}
+		n.cfg.JWTSecretHex = s
 	}
-	n.jwtHex = jetSecretHex
 
 	//  skip genesis generation unless explicitly provided.
 	// TODO: support genesis creation without a fixture.
 	if len(n.cfg.GenesisFileBz) == 0 {
 		return fmt.Errorf("error unimplemented: automatic genesis generation not yet supported")
-	}
-
-	if len(n.cfg.GenesisFileBz) > 0 {
-		n.genesisBz = n.cfg.GenesisFileBz
 	}
 
 	if err := n.writeNodeFiles(ctx); err != nil {
@@ -226,7 +153,8 @@ func (n *Node) Start(ctx context.Context) error {
 	}
 
 	// resolve host ports
-	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.internal.RPC+"/tcp", n.internal.P2P+"/tcp", n.internal.API+"/tcp", n.internal.Engine+"/tcp", n.internal.Metrics+"/tcp")
+	p := defaultInternalPorts()
+	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, p.RPC+"/tcp", p.P2P+"/tcp", p.API+"/tcp", p.Engine+"/tcp", p.Metrics+"/tcp")
 	if err != nil {
 		return fmt.Errorf("get host ports: %w", err)
 	}
@@ -236,17 +164,7 @@ func (n *Node) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *Node) getJWTSecret() (string, error) {
-	s := n.nodeCfg.JWTSecretHex
-	if s != "" {
-		return s, nil
-	}
-	s, err := generateJWTSecretHex(32)
-	if err != nil {
-		return "", fmt.Errorf("generate jwt secret: %w", err)
-	}
-	return s, nil
-}
+// jwt is generated in Start if not preset via builder
 
 // jwtPath returns the path to the JWT secret file inside the container.
 func (n *Node) jwtPath() string {
@@ -265,11 +183,11 @@ func (n *Node) dataDir() string {
 
 // writeNodeFiles writes necessary files (genesis, jwt) to the node's volume.
 func (n *Node) writeNodeFiles(ctx context.Context) error {
-	if err := n.WriteFile(ctx, path.Join("jwt", "jwt.hex"), []byte(n.jwtHex)); err != nil {
+	if err := n.WriteFile(ctx, path.Join("jwt", "jwt.hex"), []byte(n.cfg.JWTSecretHex)); err != nil {
 		return fmt.Errorf("write jwt: %w", err)
 	}
-	if len(n.genesisBz) > 0 {
-		if err := n.WriteFile(ctx, path.Join("chain", "genesis.json"), n.genesisBz); err != nil {
+	if len(n.cfg.GenesisFileBz) > 0 {
+		if err := n.WriteFile(ctx, path.Join("chain", "genesis.json"), n.cfg.GenesisFileBz); err != nil {
 			return fmt.Errorf("write genesis: %w", err)
 		}
 	}
@@ -278,17 +196,18 @@ func (n *Node) writeNodeFiles(ctx context.Context) error {
 
 // createNodeContainer constructs and creates the docker container for the node.
 func (n *Node) createNodeContainer(ctx context.Context) error {
+	internalPorts := defaultInternalPorts()
 	cmd := []string{
 		n.cfg.Bin, "node",
 		"--chain", n.genesisPath(),
 		"--datadir", n.dataDir(),
-		"--metrics", "0.0.0.0:" + n.internal.Metrics,
+		"--metrics", "0.0.0.0:" + internalPorts.Metrics,
 		"--authrpc.addr", "0.0.0.0",
-		"--authrpc.port", n.internal.Engine,
+		"--authrpc.port", internalPorts.Engine,
 		"--authrpc.jwtsecret", n.jwtPath(),
-		"--http", "--http.addr", "0.0.0.0", "--http.port", n.internal.RPC,
+		"--http", "--http.addr", "0.0.0.0", "--http.port", internalPorts.RPC,
 		"--http.api", "eth,net,web3,txpool",
-		"--ws", "--ws.addr", "0.0.0.0", "--ws.port", n.internal.API,
+		"--ws", "--ws.addr", "0.0.0.0", "--ws.port", internalPorts.API,
 		"--ws.api", "eth,net,web3",
 		"--engine.persistence-threshold", "0",
 		"--engine.memory-block-buffer-target", "0",
@@ -303,25 +222,17 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 		"--ev-reth.enable",
 	}
 
-	// specifying additional start args at the node level takes precedence over chain-level.
-	additionalStartArgs := n.cfg.AdditionalStartArgs
-	if len(n.nodeCfg.AdditionalStartArgs) > 0 {
-		additionalStartArgs = n.nodeCfg.AdditionalStartArgs
-	}
-	cmd = append(cmd, additionalStartArgs...)
-
+	// Use builder-level start args and env without per-node overrides.
+	cmd = append(cmd, n.cfg.AdditionalStartArgs...)
 	env := n.cfg.Env
-	if len(n.nodeCfg.Env) > 0 {
-		env = n.nodeCfg.Env
-	}
 
 	// ports to expose
 	usingPorts := nat.PortMap{
-		nat.Port(n.internal.Metrics + "/tcp"): {},
-		nat.Port(n.internal.P2P + "/tcp"):     {},
-		nat.Port(n.internal.RPC + "/tcp"):     {},
-		nat.Port(n.internal.Engine + "/tcp"):  {},
-		nat.Port(n.internal.API + "/tcp"):     {},
+		nat.Port(internalPorts.Metrics + "/tcp"): {},
+		nat.Port(internalPorts.P2P + "/tcp"):     {},
+		nat.Port(internalPorts.RPC + "/tcp"):     {},
+		nat.Port(internalPorts.Engine + "/tcp"):  {},
+		nat.Port(internalPorts.API + "/tcp"):     {},
 	}
 
 	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, env, []string{})

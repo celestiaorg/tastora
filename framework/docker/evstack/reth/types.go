@@ -2,8 +2,8 @@ package reth
 
 import "github.com/celestiaorg/tastora/framework/types"
 
-// defaultPorts returns the default internal container ports for a Reth node.
-func defaultPorts() types.Ports {
+// defaultInternalPorts returns the default internal container ports for a Reth node.
+func defaultInternalPorts() types.Ports {
 	return types.Ports{
 		Metrics: "9001",
 		P2P:     "30303",

@@ -21,26 +21,21 @@ func TestRethNode_LivenessAndGenesis(t *testing.T) {
 
 	testCfg := setupDockerTest(t)
 
-	// Build a 1-node Reth chain with a known-good genesis JSON
-	builder := reth.NewChainBuilderWithTestName(t, testCfg.TestName).
+	// Build a single Reth node with a known-good genesis JSON
+	builder := reth.NewNodeBuilderWithTestName(t, testCfg.TestName).
 		WithDockerClient(testCfg.DockerClient).
 		WithDockerNetworkID(testCfg.NetworkID).
-		WithGenesis([]byte(reth.DefaultEvolveGenesisJSON())).
-		WithNodes(reth.NewNodeConfigBuilder().Build())
+		WithGenesis([]byte(reth.DefaultEvolveGenesisJSON()))
 
-	chain, err := builder.Build(testCfg.Ctx)
+	node, err := builder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		_ = chain.Stop(testCfg.Ctx)
-		_ = chain.Remove(testCfg.Ctx)
+		_ = node.Stop(testCfg.Ctx)
+		_ = node.Remove(testCfg.Ctx)
 	})
 
-	require.NoError(t, chain.Start(testCfg.Ctx))
-
-	nodes := chain.Nodes()
-	require.Len(t, nodes, 1)
-	node := nodes[0]
+	require.NoError(t, node.Start(testCfg.Ctx))
 
 	// Wait until ethclient is responsive
 	require.Eventually(t, func() bool {
@@ -83,8 +78,17 @@ func TestRethNode_LivenessAndGenesis(t *testing.T) {
 	_, hasQueued := status["queued"]
 	require.True(t, hasPending && hasQueued, "txpool_status missing keys: %+v", status)
 
+	// Verify external ports are assigned (RPC, P2P, API, Engine, Metrics)
+	ni, err := node.GetNetworkInfo(testCfg.Ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, ni.External.Ports.RPC)
+	require.NotEmpty(t, ni.External.Ports.P2P)
+	require.NotEmpty(t, ni.External.Ports.API)
+	require.NotEmpty(t, ni.External.Ports.Engine)
+	require.NotEmpty(t, ni.External.Ports.Metrics)
+
 	// stop and verify RPC stops responding
-	require.NoError(t, chain.Stop(testCfg.Ctx))
+	require.NoError(t, node.Stop(testCfg.Ctx))
 	err = rpcCl.CallContext(testCfg.Ctx, &ver, "web3_clientVersion")
 	require.Error(t, err, "expected RPC to fail after Stop")
 }
