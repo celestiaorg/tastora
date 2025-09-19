@@ -81,7 +81,7 @@ func (c *Chain) Start(ctx context.Context) error {
 	return eg.Wait()
 }
 
-// Stop stops all nodes in the chain (preferred over StopAll for consistency with other types).
+// Stop stops all nodes in the chain.
 func (c *Chain) Stop(ctx context.Context) error {
 	var eg errgroup.Group
 	for _, n := range c.Nodes() {
@@ -93,7 +93,7 @@ func (c *Chain) Stop(ctx context.Context) error {
 	return eg.Wait()
 }
 
-// Remove removes all nodes (stopping first) with optional removal options (e.g., preserve volumes)
+// Remove removes all nodes in the Chain.
 func (c *Chain) Remove(ctx context.Context, opts ...types.RemoveOption) error {
 	var eg errgroup.Group
 	for _, n := range c.Nodes() {

@@ -98,6 +98,8 @@ type Node struct {
 	genesisBz []byte
 }
 
+// newNode creates a new Reth node instance with the provided configuration. This creates the underlying docker resources
+// but does not start the container.
 func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCfg NodeConfig) (*Node, error) {
 	image := cfg.Image
 	if nodeCfg.Image.Repository != "" {
@@ -108,11 +110,9 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCf
 	if nodeCfg.InternalPorts != nil {
 		ports = *nodeCfg.InternalPorts
 	}
-
 	log := cfg.Logger.With(zap.String("component", "reth-node"), zap.Int("i", index))
 
 	homeDir := "/home/ev-reth"
-
 	n := &Node{
 		cfg:       cfg,
 		nodeCfg:   nodeCfg,
@@ -184,7 +184,7 @@ func (n *Node) GetEthClient(ctx context.Context) (*ethclient.Client, error) {
 	return ethclient.NewClient(rpcCli), nil
 }
 
-// GetNetworkInfo returns internal/external network addressing for select ports
+// GetNetworkInfo returns internal/external network address information.
 func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 	internalIP, err := internal.GetContainerInternalIP(ctx, n.DockerClient, n.ContainerLifecycle.ContainerID())
 	if err != nil {
@@ -215,12 +215,12 @@ func (n *Node) Start(ctx context.Context) error {
 		n.jwtHex = s
 	}
 
-	// Always use built-in dev chain; skip genesis generation unless explicitly provided.
-	if len(n.genesisBz) == 0 && len(n.cfg.GenesisFileBz) > 0 {
+	//  skip genesis generation unless explicitly provided.
+	// TODO: support genesis creation without a fixture.
+	if len(n.cfg.GenesisFileBz) > 0 {
 		n.genesisBz = n.cfg.GenesisFileBz
 	}
 
-	// Write files into the volume
 	if err := n.writeNodeFiles(ctx); err != nil {
 		return err
 	}
@@ -228,11 +228,12 @@ func (n *Node) Start(ctx context.Context) error {
 	if err := n.createNodeContainer(ctx); err != nil {
 		return err
 	}
+
 	if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
 		return err
 	}
 
-	// Resolve host ports
+	// resolve host ports
 	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.internal.RPC+"/tcp", n.internal.P2P+"/tcp", n.internal.API+"/tcp", n.internal.Engine+"/tcp", n.internal.Metrics+"/tcp")
 	if err != nil {
 		return err
@@ -241,14 +242,6 @@ func (n *Node) Start(ctx context.Context) error {
 
 	n.started = true
 	return nil
-}
-
-// Stop stops the node container
-func (n *Node) Stop(ctx context.Context) error { return n.Node.Stop(ctx) }
-
-// Remove stops and removes the node container and resources
-func (n *Node) Remove(ctx context.Context, opts ...types.RemoveOption) error {
-	return n.Node.Remove(ctx, opts...)
 }
 
 // Internal locations for jwt/genesis and datadir within the mounted home
