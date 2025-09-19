@@ -1,7 +1,8 @@
 package reth
 
 import (
-	"testing"
+    "context"
+    "testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	dockerclient "github.com/moby/moby/client"
@@ -94,8 +95,8 @@ func (b *ChainBuilder) WithNodes(cfgs ...NodeConfig) *ChainBuilder {
     return b
 }
 
-// Build constructs a Chain with nodes created (volumes will be created on Start)
-func (b *ChainBuilder) Build() *Chain {
+// Build constructs a Chain with nodes created and volumes initialized.
+func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
     cfg := Config{
         Logger:          b.logger,
         DockerClient:    b.dockerClient,
@@ -115,11 +116,14 @@ func (b *ChainBuilder) Build() *Chain {
         nextIndex: 0,
     }
 
-    // Pre-create nodes (without starting)
+    // Pre-create nodes and volumes (without starting)
     for i, nc := range b.nodes {
-        n := newNode(cfg, b.testName, i, nc)
+        n, err := newNode(ctx, cfg, b.testName, i, nc)
+        if err != nil {
+            return nil, err
+        }
         chain.nodes[n.Name()] = n
         chain.nextIndex++
     }
-    return chain
+    return chain, nil
 }

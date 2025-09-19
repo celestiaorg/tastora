@@ -48,7 +48,10 @@ func (a *App) AddNodes(ctx context.Context, nodeConfigs ...NodeConfig) ([]*Node,
     created := make([]*Node, 0, len(nodeConfigs))
     for i, nc := range nodeConfigs {
         idx := start + i
-        n := newNode(a.cfg, a.testName, idx, nc)
+        n, err := newNode(ctx, a.cfg, a.testName, idx, nc)
+        if err != nil {
+            return nil, err
+        }
         created = append(created, n)
         a.mu.Lock()
         if a.nodes == nil { a.nodes = make(map[string]*Node) }

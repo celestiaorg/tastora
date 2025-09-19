@@ -22,7 +22,7 @@ import (
 // NodeConfig is per-node configuration set by the builder.
 type NodeConfig struct {
 	// Image overrides chain-level image
-	Image *container.Image
+	Image container.Image
 	// AdditionalStartArgs overrides chain-level AdditionalStartArgs for this node
 	AdditionalStartArgs []string
 	// Env overrides chain-level Env for this node
@@ -43,34 +43,42 @@ type NodeConfigBuilder struct{ cfg *NodeConfig }
 func NewNodeConfigBuilder() *NodeConfigBuilder {
 	return &NodeConfigBuilder{cfg: &NodeConfig{}}
 }
+
 func (b *NodeConfigBuilder) WithImage(img container.Image) *NodeConfigBuilder {
-	b.cfg.Image = &img
+	b.cfg.Image = img
 	return b
 }
+
 func (b *NodeConfigBuilder) WithAdditionalStartArgs(args ...string) *NodeConfigBuilder {
 	b.cfg.AdditionalStartArgs = args
 	return b
 }
+
 func (b *NodeConfigBuilder) WithEnv(env ...string) *NodeConfigBuilder {
 	b.cfg.Env = env
 	return b
 }
+
 func (b *NodeConfigBuilder) WithInternalPorts(ports types.Ports) *NodeConfigBuilder {
 	b.cfg.InternalPorts = &ports
 	return b
 }
+
 func (b *NodeConfigBuilder) WithGenesis(genesis []byte) *NodeConfigBuilder {
 	b.cfg.GenesisBz = genesis
 	return b
 }
+
 func (b *NodeConfigBuilder) WithJWTSecretHex(secret string) *NodeConfigBuilder {
 	b.cfg.JWTSecretHex = secret
 	return b
 }
+
 func (b *NodeConfigBuilder) WithAdditionalInitArgs(args ...string) *NodeConfigBuilder {
 	b.cfg.AdditionalInitArgs = args
 	return b
 }
+
 func (b *NodeConfigBuilder) Build() NodeConfig {
 	return *b.cfg
 }
@@ -90,10 +98,10 @@ type Node struct {
 	genesisBz []byte
 }
 
-func newNode(cfg Config, testName string, index int, nodeCfg NodeConfig) *Node {
+func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCfg NodeConfig) (*Node, error) {
 	image := cfg.Image
-	if nodeCfg.Image != nil {
-		image = *nodeCfg.Image
+	if nodeCfg.Image.Repository != "" {
+		image = nodeCfg.Image
 	}
 
 	ports := defaultPorts()
@@ -112,9 +120,14 @@ func newNode(cfg Config, testName string, index int, nodeCfg NodeConfig) *Node {
 		internal:  ports,
 		genesisBz: nodeCfg.GenesisBz,
 	}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, rethNodeType("node"), log)
-	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
-	return n
+    n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, rethNodeType("node"), log)
+    n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
+
+    // Create and setup volume now so Start doesn't need to
+    if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
+        return nil, err
+    }
+    return n, nil
 }
 
 // rethNodeType satisfies types.NodeType for container.Node
@@ -197,16 +210,11 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 
 // Start initializes required files, creates and starts the container
 func (n *Node) Start(ctx context.Context) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.started {
-		return n.StartContainer(ctx)
-	}
-
-	// Ensure volume exists/owned
-	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
-		return err
-	}
+    n.mu.Lock()
+    defer n.mu.Unlock()
+    if n.started {
+        return n.StartContainer(ctx)
+    }
 
 	// Prepare JWT
 	if n.nodeCfg.JWTSecretHex != "" {
@@ -273,19 +281,11 @@ func (n *Node) writeNodeFiles(ctx context.Context) error {
 }
 
 func (n *Node) createNodeContainer(ctx context.Context) error {
-	// Build command from docker compose example; allow overrides via AdditionalStartArgs
 	cmd := []string{
 		n.cfg.Bin, "node",
-	}
-	// Use custom genesis file if present, otherwise dev chain
-	if len(n.genesisBz) > 0 || len(n.cfg.GenesisFileBz) > 0 {
-		cmd = append(cmd, "--chain", n.genesisPath())
-	} else {
-		cmd = append(cmd, "--chain", "dev")
-	}
-	cmd = append(cmd,
+		"--chain", n.genesisPath(),
 		"--datadir", n.dataDir(),
-		"--metrics", "0.0.0.0:"+n.internal.Metrics,
+		"--metrics", "0.0.0.0:" + n.internal.Metrics,
 		"--authrpc.addr", "0.0.0.0",
 		"--authrpc.port", n.internal.Engine,
 		"--authrpc.jwtsecret", n.jwtPath(),
@@ -304,12 +304,13 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 		"--txpool.max-new-txns", "2048",
 		"--txpool.additional-validation-tasks", "16",
 		"--ev-reth.enable",
-	)
+	}
 
 	// Merge chain and per-node additional args
 	if len(n.cfg.AdditionalStartArgs) > 0 {
 		cmd = append(cmd, n.cfg.AdditionalStartArgs...)
 	}
+	
 	if len(n.nodeCfg.AdditionalStartArgs) > 0 {
 		cmd = append(cmd, n.nodeCfg.AdditionalStartArgs...)
 	}

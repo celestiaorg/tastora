@@ -1,6 +1,7 @@
 package evmsingle
 
 import (
+    "context"
     "testing"
 
     "github.com/celestiaorg/tastora/framework/docker/container"
@@ -85,8 +86,8 @@ func (b *AppBuilder) WithNodes(cfgs ...NodeConfig) *AppBuilder {
     return b
 }
 
-// Build constructs an App with nodes created (not started)
-func (b *AppBuilder) Build() *App {
+// Build constructs an App with nodes created and volumes initialized (not started)
+func (b *AppBuilder) Build(ctx context.Context) (*App, error) {
     cfg := Config{
         Logger:             b.logger,
         DockerClient:       b.dockerClient,
@@ -106,9 +107,12 @@ func (b *AppBuilder) Build() *App {
     }
 
     for i, nc := range b.nodes {
-        n := newNode(cfg, b.testName, i, nc)
+        n, err := newNode(ctx, cfg, b.testName, i, nc)
+        if err != nil {
+            return nil, err
+        }
         app.nodes[n.Name()] = n
         app.nextIndex++
     }
-    return app
+    return app, nil
 }

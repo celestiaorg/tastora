@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path"
 	"sync"
 	"time"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	reth "github.com/celestiaorg/tastora/framework/docker/evstack/reth"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/docker/go-connections/nat"
@@ -31,10 +31,10 @@ type Node struct {
 	external types.Ports
 }
 
-func newNode(cfg Config, testName string, index int, nodeCfg NodeConfig) *Node {
+func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCfg NodeConfig) (*Node, error) {
 	image := cfg.Image
-	if nodeCfg.Image != nil {
-		image = *nodeCfg.Image
+	if nodeCfg.Image.Repository != "" {
+		image = nodeCfg.Image
 	}
 
 	ports := defaultPorts()
@@ -47,7 +47,10 @@ func newNode(cfg Config, testName string, index int, nodeCfg NodeConfig) *Node {
 	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports}
 	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, evmSingleNodeType("node"), log)
 	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
-	return n
+	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
+		return nil, err
+	}
+	return n, nil
 }
 
 // evmSingleNodeType satisfies types.NodeType for container.Node
@@ -84,22 +87,19 @@ func (n *Node) Start(ctx context.Context) error {
 		return n.StartContainer(ctx)
 	}
 
-	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
-		return err
+	// Always run init to ensure config exists and is up to date
+	initCmd := []string{n.cfg.Bin, "init", "--home", n.HomeDir()}
+	if n.nodeCfg.EVMSignerPassphrase != "" {
+		initCmd = append(initCmd,
+			"--rollkit.node.aggregator=true",
+			"--rollkit.signer.passphrase", n.nodeCfg.EVMSignerPassphrase,
+		)
 	}
-
-	// Ensure config exists by running "evm-single init" if node_key.json not present
-	if _, err := n.ReadFile(ctx, "config/node_key.json"); err != nil {
-		initCmd := []string{n.cfg.Bin, "init", "--home", n.HomeDir()}
-		if n.nodeCfg.EVMSignerPassphrase != "" {
-			initCmd = append(initCmd,
-				"--rollkit.node.aggregator=true",
-				"--rollkit.signer.passphrase", n.nodeCfg.EVMSignerPassphrase,
-			)
-		}
-		if _, _, err := n.Exec(ctx, n.Logger, initCmd, n.cfg.Env); err != nil {
-			return fmt.Errorf("init evm-single: %w", err)
-		}
+	if len(n.nodeCfg.AdditionalInitArgs) > 0 {
+		initCmd = append(initCmd, n.nodeCfg.AdditionalInitArgs...)
+	}
+	if _, _, err := n.Exec(ctx, n.Logger, initCmd, n.cfg.Env); err != nil {
+		return fmt.Errorf("init evm-single: %w", err)
 	}
 
 	if err := n.createNodeContainer(ctx); err != nil {
@@ -136,48 +136,28 @@ func (n *Node) Remove(ctx context.Context, opts ...types.RemoveOption) error {
 	return n.Node.Remove(ctx, opts...)
 }
 
+// ConfigPath returns the path to the evm-single main configuration file.
+func (n *Node) ConfigPath() string {
+	return path.Join(n.HomeDir(), "config", "evnode.yaml")
+}
+
 func (n *Node) createNodeContainer(ctx context.Context) error {
 	// Build start command using CLI flags (no entrypoint)
 	cmd := []string{n.cfg.Bin, "start", "--home", n.HomeDir()}
 
-	// Engine/Eth URLs and JWT
-	engineURL := ""
-	ethURL := ""
-	jwt := ""
-	if n.nodeCfg.RethNode != nil {
-		if ni, err := n.nodeCfg.RethNode.GetNetworkInfo(ctx); err == nil {
-			engineURL = fmt.Sprintf("http://%s:%s", ni.Internal.IP, ni.Internal.Ports.Engine)
-			// Use HTTP for ETH URL to ensure txpool APIs are available
-			ethURL = fmt.Sprintf("http://%s:%s", ni.Internal.IP, ni.Internal.Ports.RPC)
-		} else {
-			engineURL = n.nodeCfg.RethNode.InternalEngineURL()
-			ethURL = n.nodeCfg.RethNode.InternalRPCURL()
-		}
-		jwt = n.nodeCfg.RethNode.JWTSecretHex()
+	// Require engine/eth URLs and JWT
+	if n.nodeCfg.EVMEngineURL == "" || n.nodeCfg.EVMETHURL == "" || n.nodeCfg.EVMJWTSecret == "" {
+		return fmt.Errorf("missing EVM connection details: engine-url, eth-url, and jwt-secret are required")
 	}
-	if n.nodeCfg.EVMEngineURL != "" {
-		engineURL = n.nodeCfg.EVMEngineURL
-	}
-	if n.nodeCfg.EVMETHURL != "" {
-		ethURL = n.nodeCfg.EVMETHURL
-	}
-	if n.nodeCfg.EVMJWTSecret != "" {
-		jwt = n.nodeCfg.EVMJWTSecret
-	}
-	if engineURL != "" {
-		cmd = append(cmd, "--evm.engine-url", engineURL)
-	}
-	if ethURL != "" {
-		cmd = append(cmd, "--evm.eth-url", ethURL)
-	}
-	if jwt != "" {
-		cmd = append(cmd, "--evm.jwt-secret", jwt)
-	}
+	cmd = append(cmd, "--evm.engine-url", n.nodeCfg.EVMEngineURL)
+	cmd = append(cmd, "--evm.eth-url", n.nodeCfg.EVMETHURL)
+	cmd = append(cmd, "--evm.jwt-secret", n.nodeCfg.EVMJWTSecret)
 
 	// Optional tuning
-	if n.nodeCfg.EVMGenesisHash != "" {
-		cmd = append(cmd, "--evm.genesis-hash", n.nodeCfg.EVMGenesisHash)
+	if n.nodeCfg.EVMGenesisHash == "" {
+		return fmt.Errorf("missing --evm.genesis-hash; must match block 0 hash of execution client")
 	}
+	cmd = append(cmd, "--evm.genesis-hash", n.nodeCfg.EVMGenesisHash)
 	if n.nodeCfg.EVMBlockTime != "" {
 		cmd = append(cmd, "--rollkit.node.block_time", n.nodeCfg.EVMBlockTime)
 	}
@@ -216,9 +196,6 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 	// No custom entrypoint; pass full command
 	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, n.cfg.Env, []string{})
 }
-
-// Helper to attach to a Reth node after start (optional)
-func (n *Node) AttachReth(r *reth.Node) { n.nodeCfg.RethNode = r }
 
 // waitForSelfReady runs `evm-single net-info` inside the container until it succeeds,
 // indicating the internal RPC (127.0.0.1:7331) is serving.

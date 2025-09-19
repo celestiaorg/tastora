@@ -26,7 +26,7 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	testCfg := setupDockerTest(t)
 
 	// 1) Start a Celestia App chain (required for DA network)
-	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
+    chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 	require.NoError(t, chain.Start(testCfg.Ctx))
 	chainID := chain.GetChainID()
@@ -120,7 +120,8 @@ func TestEvmSingle_WithReth(t *testing.T) {
 		WithGenesis([]byte(reth.DefaultEvolveGenesisJSON())).
 		WithNodes(reth.NewNodeConfigBuilder().Build())
 
-	rchain := rbuilder.Build()
+    rchain, err := rbuilder.Build(ctx)
+    require.NoError(t, err)
 
     t.Cleanup(func() {
         _ = rchain.Stop(ctx)
@@ -161,22 +162,25 @@ func TestEvmSingle_WithReth(t *testing.T) {
 		return true
 	}, 45*time.Second, 1*time.Second, "reth Engine port did not open")
 
-	// 4) Build an evm-single app linked to reth and DA
-	ebuilder := evmsingle.NewBuilder(t).
-		WithDockerClient(testCfg.DockerClient).
-		WithDockerNetworkID(testCfg.NetworkID).
-		WithNode(
-			evmsingle.NewNodeConfigBuilder().
-				WithRethNode(rnodes[0]).
-				WithEVMSignerPassphrase("secret").
-				WithEVMBlockTime("1s").
-				// Pass explicit genesis hash from reth to avoid forkchoice mismatch
-				WithEVMGenesisHash(genesisHash).
-				WithDAAddress(daAddress).
-				Build(),
-		)
+    // 4) Build an evm-single app linked to reth and DA (explicit config)
+    ebuilder := evmsingle.NewBuilder(t).
+        WithDockerClient(testCfg.DockerClient).
+        WithDockerNetworkID(testCfg.NetworkID).
+        WithNode(
+            evmsingle.NewNodeConfigBuilder().
+                WithEVMEngineURL(rnodes[0].InternalEngineURL()).
+                WithEVMETHURL(rnodes[0].InternalRPCURL()).
+                WithEVMJWTSecret(rnodes[0].JWTSecretHex()).
+                WithEVMSignerPassphrase("secret").
+                WithEVMBlockTime("1s").
+                // Pass explicit genesis hash from reth to avoid forkchoice mismatch
+                WithEVMGenesisHash(genesisHash).
+                WithDAAddress(daAddress).
+                Build(),
+        )
 
-	eapp := ebuilder.Build()
+    eapp, err := ebuilder.Build(ctx)
+    require.NoError(t, err)
     t.Cleanup(func() {
         _ = eapp.Stop(ctx)
         _ = eapp.Remove(ctx)

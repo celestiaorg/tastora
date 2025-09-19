@@ -4,16 +4,12 @@ import (
     "context"
 
     "github.com/celestiaorg/tastora/framework/docker/container"
-    reth "github.com/celestiaorg/tastora/framework/docker/evstack/reth"
 )
 
 // NodeConfig defines per-node options for ev-node-evm-single
 type NodeConfig struct {
     // Image overrides chain-level image
-    Image *container.Image
-
-    // RethNode, if provided, is used to auto-configure engine/eth URLs and JWT secret
-    RethNode *reth.Node
+    Image container.Image
 
     // Optional env overrides (if empty and RethNode is set, they are derived)
     EVMEngineURL   string
@@ -30,6 +26,8 @@ type NodeConfig struct {
 
     // AdditionalStartArgs are appended to the entrypoint's default flags
     AdditionalStartArgs []string
+    // AdditionalInitArgs are appended to the `init` command for flexibility
+    AdditionalInitArgs []string
 
     // PostStart allows custom hooks after start
     PostStart []func(ctx context.Context, n *Node) error
@@ -39,10 +37,6 @@ type NodeConfig struct {
 type NodeConfigBuilder struct{ cfg *NodeConfig }
 
 func NewNodeConfigBuilder() *NodeConfigBuilder { return &NodeConfigBuilder{cfg: &NodeConfig{}} }
-func (b *NodeConfigBuilder) WithRethNode(n *reth.Node) *NodeConfigBuilder {
-    b.cfg.RethNode = n
-    return b
-}
 
 func (b *NodeConfigBuilder) WithEVMEngineURL(v string) *NodeConfigBuilder {
     b.cfg.EVMEngineURL = v
@@ -91,6 +85,12 @@ func (b *NodeConfigBuilder) WithDANamespace(v string) *NodeConfigBuilder {
 
 func (b *NodeConfigBuilder) WithAdditionalStartArgs(args ...string) *NodeConfigBuilder {
     b.cfg.AdditionalStartArgs = args
+    return b
+}
+
+// WithAdditionalInitArgs appends extra flags to the `init` command.
+func (b *NodeConfigBuilder) WithAdditionalInitArgs(args ...string) *NodeConfigBuilder {
+    b.cfg.AdditionalInitArgs = args
     return b
 }
 

@@ -52,7 +52,10 @@ func (c *Chain) AddNodes(ctx context.Context, nodeConfigs ...NodeConfig) ([]*Nod
     created := make([]*Node, 0, len(nodeConfigs))
     for i, nc := range nodeConfigs {
         idx := start + i
-        n := newNode(c.cfg, c.testName, idx, nc)
+        n, err := newNode(ctx, c.cfg, c.testName, idx, nc)
+        if err != nil {
+            return nil, err
+        }
         created = append(created, n)
         c.mu.Lock()
         if c.nodes == nil { c.nodes = make(map[string]*Node) }
