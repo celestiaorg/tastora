@@ -120,20 +120,15 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCf
 		internal:  ports,
 		genesisBz: nodeCfg.GenesisBz,
 	}
-    n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, rethNodeType("node"), log)
-    n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
+	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, rethNodeType("node"), log)
+	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
 
-    // Create and setup volume now so Start doesn't need to
-    if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
-        return nil, err
-    }
-    return n, nil
+	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
+		return nil, err
+	}
+
+	return n, nil
 }
-
-// rethNodeType satisfies types.NodeType for container.Node
-type rethNodeType string
-
-func (t rethNodeType) String() string { return string(t) }
 
 // Name returns a stable container name
 func (n *Node) Name() string {
@@ -141,20 +136,13 @@ func (n *Node) Name() string {
 }
 
 // HostName returns a condensed hostname
-func (n *Node) HostName() string { return internal.CondenseHostName(n.Name()) }
-
-// JWTSecretHex returns the JWT secret used by this node in hex encoding.
-func (n *Node) JWTSecretHex() string { return n.jwtHex }
-
-// InternalEngineURL returns the internal AuthRPC (Engine API) URL for this node using the container name.
-// Using the container name ensures Docker DNS resolution across the test network.
-func (n *Node) InternalEngineURL() string {
-	return fmt.Sprintf("http://%s:%s", n.Name(), n.internal.Engine)
+func (n *Node) HostName() string {
+	return internal.CondenseHostName(n.Name())
 }
 
-// InternalRPCURL returns the internal JSON-RPC URL for this node using the container name.
-func (n *Node) InternalRPCURL() string {
-	return fmt.Sprintf("http://%s:%s", n.Name(), n.internal.RPC)
+// JWTSecretHex returns the JWT secret used by this node in hex encoding.
+func (n *Node) JWTSecretHex() string {
+	return n.jwtHex
 }
 
 // GenesisHash queries the node's JSON-RPC for the genesis block (0x0) hash.
@@ -210,11 +198,11 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 
 // Start initializes required files, creates and starts the container
 func (n *Node) Start(ctx context.Context) error {
-    n.mu.Lock()
-    defer n.mu.Unlock()
-    if n.started {
-        return n.StartContainer(ctx)
-    }
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.started {
+		return n.StartContainer(ctx)
+	}
 
 	// Prepare JWT
 	if n.nodeCfg.JWTSecretHex != "" {
@@ -310,7 +298,7 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 	if len(n.cfg.AdditionalStartArgs) > 0 {
 		cmd = append(cmd, n.cfg.AdditionalStartArgs...)
 	}
-	
+
 	if len(n.nodeCfg.AdditionalStartArgs) > 0 {
 		cmd = append(cmd, n.nodeCfg.AdditionalStartArgs...)
 	}

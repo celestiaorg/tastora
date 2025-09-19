@@ -1,122 +1,124 @@
 package reth
 
 import (
-    "context"
-    "fmt"
-    "sort"
-    "sync"
+	"context"
+	"fmt"
+	"golang.org/x/sync/errgroup"
+	"sort"
+	"sync"
 
-    gethrpc "github.com/ethereum/go-ethereum/rpc"
-    "github.com/ethereum/go-ethereum/ethclient"
-    "github.com/celestiaorg/tastora/framework/types"
-    "go.uber.org/zap"
+	"github.com/celestiaorg/tastora/framework/types"
+	"github.com/ethereum/go-ethereum/ethclient"
+	gethrpc "github.com/ethereum/go-ethereum/rpc"
+	"go.uber.org/zap"
 )
 
 // Chain is a logical grouping of Reth nodes
 type Chain struct {
-    cfg       Config
-    log       *zap.Logger
-    testName  string
+	cfg      Config
+	log      *zap.Logger
+	testName string
 
-    mu        sync.Mutex
-    nodes     map[string]*Node
-    nextIndex int
+	mu        sync.Mutex
+	nodes     map[string]*Node
+	nextIndex int
 }
 
-// GetNodes returns nodes sorted by name for consistent ordering
-func (c *Chain) GetNodes() []*Node {
-    c.mu.Lock()
-    defer c.mu.Unlock()
+// Nodes returns nodes sorted by name for consistent ordering
+func (c *Chain) Nodes() []*Node {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-    out := make([]*Node, 0, len(c.nodes))
-    for _, n := range c.nodes {
-        out = append(out, n)
-    }
+	out := make([]*Node, 0, len(c.nodes))
+	for _, n := range c.nodes {
+		out = append(out, n)
+	}
 
-    sort.Slice(out, func(i, j int) bool {
-        return out[i].Name() < out[j].Name()
-    })
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name() < out[j].Name()
+	})
 
-    return out
+	return out
 }
 
 // AddNodes creates nodes with the provided configs but does not start them
 func (c *Chain) AddNodes(ctx context.Context, nodeConfigs ...NodeConfig) ([]*Node, error) {
-    if len(nodeConfigs) == 0 { return nil, fmt.Errorf("at least one node config required") }
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-    c.mu.Lock()
-    start := c.nextIndex
-    c.nextIndex += len(nodeConfigs)
-    c.mu.Unlock()
+	if len(nodeConfigs) == 0 {
+		return nil, fmt.Errorf("at least one node config required")
+	}
 
-    created := make([]*Node, 0, len(nodeConfigs))
-    for i, nc := range nodeConfigs {
-        idx := start + i
-        n, err := newNode(ctx, c.cfg, c.testName, idx, nc)
-        if err != nil {
-            return nil, err
-        }
-        created = append(created, n)
-        c.mu.Lock()
-        if c.nodes == nil { c.nodes = make(map[string]*Node) }
-        c.nodes[n.Name()] = n
-        c.mu.Unlock()
-    }
-    return created, nil
+	start := c.nextIndex
+	c.nextIndex += len(nodeConfigs)
+
+	created := make([]*Node, 0, len(nodeConfigs))
+	for i, nc := range nodeConfigs {
+		idx := start + i
+		n, err := newNode(ctx, c.cfg, c.testName, idx, nc)
+		if err != nil {
+			return nil, err
+		}
+		created = append(created, n)
+		if c.nodes == nil {
+			c.nodes = make(map[string]*Node)
+		}
+		c.nodes[n.Name()] = n
+	}
+	return created, nil
 }
 
-// StartAll starts all nodes
-func (c *Chain) StartAll(ctx context.Context) error {
-    for _, n := range c.GetNodes() {
-        if err := n.Start(ctx); err != nil {
-            return err
-        }
-    }
-    return nil
-}
-
-// Start starts all nodes in the chain (preferred over StartAll for consistency with other types).
-func (c *Chain) Start(ctx context.Context) error { return c.StartAll(ctx) }
-
-// StopAll stops all nodes
-func (c *Chain) StopAll(ctx context.Context) error {
-    var firstErr error
-    for _, n := range c.GetNodes() {
-        if err := n.Stop(ctx); err != nil && firstErr == nil {
-            firstErr = err
-        }
-    }
-    return firstErr
+// Start starts all nodes in the chain.
+func (c *Chain) Start(ctx context.Context) error {
+	var eg errgroup.Group
+	for _, n := range c.Nodes() {
+		n := n
+		eg.Go(func() error {
+			return n.Start(ctx)
+		})
+	}
+	return eg.Wait()
 }
 
 // Stop stops all nodes in the chain (preferred over StopAll for consistency with other types).
-func (c *Chain) Stop(ctx context.Context) error { return c.StopAll(ctx) }
+func (c *Chain) Stop(ctx context.Context) error {
+	var eg errgroup.Group
+	for _, n := range c.Nodes() {
+		n := n
+		eg.Go(func() error {
+			return n.Stop(ctx)
+		})
+	}
+	return eg.Wait()
+}
 
-// RemoveAll removes all nodes (stopping first) with optional removal options (e.g., preserve volumes)
+// Remove removes all nodes (stopping first) with optional removal options (e.g., preserve volumes)
 func (c *Chain) Remove(ctx context.Context, opts ...types.RemoveOption) error {
-    var firstErr error
-    for _, n := range c.GetNodes() {
-        if err := n.Remove(ctx, opts...); err != nil && firstErr == nil {
-            firstErr = err
-        }
-    }
-    return firstErr
+	var eg errgroup.Group
+	for _, n := range c.Nodes() {
+		n := n
+		eg.Go(func() error {
+			return n.Remove(ctx, opts...)
+		})
+	}
+	return eg.Wait()
 }
 
 // GetRPCClient returns a go-ethereum RPC client for the first node in the chain.
 func (c *Chain) GetRPCClient(ctx context.Context) (*gethrpc.Client, error) {
-    nodes := c.GetNodes()
-    if len(nodes) == 0 { return nil, fmt.Errorf("no reth nodes in chain") }
-    return nodes[0].GetRPCClient(ctx)
+	nodes := c.Nodes()
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("no reth nodes in chain")
+	}
+	return nodes[0].GetRPCClient(ctx)
 }
 
 // GetEthClient returns a go-ethereum ethclient.Client for the first node in the chain.
 func (c *Chain) GetEthClient(ctx context.Context) (*ethclient.Client, error) {
-    nodes := c.GetNodes()
-    if len(nodes) == 0 { return nil, fmt.Errorf("no reth nodes in chain") }
-    return nodes[0].GetEthClient(ctx)
+	nodes := c.Nodes()
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("no reth nodes in chain")
+	}
+	return nodes[0].GetEthClient(ctx)
 }
-
-// GetClient returns a bound Ethereum JSON-RPC client for the first node in the
-// chain. Returns an error if the chain has no nodes or the node is not started.
-// go-ethereum clients are exposed under build tag with_geth (see geth_chain_client.go)

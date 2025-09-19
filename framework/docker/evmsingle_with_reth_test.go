@@ -26,7 +26,7 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	testCfg := setupDockerTest(t)
 
 	// 1) Start a Celestia App chain (required for DA network)
-    chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
+	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 	require.NoError(t, chain.Start(testCfg.Ctx))
 	chainID := chain.GetChainID()
@@ -120,17 +120,17 @@ func TestEvmSingle_WithReth(t *testing.T) {
 		WithGenesis([]byte(reth.DefaultEvolveGenesisJSON())).
 		WithNodes(reth.NewNodeConfigBuilder().Build())
 
-    rchain, err := rbuilder.Build(ctx)
-    require.NoError(t, err)
+	rchain, err := rbuilder.Build(ctx)
+	require.NoError(t, err)
 
-    t.Cleanup(func() {
-        _ = rchain.Stop(ctx)
-        _ = rchain.Remove(ctx)
-    })
+	t.Cleanup(func() {
+		_ = rchain.Stop(ctx)
+		_ = rchain.Remove(ctx)
+	})
 
-    require.NoError(t, rchain.Start(ctx))
+	require.NoError(t, rchain.Start(ctx))
 
-	rnodes := rchain.GetNodes()
+	rnodes := rchain.Nodes()
 	require.Len(t, rnodes, 1)
 
 	// Wait until reth JSON-RPC is ready using ethclient (fetch latest block number)
@@ -162,31 +162,35 @@ func TestEvmSingle_WithReth(t *testing.T) {
 		return true
 	}, 45*time.Second, 1*time.Second, "reth Engine port did not open")
 
-    // 4) Build an evm-single app linked to reth and DA (explicit config)
-    ebuilder := evmsingle.NewBuilder(t).
-        WithDockerClient(testCfg.DockerClient).
-        WithDockerNetworkID(testCfg.NetworkID).
-        WithNode(
-            evmsingle.NewNodeConfigBuilder().
-                WithEVMEngineURL(rnodes[0].InternalEngineURL()).
-                WithEVMETHURL(rnodes[0].InternalRPCURL()).
-                WithEVMJWTSecret(rnodes[0].JWTSecretHex()).
-                WithEVMSignerPassphrase("secret").
-                WithEVMBlockTime("1s").
-                // Pass explicit genesis hash from reth to avoid forkchoice mismatch
-                WithEVMGenesisHash(genesisHash).
-                WithDAAddress(daAddress).
-                Build(),
-        )
+	rethNetworkInfo, err := rnodes[0].GetNetworkInfo(ctx)
+	require.NoError(t, err)
+	evmEthURL := fmt.Sprintf("http://%s:%s", rethNetworkInfo.Internal.Hostname, rethNetworkInfo.Internal.Ports.RPC)
+	evmEngineURL := fmt.Sprintf("http://%s:%s", rethNetworkInfo.Internal.Hostname, rethNetworkInfo.Internal.Ports.Engine)
 
-    eapp, err := ebuilder.Build(ctx)
-    require.NoError(t, err)
-    t.Cleanup(func() {
-        _ = eapp.Stop(ctx)
-        _ = eapp.Remove(ctx)
-    })
+	// 4) Build an evm-single app linked to reth and DA (explicit config)
+	ebuilder := evmsingle.NewBuilder(t).
+		WithDockerClient(testCfg.DockerClient).
+		WithDockerNetworkID(testCfg.NetworkID).
+		WithNode(
+			evmsingle.NewNodeConfigBuilder().
+				WithEVMEngineURL(evmEngineURL).
+				WithEVMETHURL(evmEthURL).
+				WithEVMJWTSecret(rnodes[0].JWTSecretHex()).
+				WithEVMSignerPassphrase("secret").
+				WithEVMBlockTime("1s").
+				WithEVMGenesisHash(genesisHash).
+				WithDAAddress(daAddress).
+				Build(),
+		)
 
-    require.NoError(t, eapp.Start(ctx))
+	eapp, err := ebuilder.Build(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = eapp.Stop(ctx)
+		_ = eapp.Remove(ctx)
+	})
+
+	require.NoError(t, eapp.Start(ctx))
 
 	enodes := eapp.GetNodes()
 	require.Len(t, enodes, 1)
