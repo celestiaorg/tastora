@@ -218,6 +218,7 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 		"--txpool.max-new-txns", "2048",
 		"--txpool.additional-validation-tasks", "16",
 		"--ev-reth.enable",
+		"--rpc.eth-proof-window", "120000",
 	}
 
 	// Use builder-level start args and env without per-node overrides.
