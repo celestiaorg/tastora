@@ -3,3 +3,4 @@ vendor
 CLAUDE.local.md
 memory-bank/
 *.test
+.gocache
