@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"net"
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,12 +58,7 @@ func (cn *ChainNode) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, err
 		Internal: types.Network{
 			Hostname: cn.HostName(),
 			IP:       internalIP,
-			Ports: types.Ports{
-				RPC:  "26657",
-				GRPC: "9090",
-				API:  "1317",
-				P2P:  "26656",
-			},
+			Ports:    cn.getInternalPorts(),
 		},
 		External: types.Network{
 			Hostname: "0.0.0.0",
@@ -155,6 +152,80 @@ func (cn *ChainNode) GetRPCClient() (rpcclient.Client, error) {
 	return cn.Client, nil
 }
 
+// getRPCLaddr returns the RPC listen address from AdditionalStartArgs or the default.
+func (cn *ChainNode) getRPCLaddr() string {
+	argMap := internal.ParseCommandLineArgs(cn.AdditionalStartArgs)
+	if addr, exists := argMap["rpc.laddr"]; exists {
+		return addr
+	}
+	return "tcp://0.0.0.0:26657" // default
+}
+
+// getGRPCAddress returns the GRPC address from AdditionalStartArgs or the default.
+func (cn *ChainNode) getGRPCAddress() string {
+	argMap := internal.ParseCommandLineArgs(cn.AdditionalStartArgs)
+	if addr, exists := argMap["grpc.address"]; exists {
+		return addr
+	}
+	return "0.0.0.0:9090" // default
+}
+
+// getAPIAddress returns the API address from AdditionalStartArgs or the default.
+func (cn *ChainNode) getAPIAddress() string {
+	argMap := internal.ParseCommandLineArgs(cn.AdditionalStartArgs)
+	if addr, exists := argMap["api.address"]; exists {
+		// ensure tcp:// prefix for API address
+		if !strings.HasPrefix(addr, "tcp://") {
+			addr = "tcp://" + addr
+		}
+		return addr
+	}
+	return "tcp://0.0.0.0:1317" // default
+}
+
+// getP2PLaddr returns the P2P listen address from AdditionalStartArgs or the default.
+func (cn *ChainNode) getP2PLaddr() string {
+	argMap := internal.ParseCommandLineArgs(cn.AdditionalStartArgs)
+	if addr, exists := argMap["p2p.laddr"]; exists {
+		return addr
+	}
+	return "tcp://0.0.0.0:26656" // default
+}
+
+// getInternalPorts returns all internal ports extracted from configuration.
+func (cn *ChainNode) getInternalPorts() types.Ports {
+	// extract RPC port
+	rpcPort := "26657" // default
+	if _, port, err := net.SplitHostPort(strings.TrimPrefix(cn.getRPCLaddr(), "tcp://")); err == nil {
+		rpcPort = port
+	}
+
+	// extract GRPC port
+	grpcPort := "9090" // default
+	if _, port, err := net.SplitHostPort(cn.getGRPCAddress()); err == nil {
+		grpcPort = port
+	}
+
+	// extract API port
+	apiPort := "1317" // default
+	if _, port, err := net.SplitHostPort(strings.TrimPrefix(cn.getAPIAddress(), "tcp://")); err == nil {
+		apiPort = port
+	}
+
+	// extract P2P port
+	p2pPort := "26656" // default
+	if _, port, err := net.SplitHostPort(strings.TrimPrefix(cn.getP2PLaddr(), "tcp://")); err == nil {
+		p2pPort = port
+	}
+
+	return types.Ports{
+		RPC:  rpcPort,
+		GRPC: grpcPort,
+		API:  apiPort,
+		P2P:  p2pPort,
+	}
+}
+
 // GetKeyring retrieves the keyring instance for the ChainNode. The keyring will be usable
 // by the host running the test.
 func (cn *ChainNode) GetKeyring() (keyring.Keyring, error) {
@@ -246,7 +317,7 @@ func (cn *ChainNode) setTestConfig(ctx context.Context) error {
 		cfg.Consensus.TimeoutCommit = blockTime
 		cfg.Consensus.TimeoutPropose = blockTime
 
-		cfg.RPC.ListenAddress = "tcp://0.0.0.0:26657"
+		cfg.RPC.ListenAddress = cn.getRPCLaddr()
 		cfg.RPC.CORSAllowedOrigins = []string{"*"}
 	})
 
@@ -256,10 +327,10 @@ func (cn *ChainNode) setTestConfig(ctx context.Context) error {
 
 	err = config.Modify(ctx, cn, "config/app.toml", func(cfg *servercfg.Config) {
 		cfg.MinGasPrices = cn.GasPrices
-		cfg.GRPC.Address = "0.0.0.0:9090"
+		cfg.GRPC.Address = cn.getGRPCAddress()
 		cfg.API.Enable = true
 		cfg.API.Swagger = true
-		cfg.API.Address = "tcp://0.0.0.0:1317"
+		cfg.API.Address = cn.getAPIAddress()
 	})
 
 	if err != nil {
@@ -283,11 +354,21 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 		return err
 	}
 
+	// get internal ports from configuration
+	internalPorts := cn.getInternalPorts()
+
+	// create port mappings for Docker
+	rpcPortMapping := internalPorts.RPC + "/tcp"
+	grpcPortMapping := internalPorts.GRPC + "/tcp"
+	apiPortMapping := internalPorts.API + "/tcp"
+	p2pPortMapping := internalPorts.P2P + "/tcp"
+
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := cn.ContainerLifecycle.GetHostPorts(ctx, rpcPort, grpcPort, apiPort, p2pPort)
+	hostPorts, err := cn.ContainerLifecycle.GetHostPorts(ctx, rpcPortMapping, grpcPortMapping, apiPortMapping, p2pPortMapping)
 	if err != nil {
 		return err
 	}
+
 	cn.externalPorts = types.Ports{
 		RPC:  internal.MustExtractPort(hostPorts[0]),
 		GRPC: internal.MustExtractPort(hostPorts[1]),
@@ -344,9 +425,15 @@ func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 	if len(cn.AdditionalStartArgs) > 0 {
 		cmd = append(cmd, cn.AdditionalStartArgs...)
 	}
-	usingPorts := nat.PortMap{}
-	for k, v := range sentryPorts {
-		usingPorts[k] = v
+
+	// get internal ports from configuration and create port map
+	internalPorts := cn.getInternalPorts()
+	usingPorts := nat.PortMap{
+		nat.Port(internalPorts.P2P + "/tcp"):  {},
+		nat.Port(internalPorts.RPC + "/tcp"):  {},
+		nat.Port(internalPorts.GRPC + "/tcp"): {},
+		nat.Port(internalPorts.API + "/tcp"):  {},
+		nat.Port(privValPort):                 {},
 	}
 
 	return cn.CreateContainer(ctx, cn.TestName, cn.NetworkID, cn.Image, usingPorts, "", cn.Bind(), nil, cn.HostName(), cmd, cn.Env, []string{})

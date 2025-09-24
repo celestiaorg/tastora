@@ -268,3 +268,58 @@ func TestChainNodeExec(t *testing.T) {
 	require.Empty(t, stdout, "stdout should be empty for failing command")
 	require.Empty(t, stderr, "stderr should be empty for failing command")
 }
+
+// TestCustomPortConfigurations tests that chains work correctly with custom port configurations
+func TestCustomPortConfigurations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping due to short mode")
+	}
+	t.Parallel()
+	configureBech32PrefixOnce()
+
+	// setup isolated docker environment for this test
+	testCfg := setupDockerTest(t)
+
+	// create node configuration with custom ports
+	customPortsConfig := cosmos.NewChainNodeConfigBuilder().
+		WithAdditionalStartArgs(
+			"--force-no-bbr",
+			"--rpc.laddr=tcp://0.0.0.0:26757",  // custom RPC port
+			"--grpc.address=0.0.0.0:9091",      // custom GRPC port
+			"--api.address=tcp://0.0.0.0:1318", // custom API port
+			"--p2p.laddr=tcp://0.0.0.0:26658",  // custom P2P port
+			"--timeout-commit=1s",
+			"--minimum-gas-prices=0utia",
+		).
+		Build()
+
+	// build and start chain with custom ports
+	chain, err := testCfg.ChainBuilder.
+		WithNodes(customPortsConfig).
+		Build(testCfg.Ctx)
+	require.NoError(t, err)
+
+	err = chain.Start(testCfg.Ctx)
+	require.NoError(t, err)
+
+	// verify chain started successfully and RPC client works
+	nodes := chain.GetNodes()
+	require.Len(t, nodes, 1, "expected 1 node")
+
+	node := nodes[0].(*cosmos.ChainNode)
+
+	// test height fetching
+	height, err := node.Height(testCfg.Ctx)
+	require.NoError(t, err, "should be able to fetch height with custom ports")
+	require.Greater(t, height, int64(0), "height should be greater than 0")
+
+	// verify network info returns correct custom ports
+	networkInfo, err := node.GetNetworkInfo(testCfg.Ctx)
+	require.NoError(t, err, "should get network info")
+
+	// verify internal ports match our custom configuration
+	require.Equal(t, "26757", networkInfo.Internal.Ports.RPC, "internal RPC port should be custom port")
+	require.Equal(t, "9091", networkInfo.Internal.Ports.GRPC, "internal GRPC port should be custom port")
+	require.Equal(t, "1318", networkInfo.Internal.Ports.API, "internal API port should be custom port")
+	require.Equal(t, "26658", networkInfo.Internal.Ports.P2P, "internal P2P port should be custom port")
+}
