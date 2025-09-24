@@ -87,6 +87,38 @@ func (n *Node) Start(ctx context.Context) error {
 		return n.StartContainer(ctx)
 	}
 
+	if err := n.initContainer(ctx); err != nil {
+		return fmt.Errorf("init container: %w", err)
+	}
+
+	if err := n.createNodeContainer(ctx); err != nil {
+		return fmt.Errorf("create node container: %w", err)
+	}
+
+	if err := n.StartContainer(ctx); err != nil {
+		return fmt.Errorf("start container: %w", err)
+	}
+
+	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.internal.RPC+"/tcp", n.internal.P2P+"/tcp")
+	if err != nil {
+		return fmt.Errorf("get host ports: %w", err)
+	}
+
+	n.external = types.Ports{
+		RPC: internal.MustExtractPort(hostPorts[0]),
+		P2P: internal.MustExtractPort(hostPorts[1]),
+	}
+
+	// Wait for the node's own RPC to be responsive using its CLI
+	if err := n.waitForSelfReady(ctx); err != nil {
+		return fmt.Errorf("wait for self ready: %w", err)
+	}
+
+	n.started = true
+	return nil
+}
+
+func (n *Node) initContainer(ctx context.Context) error {
 	// Always run init to ensure config exists and is up to date
 	initCmd := []string{n.cfg.Bin, "init", "--home", n.HomeDir()}
 	if n.nodeCfg.EVMSignerPassphrase != "" {
@@ -98,33 +130,10 @@ func (n *Node) Start(ctx context.Context) error {
 	if len(n.nodeCfg.AdditionalInitArgs) > 0 {
 		initCmd = append(initCmd, n.nodeCfg.AdditionalInitArgs...)
 	}
+
 	if _, _, err := n.Exec(ctx, n.Logger, initCmd, n.cfg.Env); err != nil {
 		return fmt.Errorf("init evm-single: %w", err)
 	}
-
-	if err := n.createNodeContainer(ctx); err != nil {
-		return err
-	}
-	if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
-		return err
-	}
-
-	// Resolve host ports
-	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.internal.RPC+"/tcp", n.internal.P2P+"/tcp")
-	if err != nil {
-		return err
-	}
-	n.external = types.Ports{
-		RPC: internal.MustExtractPort(hostPorts[0]),
-		P2P: internal.MustExtractPort(hostPorts[1]),
-	}
-
-	// Wait for the node's own RPC to be responsive using its CLI
-	if err := n.waitForSelfReady(ctx); err != nil {
-		return err
-	}
-
-	n.started = true
 	return nil
 }
 
@@ -230,4 +239,3 @@ func (n *Node) waitForSelfReady(ctx context.Context) error {
 		time.Sleep(1 * time.Second)
 	}
 }
-
