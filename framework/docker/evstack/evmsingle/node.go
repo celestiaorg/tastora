@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"path"
 	"sync"
 	"time"
 
@@ -45,18 +44,13 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCf
 	homeDir := "/root/.evm-single"
 
 	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, evmSingleNodeType("node"), log)
+	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, NodeType, log)
 	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
 	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
 		return nil, err
 	}
 	return n, nil
 }
-
-// evmSingleNodeType satisfies types.NodeType for container.Node
-type evmSingleNodeType string
-
-func (t evmSingleNodeType) String() string { return string(t) }
 
 // Name returns a stable container name
 func (n *Node) Name() string {
@@ -118,6 +112,7 @@ func (n *Node) Start(ctx context.Context) error {
 	return nil
 }
 
+// initContainer runs `evm-single init` inside the container to set up the config directory.
 func (n *Node) initContainer(ctx context.Context) error {
 	// Always run init to ensure config exists and is up to date
 	initCmd := []string{n.cfg.Bin, "init", "--home", n.HomeDir()}
@@ -137,19 +132,7 @@ func (n *Node) initContainer(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the node
-func (n *Node) Stop(ctx context.Context) error { return n.Node.Stop(ctx) }
-
-// Remove stops and removes the node container and resources
-func (n *Node) Remove(ctx context.Context, opts ...types.RemoveOption) error {
-	return n.Node.Remove(ctx, opts...)
-}
-
-// ConfigPath returns the path to the evm-single main configuration file.
-func (n *Node) ConfigPath() string {
-	return path.Join(n.HomeDir(), "config", "evnode.yaml")
-}
-
+// createNodeContainer creates the evm-single container with the appropriate start command and ports.
 func (n *Node) createNodeContainer(ctx context.Context) error {
 	// Build start command using CLI flags (no entrypoint)
 	cmd := []string{n.cfg.Bin, "start", "--home", n.HomeDir()}
@@ -162,47 +145,45 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 	cmd = append(cmd, "--evm.eth-url", n.nodeCfg.EVMETHURL)
 	cmd = append(cmd, "--evm.jwt-secret", n.nodeCfg.EVMJWTSecret)
 
-	// Optional tuning
 	if n.nodeCfg.EVMGenesisHash == "" {
-		return fmt.Errorf("missing --evm.genesis-hash; must match block 0 hash of execution client")
-	}
-	cmd = append(cmd, "--evm.genesis-hash", n.nodeCfg.EVMGenesisHash)
-	if n.nodeCfg.EVMBlockTime != "" {
-		cmd = append(cmd, "--rollkit.node.block_time", n.nodeCfg.EVMBlockTime)
-	}
-	if n.nodeCfg.EVMSignerPassphrase != "" {
-		cmd = append(cmd, "--rollkit.node.aggregator=true", "--rollkit.signer.passphrase", n.nodeCfg.EVMSignerPassphrase)
+		return fmt.Errorf("missing --evm.genesis-hash. must match block 0 hash of execution client")
 	}
 
-	// DA flags
+	cmd = append(cmd, "--evm.genesis-hash", n.nodeCfg.EVMGenesisHash)
+	if n.nodeCfg.EVMBlockTime != "" {
+		cmd = append(cmd, "--evnode.node.block_time", n.nodeCfg.EVMBlockTime)
+	}
+	if n.nodeCfg.EVMSignerPassphrase != "" {
+		cmd = append(cmd, "--evnode.node.aggregator=true", "--evnode.signer.passphrase", n.nodeCfg.EVMSignerPassphrase)
+	}
+
 	if n.nodeCfg.DAAddress != "" {
-		cmd = append(cmd, "--rollkit.da.address", n.nodeCfg.DAAddress)
+		cmd = append(cmd, "--evnode.da.address", n.nodeCfg.DAAddress)
 	}
+
 	if n.nodeCfg.DAAuthToken != "" {
-		cmd = append(cmd, "--rollkit.da.auth_token", n.nodeCfg.DAAuthToken)
+		cmd = append(cmd, "--evnode.da.auth_token", n.nodeCfg.DAAuthToken)
 	}
+
 	if n.nodeCfg.DANamespace != "" {
-		cmd = append(cmd, "--rollkit.da.namespace", n.nodeCfg.DANamespace)
+		cmd = append(cmd, "--evnode.da.namespace", n.nodeCfg.DANamespace)
 	}
 
 	// Ensure RPC listens on all interfaces so other containers/host can reach it
 	cmd = append(cmd, "--evnode.rpc.address", fmt.Sprintf("0.0.0.0:%s", n.internal.RPC))
 
-	// Append additional args
-	if len(n.cfg.AdditionalStartArgs) > 0 {
-		cmd = append(cmd, n.cfg.AdditionalStartArgs...)
-	}
+	additionalStartArgs := n.cfg.AdditionalStartArgs
 	if len(n.nodeCfg.AdditionalStartArgs) > 0 {
-		cmd = append(cmd, n.nodeCfg.AdditionalStartArgs...)
+		additionalStartArgs = n.nodeCfg.AdditionalStartArgs
 	}
 
-	// Ports to expose
+	cmd = append(cmd, additionalStartArgs...)
+
 	usingPorts := nat.PortMap{
 		nat.Port(n.internal.RPC + "/tcp"): {},
 		nat.Port(n.internal.P2P + "/tcp"): {},
 	}
 
-	// No custom entrypoint; pass full command
 	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, n.cfg.Env, []string{})
 }
 
