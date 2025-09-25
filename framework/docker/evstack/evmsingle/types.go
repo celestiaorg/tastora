@@ -15,4 +15,4 @@ func defaultPorts() types.Ports {
 // evmSingleNodeType satisfies types.NodeType for container.Node
 type evmSingleNodeType string
 
-func (t evmSingleNodeType) String() string { return "evm-single" }
+func (t evmSingleNodeType) String() string { return string(t) }

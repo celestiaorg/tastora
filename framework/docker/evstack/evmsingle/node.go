@@ -122,9 +122,13 @@ func (n *Node) initContainer(ctx context.Context) error {
 			"--rollkit.signer.passphrase", n.nodeCfg.EVMSignerPassphrase,
 		)
 	}
+
+	additionalInitArgs := n.cfg.AdditionalInitArgs
 	if len(n.nodeCfg.AdditionalInitArgs) > 0 {
-		initCmd = append(initCmd, n.nodeCfg.AdditionalInitArgs...)
+		additionalInitArgs = n.nodeCfg.AdditionalInitArgs
 	}
+
+	initCmd = append(initCmd, additionalInitArgs...)
 
 	if _, _, err := n.Exec(ctx, n.Logger, initCmd, n.cfg.Env); err != nil {
 		return fmt.Errorf("init evm-single: %w", err)

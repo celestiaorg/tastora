@@ -6,25 +6,21 @@ import (
 
 // NodeConfig defines per-node options for ev-node-evm-single
 type NodeConfig struct {
-	// Image overrides chain-level image
 	Image container.Image
 
-	// Optional env overrides (if empty and RethNode is set, they are derived)
+	// Correspond to ev-node-evm-single env vars
 	EVMEngineURL        string
 	EVMETHURL           string
 	EVMJWTSecret        string
 	EVMGenesisHash      string
 	EVMBlockTime        string
 	EVMSignerPassphrase string
-
-	// Optional DA related env
-	DAAddress   string
-	DAAuthToken string
-	DANamespace string
-
+	DAAddress           string
+	DAAuthToken         string
+	DANamespace         string
 	// AdditionalStartArgs are appended to the entrypoint's default flags
 	AdditionalStartArgs []string
-	// AdditionalInitArgs are appended to the `init` command for flexibility
+	// AdditionalInitArgs are appended to the init command for flexibility.
 	AdditionalInitArgs []string
 }
 
