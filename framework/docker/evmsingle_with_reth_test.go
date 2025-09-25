@@ -49,10 +49,11 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	defer cancel()
 
 	t.Cleanup(func() {
-		_ = chain.Remove(ctx)
+		cleanUpCtx := context.TODO()
+		_ = chain.Remove(cleanUpCtx)
 		nodes := danet.GetNodes()
 		for _, n := range nodes {
-			_ = n.Remove(ctx)
+			_ = n.Remove(cleanUpCtx)
 		}
 	})
 
