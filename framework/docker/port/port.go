@@ -42,9 +42,6 @@ func OpenListener(port int) (*net.TCPListener, error) {
 // host and bind them to the container ports.
 // This is useful for cases where you want to find a random open port.
 func GenerateBindings(pairs nat.PortMap) (nat.PortMap, Listeners, error) {
-	mu.Lock()
-	defer mu.Unlock()
-
 	listeners := make(Listeners, 0)
 	bindings := make(nat.PortMap)
 
