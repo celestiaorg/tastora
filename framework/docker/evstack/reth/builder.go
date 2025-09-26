@@ -1,13 +1,13 @@
 package reth
 
 import (
-    "context"
-    "testing"
+	"context"
+	"testing"
 
-    "github.com/celestiaorg/tastora/framework/docker/container"
-    dockerclient "github.com/moby/moby/client"
-    "go.uber.org/zap"
-    "go.uber.org/zap/zaptest"
+	"github.com/celestiaorg/tastora/framework/docker/container"
+	dockerclient "github.com/moby/moby/client"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 )
 
 // NodeBuilder constructs a single Reth Node and builds its Docker resources (volume, etc.).
@@ -22,7 +22,7 @@ type NodeBuilder struct {
 	additionalStartArgs []string
 	bin                 string
 	genesis             []byte
-    jwtSecretHex        string
+	jwtSecretHex        string
 }
 
 func NewNodeBuilder(t *testing.T) *NodeBuilder {
@@ -63,6 +63,11 @@ func (b *NodeBuilder) WithImage(img container.Image) *NodeBuilder {
 	b.image = img
 	return b
 }
+
+func (b *NodeBuilder) WithTag(tag string) *NodeBuilder {
+	return b.WithImage(container.NewImage(b.image.Repository, tag, b.image.UIDGID))
+}
+
 func (b *NodeBuilder) WithEnv(env ...string) *NodeBuilder {
 	b.env = env
 	return b
@@ -81,25 +86,25 @@ func (b *NodeBuilder) WithGenesis(genesis []byte) *NodeBuilder {
 }
 
 func (b *NodeBuilder) WithJWTSecretHex(secret string) *NodeBuilder {
-    b.jwtSecretHex = secret
-    return b
+	b.jwtSecretHex = secret
+	return b
 }
 
 // Build constructs the Node and initializes its Docker volume but does not start the container.
 func (b *NodeBuilder) Build(ctx context.Context) (*Node, error) {
-    cfg := Config{
-        Logger:              b.logger,
-        DockerClient:        b.dockerClient,
-        DockerNetworkID:     b.networkID,
-        Image:               b.image,
-        Bin:                 b.bin,
-        Env:                 b.env,
-        AdditionalStartArgs: b.additionalStartArgs,
-        JWTSecretHex:        b.jwtSecretHex,
-        GenesisFileBz:       b.genesis,
-    }
+	cfg := Config{
+		Logger:              b.logger,
+		DockerClient:        b.dockerClient,
+		DockerNetworkID:     b.networkID,
+		Image:               b.image,
+		Bin:                 b.bin,
+		Env:                 b.env,
+		AdditionalStartArgs: b.additionalStartArgs,
+		JWTSecretHex:        b.jwtSecretHex,
+		GenesisFileBz:       b.genesis,
+	}
 
-    n, err := newNode(ctx, cfg, b.testName, 0)
+	n, err := newNode(ctx, cfg, b.testName, 0)
 	if err != nil {
 		return nil, err
 	}
