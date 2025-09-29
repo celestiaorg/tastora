@@ -37,9 +37,9 @@ func TestParseCommandLineArgs(t *testing.T) {
 			expected: map[string]string{"rpc.laddr": "tcp://0.0.0.0:26757", "force-no-bbr": "", "timeout-commit": "1s"},
 		},
 		{
-			name:     "args without double dash are ignored",
+			name:     "args with dash are parsed",
 			args:     []string{"-rpc.laddr=tcp://0.0.0.0:26757", "start", "--force-no-bbr"},
-			expected: map[string]string{"force-no-bbr": ""},
+			expected: map[string]string{"rpc.laddr": "tcp://0.0.0.0:26757", "force-no-bbr": ""},
 		},
 		{
 			name:     "value with equals sign",
