@@ -17,20 +17,11 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
-	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 var _ types.Chain = &Chain{}
-
-var sentryPorts = nat.PortMap{
-	nat.Port(p2pPort):     {},
-	nat.Port(rpcPort):     {},
-	nat.Port(grpcPort):    {},
-	nat.Port(apiPort):     {},
-	nat.Port(privValPort): {},
-}
 
 type Chain struct {
 	t          *testing.T

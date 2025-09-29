@@ -2,6 +2,7 @@ package internal
 
 import (
 	"regexp"
+	"strings"
 )
 
 // CondenseHostName truncates the middle of the given name
@@ -29,4 +30,30 @@ var validContainerCharsRE = regexp.MustCompile(`[^a-zA-Z0-9_.-]`)
 // invalid characters too.
 func SanitizeContainerName(name string) string {
 	return validContainerCharsRE.ReplaceAllLiteralString(name, "_")
+}
+
+// ParseCommandLineArgs converts a slice of command line arguments into a map for easy lookup.
+// Arguments in the format "--key=value" are stored as key -> value.
+// Arguments in the format "-key=value" are stored as key -> value.
+// Arguments without "=" are stored as key -> "" (empty string).
+func ParseCommandLineArgs(args []string) map[string]string {
+	result := make(map[string]string)
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--") {
+			parsePrefix(arg, "--", result)
+		} else if strings.HasPrefix(arg, "-") {
+			parsePrefix(arg, "-", result)
+		}
+	}
+	return result
+}
+
+// parsePrefix removes the given prefix from arg and splits it into key and value at the first "=".
+func parsePrefix(arg, prefix string, result map[string]string) {
+	arg = strings.TrimPrefix(arg, prefix)
+	if parts := strings.SplitN(arg, "=", 2); len(parts) == 2 {
+		result[parts[0]] = parts[1]
+	} else {
+		result[arg] = ""
+	}
 }
