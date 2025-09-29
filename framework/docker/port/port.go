@@ -22,6 +22,9 @@ func (l Listeners) CloseAll() {
 
 // OpenListener opens a listener on a port. Set to 0 to get a random port.
 func OpenListener(port int) (*net.TCPListener, error) {
+	mu.Lock()
+	defer mu.Unlock()
+
 	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return nil, err
@@ -39,9 +42,6 @@ func OpenListener(port int) (*net.TCPListener, error) {
 // host and bind them to the container ports.
 // This is useful for cases where you want to find a random open port.
 func GenerateBindings(pairs nat.PortMap) (nat.PortMap, Listeners, error) {
-	mu.Lock()
-	defer mu.Unlock()
-
 	listeners := make(Listeners, 0)
 	bindings := make(nat.PortMap)
 
@@ -61,7 +61,7 @@ func GenerateBindings(pairs nat.PortMap) (nat.PortMap, Listeners, error) {
 			return nil, nil, fmt.Errorf("failed to parse address: %s", listener.Addr().String())
 		}
 		portStr := parts[len(parts)-1]
-		
+
 		bindings[port] = []nat.PortBinding{
 			{
 				HostIP:   "127.0.0.1",
