@@ -307,14 +307,21 @@ func (b *broadcaster) BroadcastMessages(ctx context.Context, signingWallet *type
 // has been included in a block.
 func getFullyPopulatedResponse(ctx context.Context, cc client.Context, txHash string) (sdk.TxResponse, error) {
 	var resp sdk.TxResponse
+	var queryErr error
 	err := wait.ForCondition(ctx, time.Second*60, time.Second*5, func() (bool, error) {
 		fullyPopulatedTxResp, err := authtx.QueryTx(cc, txHash)
 		if err != nil {
+			queryErr = err
 			return false, nil
 		}
 
 		resp = *fullyPopulatedTxResp
 		return true, nil
 	})
-	return resp, err
+
+	if err != nil {
+		return resp, fmt.Errorf("tx with hash %s not found: %w", txHash, queryErr)
+	}
+
+	return resp, nil
 }
