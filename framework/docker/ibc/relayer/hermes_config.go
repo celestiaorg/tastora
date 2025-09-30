@@ -9,6 +9,9 @@ import (
 	"github.com/celestiaorg/tastora/framework/types"
 )
 
+// ConfigOption defines a function type for configuring HermesConfig.
+type ConfigOption func(*HermesConfig)
+
 // HermesConfig represents the full Hermes configuration
 type HermesConfig struct {
 	Global        GlobalConfig    `toml:"global"`

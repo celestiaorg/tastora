@@ -49,7 +49,7 @@ func setupIBCDockerTest(t *testing.T) *IBCTestSetupConfig {
 	uniqueTestName := fmt.Sprintf("%s-%s", t.Name(), random.LowerCaseLetterString(8))
 
 	dockerClient, networkID := DockerSetup(t)
-	
+
 	// Override the default cleanup to use our unique test name
 	t.Cleanup(DockerCleanupWithTestName(t, dockerClient, uniqueTestName))
 
@@ -75,8 +75,19 @@ func setupIBCDockerTest(t *testing.T) *IBCTestSetupConfig {
 	hermes, err := relayer.NewHermes(ctx, dockerClient, uniqueTestName, networkID, 0, logger)
 	require.NoError(t, err, "failed to create hermes relayer")
 
-	err = hermes.Init(ctx, chainA, chainB)
+	err = hermes.Init(ctx, []types.Chain{chainA, chainB}, func(config *relayer.HermesConfig) {
+		// apply a modification that is not the default.
+		config.Chains[0].ClockDrift = "6s"
+		config.Chains[1].ClockDrift = "6s"
+	})
+
 	require.NoError(t, err, "failed to initialize relayer")
+
+	cfg, err := hermes.GetConfig(ctx)
+	require.NoError(t, err, "failed to get relayer config")
+
+	require.Equal(t, cfg.Chains[0].ClockDrift, "6s", "clock drift should be 6s")
+	require.Equal(t, cfg.Chains[1].ClockDrift, "6s", "clock drift should be 6s")
 
 	// Setup IBC connection and channel
 	connection, channel := setupIBCConnection(t, ctx, chainA, chainB, hermes)
