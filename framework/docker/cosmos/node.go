@@ -61,7 +61,8 @@ func (cn *ChainNode) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, err
 			Ports:    cn.getInternalPorts(),
 		},
 		External: types.Network{
-			Hostname: "0.0.0.0",
+			Hostname: "localhost",
+			IP:       "127.0.0.1",
 			Ports:    cn.externalPorts,
 		},
 	}, nil
@@ -102,6 +103,8 @@ type ChainNodeParams struct {
 	PrivValidatorKey []byte
 	// PostInit functions are executed sequentially after the node is initialized.
 	PostInit []func(ctx context.Context, node *ChainNode) error
+	// AdditionalExposedPorts are additional ports to expose for this node
+	AdditionalExposedPorts []string
 }
 
 // NewChainNode creates a new ChainNode with injected dependencies
@@ -219,10 +222,11 @@ func (cn *ChainNode) getInternalPorts() types.Ports {
 	}
 
 	return types.Ports{
-		RPC:  rpcPort,
-		GRPC: grpcPort,
-		API:  apiPort,
-		P2P:  p2pPort,
+		EVNodeRPC: "7331",
+		RPC:       rpcPort,
+		GRPC:      grpcPort,
+		API:       apiPort,
+		P2P:       p2pPort,
 	}
 }
 
@@ -363,8 +367,13 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 	apiPortMapping := internalPorts.API + "/tcp"
 	p2pPortMapping := internalPorts.P2P + "/tcp"
 
+	portMappings := []string{rpcPortMapping, grpcPortMapping, apiPortMapping, p2pPortMapping}
+	for _, port := range cn.AdditionalExposedPorts {
+		portMappings = append(portMappings, port+"/tcp")
+	}
+
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := cn.ContainerLifecycle.GetHostPorts(ctx, rpcPortMapping, grpcPortMapping, apiPortMapping, p2pPortMapping)
+	hostPorts, err := cn.ContainerLifecycle.GetHostPorts(ctx, portMappings...)
 	if err != nil {
 		return err
 	}
@@ -374,6 +383,10 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 		GRPC: internal.MustExtractPort(hostPorts[1]),
 		API:  internal.MustExtractPort(hostPorts[2]),
 		P2P:  internal.MustExtractPort(hostPorts[3]),
+	}
+
+	if len(cn.AdditionalExposedPorts) > 0 {
+		cn.externalPorts.EVNodeRPC = internal.MustExtractPort(hostPorts[len(hostPorts)-1])
 	}
 
 	return cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC)
@@ -434,6 +447,10 @@ func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 		nat.Port(internalPorts.GRPC + "/tcp"): {},
 		nat.Port(internalPorts.API + "/tcp"):  {},
 		nat.Port(privValPort):                 {},
+	}
+
+	for _, port := range cn.AdditionalExposedPorts {
+		usingPorts[nat.Port(port+"/tcp")] = []nat.PortBinding{}
 	}
 
 	return cn.CreateContainer(ctx, cn.TestName, cn.NetworkID, cn.Image, usingPorts, "", cn.Bind(), nil, cn.HostName(), cmd, cn.Env, []string{})

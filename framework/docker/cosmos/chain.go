@@ -136,8 +136,13 @@ func (c *Chain) AddNode(ctx context.Context, nodeConfig ChainNodeConfig) error {
 	if err := node.createNodeContainer(ctx); err != nil {
 		return err
 	}
+
 	if err := node.startContainer(ctx); err != nil {
 		return err
+	}
+
+	if err := c.copyFaucetKeyToValidator(c.GetFaucetWallet(), node); err != nil {
+		return fmt.Errorf("failed to copy faucet key to new node: %w", err)
 	}
 
 	// add the new node to the chain
@@ -462,6 +467,13 @@ func (c *Chain) copyFaucetKeyToValidator(faucetWallet *types.Wallet, targetValid
 	sourceKeyring, err := c.Validators[0].GetKeyring()
 	if err != nil {
 		return fmt.Errorf("failed to get source keyring: %w", err)
+	}
+
+	// create a dummy key to initialize the keyring directory in the target container
+	// this ensures the keyring-test directory exists before we try to access it
+	dummyKeyName := "temp-init-key"
+	if err := targetValidator.createKey(context.Background(), dummyKeyName); err != nil {
+		return fmt.Errorf("failed to initialize keyring directory: %w", err)
 	}
 
 	// get the keyring from target validator

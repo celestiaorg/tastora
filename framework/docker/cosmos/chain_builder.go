@@ -151,6 +151,8 @@ type ChainBuilder struct {
 	// faucetWallet is the wallet that should be used when broadcasting transactions when the sender doesn't matter
 	// and the outcome is the only thing important. E.g. funding relayer wallets.
 	faucetWallet *types.Wallet
+	// additionalExposedPorts are additional ports to expose for all nodes in the chain
+	additionalExposedPorts []string
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -326,6 +328,12 @@ func (b *ChainBuilder) WithEnv(env ...string) *ChainBuilder {
 	return b
 }
 
+// WithAdditionalExposedPorts sets additional ports to expose for all nodes in the chain
+func (b *ChainBuilder) WithAdditionalExposedPorts(ports ...string) *ChainBuilder {
+	b.additionalExposedPorts = ports
+	return b
+}
+
 // getImage returns the appropriate Docker image for a node, using node-specific override if available,
 // otherwise falling back to the chain's default image
 func (b *ChainBuilder) getImage(nodeConfig ChainNodeConfig) container.Image {
@@ -472,20 +480,21 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 	}
 
 	chainParams := ChainNodeParams{
-		Validator:           nodeConfig.nodeType == types.NodeTypeValidator,
-		NodeType:            nodeConfig.nodeType,
-		ChainID:             b.chainID,
-		BinaryName:          b.binaryName,
-		CoinType:            b.coinType,
-		GasPrices:           b.gasPrices,
-		GasAdjustment:       b.gasAdjustment,
-		Env:                 b.getEnv(nodeConfig),
-		AdditionalStartArgs: b.getAdditionalStartArgs(nodeConfig),
-		EncodingConfig:      b.encodingConfig,
-		GenesisKeyring:      nodeConfig.keyring,
-		ValidatorIndex:      index,
-		PrivValidatorKey:    nodeConfig.privValidatorKey,
-		PostInit:            b.getPostInit(nodeConfig),
+		Validator:              nodeConfig.nodeType == types.NodeTypeValidator,
+		NodeType:               nodeConfig.nodeType,
+		ChainID:                b.chainID,
+		BinaryName:             b.binaryName,
+		CoinType:               b.coinType,
+		GasPrices:              b.gasPrices,
+		GasAdjustment:          b.gasAdjustment,
+		Env:                    b.getEnv(nodeConfig),
+		AdditionalStartArgs:    b.getAdditionalStartArgs(nodeConfig),
+		EncodingConfig:         b.encodingConfig,
+		GenesisKeyring:         nodeConfig.keyring,
+		ValidatorIndex:         index,
+		PrivValidatorKey:       nodeConfig.privValidatorKey,
+		PostInit:               b.getPostInit(nodeConfig),
+		AdditionalExposedPorts: b.additionalExposedPorts,
 	}
 
 	// Get the appropriate image using fallback logic
