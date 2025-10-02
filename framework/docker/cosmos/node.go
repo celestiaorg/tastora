@@ -65,6 +65,7 @@ func (cn *ChainNode) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, err
 			IP:       "127.0.0.1",
 			Ports:    cn.externalPorts,
 		},
+		ExtraPortMappings: cn.extraPortMappings,
 	}, nil
 }
 
@@ -80,6 +81,9 @@ type ChainNode struct {
 
 	// externalPorts are set during startContainer.
 	externalPorts types.Ports
+
+	// extraPortMappings maps internal ports to external ports for additional exposed ports
+	extraPortMappings map[string]string
 
 	// faucetWallet stores the faucet wallet for this node
 	faucetWallet *types.Wallet
@@ -222,11 +226,10 @@ func (cn *ChainNode) getInternalPorts() types.Ports {
 	}
 
 	return types.Ports{
-		EVNodeRPC: "7331",
-		RPC:       rpcPort,
-		GRPC:      grpcPort,
-		API:       apiPort,
-		P2P:       p2pPort,
+		RPC:  rpcPort,
+		GRPC: grpcPort,
+		API:  apiPort,
+		P2P:  p2pPort,
 	}
 }
 
@@ -368,6 +371,9 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 	p2pPortMapping := internalPorts.P2P + "/tcp"
 
 	portMappings := []string{rpcPortMapping, grpcPortMapping, apiPortMapping, p2pPortMapping}
+
+	standardPortCount := len(portMappings)
+
 	for _, port := range cn.AdditionalExposedPorts {
 		portMappings = append(portMappings, port+"/tcp")
 	}
@@ -385,8 +391,10 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 		P2P:  internal.MustExtractPort(hostPorts[3]),
 	}
 
-	if len(cn.AdditionalExposedPorts) > 0 {
-		cn.externalPorts.EVNodeRPC = internal.MustExtractPort(hostPorts[len(hostPorts)-1])
+	cn.extraPortMappings = make(map[string]string)
+	for i, internalPort := range cn.AdditionalExposedPorts {
+		externalPort := internal.MustExtractPort(hostPorts[standardPortCount+i])
+		cn.extraPortMappings[internalPort] = externalPort
 	}
 
 	return cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC)

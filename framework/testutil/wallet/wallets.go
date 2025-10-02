@@ -10,33 +10,20 @@ import (
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
-// WalletCreator defines the interface for creating wallets and accessing the faucet wallet.
-type WalletCreator interface {
-	CreateWallet(ctx context.Context, keyName string, bech32Prefix string) (*types.Wallet, error)
-	GetFaucetWallet() *types.Wallet
-}
-
-// MessageBroadcaster defines the interface for broadcasting messages to the blockchain.
-type MessageBroadcaster interface {
-	BroadcastMessages(ctx context.Context, signingWallet *types.Wallet, msgs ...sdk.Msg) (sdk.TxResponse, error)
-}
-
 // CreateAndFund creates a new test wallet, funds it using the faucet wallet, and returns the created wallet.
 func CreateAndFund(
 	ctx context.Context,
 	keyNamePrefix string,
 	coins sdk.Coins,
-	bech32Prefix string,
-	walletCreator WalletCreator,
-	broadcaster MessageBroadcaster,
+	chain types.Chain,
 ) (*types.Wallet, error) {
 	keyName := fmt.Sprintf("%s-%s", keyNamePrefix, random.LowerCaseLetterString(6))
-	wallet, err := walletCreator.CreateWallet(ctx, keyName, bech32Prefix)
+	wallet, err := chain.CreateWallet(ctx, keyName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get source user wallet: %w", err)
 	}
 
-	fromAddr, err := sdkacc.AddressFromWallet(walletCreator.GetFaucetWallet())
+	fromAddr, err := sdkacc.AddressFromWallet(chain.GetFaucetWallet())
 	if err != nil {
 		return nil, fmt.Errorf("invalid from address: %w", err)
 	}
@@ -47,7 +34,7 @@ func CreateAndFund(
 	}
 
 	bankSend := banktypes.NewMsgSend(fromAddr, toAddr, coins)
-	resp, err := broadcaster.BroadcastMessages(ctx, walletCreator.GetFaucetWallet(), bankSend)
+	resp, err := chain.BroadcastMessages(ctx, chain.GetFaucetWallet(), bankSend)
 	if err != nil {
 		return nil, fmt.Errorf("failed to broadcast transaction: %w", err)
 	}

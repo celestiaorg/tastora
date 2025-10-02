@@ -26,8 +26,7 @@ func TestCreateAndFundWallet(t *testing.T) {
 
 	amount := math.NewInt(1000000)
 	sendAmount := sdk.NewCoins(sdk.NewCoin("utia", amount))
-	node := chain.GetNode()
-	testWallet, err := wallet.CreateAndFund(testCfg.Ctx, "test", sendAmount, "celestia", node, chain)
+	testWallet, err := wallet.CreateAndFund(testCfg.Ctx, "test", sendAmount, chain)
 	require.NoError(t, err)
 	require.NotNil(t, testWallet)
 	require.NotEmpty(t, testWallet.GetFormattedAddress())

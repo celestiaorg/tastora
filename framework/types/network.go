@@ -10,6 +10,8 @@ import (
 type NetworkInfo struct {
 	Internal Network
 	External Network
+	// ExtraPortMappings maps internal ports to external ports for additional exposed ports
+	ExtraPortMappings map[string]string
 }
 
 // Network contains network information for connectivity
@@ -46,13 +48,12 @@ func (n Network) HTTPAddress() string {
 
 // Ports contains port information for various services
 type Ports struct {
-	RPC       string
-	GRPC      string
-	API       string
-	P2P       string
-	HTTP      string
-	Metrics   string
-	EVNodeRPC string
+	RPC     string
+	GRPC    string
+	API     string
+	P2P     string
+	HTTP    string
+	Metrics string
 
 	// DA Nodes
 	CoreRPC  string // Only needed for DA nodes - port to connect to celestia-app RPC

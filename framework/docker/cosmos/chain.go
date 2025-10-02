@@ -454,41 +454,97 @@ func (c *Chain) pullImages(ctx context.Context) {
 	}
 }
 
-// CreateWallet creates a new wallet using Validator[0] to maintain backward compatibility.
+// CreateWallet creates a new wallet on the first node and copies the key to all other nodes.
 func (c *Chain) CreateWallet(ctx context.Context, keyName string) (*types.Wallet, error) {
-	return c.GetNode().CreateWallet(ctx, keyName, c.Config.Bech32Prefix)
+	wallet, err := c.GetNode().CreateWallet(ctx, keyName, c.Config.Bech32Prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.copyWalletKeyToAllNodes(wallet); err != nil {
+		return nil, fmt.Errorf("failed to copy wallet key to all nodes: %w", err)
+	}
+
+	return wallet, nil
+}
+
+// copyWalletKeyToAllNodes copies a wallet's key from the first node to all other nodes in the chain.
+func (c *Chain) copyWalletKeyToAllNodes(wallet *types.Wallet) error {
+	nodes := c.Nodes()
+	if len(nodes) <= 1 {
+		return nil
+	}
+
+	srcNode := nodes[0]
+	srcKr, err := srcNode.GetKeyring()
+	if err != nil {
+		return fmt.Errorf("failed to get source keyring: %w", err)
+	}
+
+	keyName := wallet.GetKeyName()
+	armoredKey, err := srcKr.ExportPrivKeyArmor(keyName, "")
+	if err != nil {
+		return fmt.Errorf("failed to export key %q: %w", keyName, err)
+	}
+
+	for i := 1; i < len(nodes); i++ {
+		if err := c.ensureNodeKeyringInitialized(nodes[i]); err != nil {
+			return fmt.Errorf("failed to initialize keyring for node %d: %w", i, err)
+		}
+
+		dstKr, err := nodes[i].GetKeyring()
+		if err != nil {
+			return fmt.Errorf("failed to get keyring for node %d: %w", i, err)
+		}
+
+		if _, err := dstKr.Key(keyName); err == nil {
+			continue
+		}
+
+		if err := dstKr.ImportPrivKey(keyName, armoredKey, ""); err != nil {
+			return fmt.Errorf("failed to import key %q to node %d: %w", keyName, i, err)
+		}
+	}
+
+	return nil
+}
+
+// ensureNodeKeyringInitialized ensures the keyring directory exists on the target node by creating a temporary key if needed.
+func (c *Chain) ensureNodeKeyringInitialized(node *ChainNode) error {
+	kr, err := node.GetKeyring()
+	if err == nil {
+		if _, err := kr.List(); err == nil {
+			return nil
+		}
+	}
+
+	dummyKeyName := "temp-init-key"
+	return node.createKey(context.Background(), dummyKeyName)
 }
 
 // copyFaucetKeyToValidator copies the faucet key from validator[0] to the specified validator.
 func (c *Chain) copyFaucetKeyToValidator(faucetWallet *types.Wallet, targetValidator *ChainNode) error {
 	faucetKeyName := faucetWallet.GetKeyName()
 
-	// as part of setup, the faucet wallet was created on Validators[0]
 	sourceKeyring, err := c.Validators[0].GetKeyring()
 	if err != nil {
 		return fmt.Errorf("failed to get source keyring: %w", err)
 	}
 
-	// create a dummy key to initialize the keyring directory in the target container
-	// this ensures the keyring-test directory exists before we try to access it
-	dummyKeyName := "temp-init-key"
-	if err := targetValidator.createKey(context.Background(), dummyKeyName); err != nil {
+	if err := c.ensureNodeKeyringInitialized(targetValidator); err != nil {
 		return fmt.Errorf("failed to initialize keyring directory: %w", err)
 	}
 
-	// get the keyring from target validator
 	targetKeyring, err := targetValidator.GetKeyring()
 	if err != nil {
 		return fmt.Errorf("failed to get target keyring: %w", err)
 	}
 
-	// export the key from source
 	armoredKey, err := sourceKeyring.ExportPrivKeyArmor(faucetKeyName, "")
 	if err != nil {
 		return fmt.Errorf("failed to export faucet key: %w", err)
 	}
 
-	// import the key to target
 	if err := targetKeyring.ImportPrivKey(faucetKeyName, armoredKey, ""); err != nil {
 		return fmt.Errorf("failed to import faucet key: %w", err)
 	}
