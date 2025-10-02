@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BurntSushi/toml"
 	"path"
 	"regexp"
 	"strings"
@@ -118,8 +119,8 @@ func (h *Hermes) Stop(ctx context.Context) error {
 }
 
 // Init initializes and validates the relayer configuration, and creates and funds wallets on the provided chains.
-func (h *Hermes) Init(ctx context.Context, chains ...types.Chain) error {
-	if err := h.generateConfig(ctx, chains...); err != nil {
+func (h *Hermes) Init(ctx context.Context, chains []types.Chain, opts ...ConfigOption) error {
+	if err := h.generateConfig(ctx, chains, opts...); err != nil {
 		return fmt.Errorf("failed to generate config: %w", err)
 	}
 
@@ -127,6 +128,21 @@ func (h *Hermes) Init(ctx context.Context, chains ...types.Chain) error {
 		return fmt.Errorf("failed to setup wallets: %w", err)
 	}
 	return nil
+}
+
+// GetConfig reads and parses the Hermes configuration file from the container.
+func (h *Hermes) GetConfig(ctx context.Context) (HermesConfig, error) {
+	fileBz, err := h.ReadFile(ctx, ".hermes/config.toml")
+	if err != nil {
+		return HermesConfig{}, fmt.Errorf("failed to read hermes config: %w", err)
+	}
+
+	var config HermesConfig
+	if err := toml.Unmarshal(fileBz, &config); err != nil {
+		return HermesConfig{}, fmt.Errorf("failed to unmarshal hermes config: %w", err)
+	}
+
+	return config, nil
 }
 
 // setupWallets creates keys on Hermes relayer and funds them from chain faucets.
@@ -293,7 +309,7 @@ func (h *Hermes) extractJSONResult(stdout []byte) []byte {
 }
 
 // generateConfig creates the Hermes configuration file and writes it to the container
-func (h *Hermes) generateConfig(ctx context.Context, chains ...types.Chain) error {
+func (h *Hermes) generateConfig(ctx context.Context, chains []types.Chain, opts ...ConfigOption) error {
 	// collect chain configs from all added chains
 	chainConfigs := make([]types.ChainRelayerConfig, 0, len(chains))
 	for _, chain := range chains {
@@ -304,6 +320,11 @@ func (h *Hermes) generateConfig(ctx context.Context, chains ...types.Chain) erro
 	hermesConfig, err := NewHermesConfig(chainConfigs)
 	if err != nil {
 		return fmt.Errorf("failed to create hermes config: %w", err)
+	}
+
+	// apply any additional options to modify the config.
+	for _, opt := range opts {
+		opt(hermesConfig)
 	}
 
 	configTOML, err := hermesConfig.ToTOML()
