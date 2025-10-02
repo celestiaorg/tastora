@@ -461,8 +461,13 @@ func (c *Chain) CreateWallet(ctx context.Context, keyName string) (*types.Wallet
 		return nil, err
 	}
 
-	if err := c.copyWalletKeyToAllNodes(wallet); err != nil {
-		return nil, fmt.Errorf("failed to copy wallet key to all nodes: %w", err)
+	// the faucet wallet is handled separately during chain initialization.
+	// when we are creating the faucet wallet, the other nodes will not be started yet
+	// and so cannot copy the key to them.
+	if keyName != consts.FaucetAccountKeyName {
+		if err := c.copyWalletKeyToAllNodes(wallet); err != nil {
+			return nil, fmt.Errorf("failed to copy wallet key to all nodes: %w", err)
+		}
 	}
 
 	return wallet, nil
