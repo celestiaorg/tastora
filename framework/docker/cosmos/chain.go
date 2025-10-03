@@ -496,15 +496,8 @@ func (c *Chain) copyWalletKeyToAllNodes(wallet *types.Wallet) error {
 
 // ensureNodeKeyringInitialized ensures the keyring directory exists on the target node.
 func (c *Chain) ensureNodeKeyringInitialized(node *ChainNode) error {
-	kr, err := node.GetKeyring()
-	if err == nil {
-		if _, err := kr.List(); err == nil {
-			return nil
-		}
-	}
-
 	keyringDir := path.Join(node.HomeDir(), "keyring-test")
-	_, _, err = node.Exec(context.Background(), []string{"mkdir", "-p", keyringDir}, nil)
+	_, _, err := node.Exec(context.Background(), []string{"mkdir", "-p", keyringDir}, nil)
 	return err
 }
 
