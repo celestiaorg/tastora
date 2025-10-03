@@ -42,7 +42,7 @@ func newNode(ctx context.Context, cfg Config, testName string, index int) (*Node
 		cfg:    cfg,
 		logger: log,
 	}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, rethNodeType("node"), log)
+	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, NodeType, log)
 	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
 
 	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {

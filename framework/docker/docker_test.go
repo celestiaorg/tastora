@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
+	reth "github.com/celestiaorg/tastora/framework/docker/evstack/reth"
+	evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
 	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -44,6 +46,8 @@ type TestSetupConfig struct {
 	EncConfig        testutil.TestEncodingConfig
 	ChainBuilder     *cosmos.ChainBuilder
 	DANetworkBuilder *da.NetworkBuilder
+	RethBuilder      *reth.NodeBuilder
+	EVMSingleChainBuilder *evmsingle.ChainBuilder
 	Chain            *cosmos.Chain
 	Ctx              context.Context
 }
@@ -114,6 +118,17 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 		WithImage(defaultDAImage).
 		WithNodes(bridgeNodeConfig, lightNodeConfig, fullNodeConfig)
 
+	// Pre-configured Reth single-node builder with a default evolve genesis
+	rethBuilder := reth.NewNodeBuilderWithTestName(t, uniqueTestName).
+		WithDockerClient(dockerClient).
+		WithDockerNetworkID(networkID).
+		WithGenesis([]byte(reth.DefaultEvolveGenesisJSON()))
+
+	// Pre-configured evm-single chain builder; tests add nodes and wiring
+	evSingleBuilder := evmsingle.NewChainBuilderWithTestName(t, uniqueTestName).
+		WithDockerClient(dockerClient).
+		WithDockerNetworkID(networkID)
+
 	return &TestSetupConfig{
 		DockerClient:     dockerClient,
 		NetworkID:        networkID,
@@ -122,6 +137,8 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 		EncConfig:        encConfig,
 		ChainBuilder:     builder,
 		DANetworkBuilder: daNetworkBuilder,
+		RethBuilder:      rethBuilder,
+		EVMSingleChainBuilder: evSingleBuilder,
 		Ctx:              ctx,
 	}
 }
