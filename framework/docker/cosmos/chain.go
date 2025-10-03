@@ -17,6 +17,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/docker/docker/api/types/filters"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -397,7 +398,10 @@ func (c *Chain) Remove(ctx context.Context, opts ...types.RemoveOption) error {
 			return n.Remove(ctx, opts...)
 		})
 	}
-	return eg.Wait()
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+	return c.pruneOrphanedVolumes(ctx)
 }
 
 // UpgradeVersion updates the chain's version across all components, including validators and full nodes, and pulls new images.
@@ -542,4 +546,19 @@ func (c *Chain) getGenesisFileBz(ctx context.Context, defaultGenesisAmount sdk.C
 	}
 
 	return nil, fmt.Errorf("genesis file must be specified if no validator nodes are present")
+}
+
+func (c *Chain) pruneOrphanedVolumes(ctx context.Context) error {
+	report, err := c.Config.DockerClient.VolumesPrune(ctx, filters.Args{})
+	if err != nil {
+		return fmt.Errorf("failed to prune orphaned volumes: %w", err)
+	}
+
+	if len(report.VolumesDeleted) > 0 {
+		c.log.Info("Pruned all orphaned volumes",
+			zap.Strings("volumes", report.VolumesDeleted),
+			zap.Uint64("space_reclaimed_bytes", report.SpaceReclaimed))
+	}
+
+	return nil
 }

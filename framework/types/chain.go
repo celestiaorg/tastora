@@ -28,6 +28,8 @@ type Chain interface {
 	Start(ctx context.Context) error
 	// Stop stops the chain.
 	Stop(ctx context.Context) error
+	// Remove stops and removes the chain and cleans up resources.
+	Remove(ctx context.Context, opts ...RemoveOption) error
 	// GetVolumeName is a docker specific field, it is the name of the docker volume the chain nodes are mounted to.
 	GetVolumeName() string
 	// GetNodes returns a slice of ChainNodes.
