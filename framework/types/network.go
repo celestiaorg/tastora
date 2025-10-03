@@ -10,6 +10,8 @@ import (
 type NetworkInfo struct {
 	Internal Network
 	External Network
+	// ExtraPortMappings maps internal ports to external ports for additional exposed ports
+	ExtraPortMappings map[string]string
 }
 
 // Network contains network information for connectivity

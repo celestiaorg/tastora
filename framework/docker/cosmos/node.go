@@ -61,9 +61,11 @@ func (cn *ChainNode) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, err
 			Ports:    cn.getInternalPorts(),
 		},
 		External: types.Network{
-			Hostname: "0.0.0.0",
+			Hostname: "localhost",
+			IP:       "127.0.0.1",
 			Ports:    cn.externalPorts,
 		},
+		ExtraPortMappings: cn.extraPortMappings,
 	}, nil
 }
 
@@ -79,6 +81,9 @@ type ChainNode struct {
 
 	// externalPorts are set during startContainer.
 	externalPorts types.Ports
+
+	// extraPortMappings maps internal ports to external ports for additional exposed ports
+	extraPortMappings map[string]string
 
 	// faucetWallet stores the faucet wallet for this node
 	faucetWallet *types.Wallet
@@ -102,6 +107,8 @@ type ChainNodeParams struct {
 	PrivValidatorKey []byte
 	// PostInit functions are executed sequentially after the node is initialized.
 	PostInit []func(ctx context.Context, node *ChainNode) error
+	// AdditionalExposedPorts are additional ports to expose for this node
+	AdditionalExposedPorts []string
 }
 
 // NewChainNode creates a new ChainNode with injected dependencies
@@ -363,8 +370,16 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 	apiPortMapping := internalPorts.API + "/tcp"
 	p2pPortMapping := internalPorts.P2P + "/tcp"
 
+	portMappings := []string{rpcPortMapping, grpcPortMapping, apiPortMapping, p2pPortMapping}
+
+	standardPortCount := len(portMappings)
+
+	for _, port := range cn.AdditionalExposedPorts {
+		portMappings = append(portMappings, port+"/tcp")
+	}
+
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := cn.ContainerLifecycle.GetHostPorts(ctx, rpcPortMapping, grpcPortMapping, apiPortMapping, p2pPortMapping)
+	hostPorts, err := cn.ContainerLifecycle.GetHostPorts(ctx, portMappings...)
 	if err != nil {
 		return err
 	}
@@ -374,6 +389,12 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 		GRPC: internal.MustExtractPort(hostPorts[1]),
 		API:  internal.MustExtractPort(hostPorts[2]),
 		P2P:  internal.MustExtractPort(hostPorts[3]),
+	}
+
+	cn.extraPortMappings = make(map[string]string)
+	for i, internalPort := range cn.AdditionalExposedPorts {
+		externalPort := internal.MustExtractPort(hostPorts[standardPortCount+i])
+		cn.extraPortMappings[internalPort] = externalPort
 	}
 
 	return cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC)
@@ -434,6 +455,10 @@ func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 		nat.Port(internalPorts.GRPC + "/tcp"): {},
 		nat.Port(internalPorts.API + "/tcp"):  {},
 		nat.Port(privValPort):                 {},
+	}
+
+	for _, port := range cn.AdditionalExposedPorts {
+		usingPorts[nat.Port(port+"/tcp")] = []nat.PortBinding{}
 	}
 
 	return cn.CreateContainer(ctx, cn.TestName, cn.NetworkID, cn.Image, usingPorts, "", cn.Bind(), nil, cn.HostName(), cmd, cn.Env, []string{})
