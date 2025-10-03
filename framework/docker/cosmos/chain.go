@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path"
 	"sync"
 	"testing"
 
@@ -493,7 +494,7 @@ func (c *Chain) copyWalletKeyToAllNodes(wallet *types.Wallet) error {
 	return nil
 }
 
-// ensureNodeKeyringInitialized ensures the keyring directory exists on the target node by creating a temporary key if needed.
+// ensureNodeKeyringInitialized ensures the keyring directory exists on the target node.
 func (c *Chain) ensureNodeKeyringInitialized(node *ChainNode) error {
 	kr, err := node.GetKeyring()
 	if err == nil {
@@ -502,8 +503,9 @@ func (c *Chain) ensureNodeKeyringInitialized(node *ChainNode) error {
 		}
 	}
 
-	dummyKeyName := "temp-init-key"
-	return node.createKey(context.Background(), dummyKeyName)
+	keyringDir := path.Join(node.HomeDir(), "keyring-test")
+	_, _, err = node.Exec(context.Background(), []string{"mkdir", "-p", keyringDir}, nil)
+	return err
 }
 
 // copyWalletToValidator copies the faucet key from validator[0] to the specified validator.
