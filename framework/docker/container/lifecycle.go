@@ -3,14 +3,15 @@ package container
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/consts"
-	"github.com/celestiaorg/tastora/framework/docker/internal"
-	"github.com/celestiaorg/tastora/framework/docker/port"
-	"github.com/celestiaorg/tastora/framework/types"
 	"io"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/docker/port"
+	"github.com/celestiaorg/tastora/framework/types"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -224,6 +225,9 @@ func (c *Lifecycle) StopContainer(ctx context.Context) error {
 
 func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOption) error {
 	// default to force removal and remove volumes
+	// Note: RemoveVolumes only removes anonymous volumes attached to the container.
+	// Named volumes created with VolumeCreate() must be removed separately.
+	// Reference: https://github.com/docker/cli/issues/4028 - Docker API behavior for volume removal
 	removeOpts := container.RemoveOptions{
 		Force:         true,
 		RemoveVolumes: true,

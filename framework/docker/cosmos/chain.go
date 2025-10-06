@@ -549,16 +549,19 @@ func (c *Chain) getGenesisFileBz(ctx context.Context, defaultGenesisAmount sdk.C
 }
 
 func (c *Chain) pruneOrphanedVolumes(ctx context.Context) error {
-	report, err := c.Config.DockerClient.VolumesPrune(ctx, filters.Args{})
+	testName := c.t.Name()
+	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, testName)))
+
+	report, err := c.Config.DockerClient.VolumesPrune(ctx, filterArgs)
 	if err != nil {
-		return fmt.Errorf("failed to prune orphaned volumes: %w", err)
+		return fmt.Errorf("failed to prune volumes for test %s: %w", testName, err)
 	}
 
-	if len(report.VolumesDeleted) > 0 {
-		c.log.Info("Pruned all orphaned volumes",
-			zap.Strings("volumes", report.VolumesDeleted),
-			zap.Uint64("space_reclaimed_bytes", report.SpaceReclaimed))
-	}
+	c.log.Info("Clean up test volumes",
+		zap.String("test", testName),
+		zap.Strings("volumes", report.VolumesDeleted),
+		zap.Uint64("space_reclaimed_bytes", report.SpaceReclaimed),
+		zap.Int("count", len(report.VolumesDeleted)))
 
 	return nil
 }
