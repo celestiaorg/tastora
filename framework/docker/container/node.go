@@ -162,8 +162,29 @@ func (n *Node) GetVolumeName(nodeName string) string {
 // The nodeName parameter should be the specific name for this node instance.
 // Volume names are deterministic based on testName and nodeName to support re-binding.
 func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error {
+	// volume name should be deterministic based on test name and node name.
 	volName := n.GetVolumeName(nodeName)
+	if err := n.ensureVolume(ctx, nodeName, volName); err != nil {
+		return fmt.Errorf("ensure volume %w", err)
+	}
 
+	// configure volume ownership
+	if err := volume.SetOwner(ctx, volume.OwnerOptions{
+		Log:        n.Logger,
+		Client:     n.DockerClient,
+		VolumeName: volName,
+		ImageRef:   n.Image.Ref(),
+		TestName:   n.TestName,
+		UidGid:     n.Image.UIDGID,
+	}); err != nil {
+		return fmt.Errorf("set volume owner: %w", err)
+	}
+
+	return nil
+}
+
+// ensureVolume checks if a volume with the given name exists, and creates it if it doesn't.
+func (n *Node) ensureVolume(ctx context.Context, nodeName, volName string) error {
 	// check if volume already exists
 	_, err := n.DockerClient.VolumeInspect(ctx, volName)
 	if err != nil {
@@ -182,18 +203,5 @@ func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error 
 	}
 
 	n.VolumeName = volName
-
-	// configure volume ownership
-	if err := volume.SetOwner(ctx, volume.OwnerOptions{
-		Log:        n.Logger,
-		Client:     n.DockerClient,
-		VolumeName: volName,
-		ImageRef:   n.Image.Ref(),
-		TestName:   n.TestName,
-		UidGid:     n.Image.UIDGID,
-	}); err != nil {
-		return fmt.Errorf("set volume owner: %w", err)
-	}
-
 	return nil
 }
