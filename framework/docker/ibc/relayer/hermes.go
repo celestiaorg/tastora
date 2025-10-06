@@ -72,7 +72,7 @@ func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName,
 
 // Name returns the hostname of the docker container.
 func (h *Hermes) Name() string {
-	return fmt.Sprintf("%s-%d-hermes", internal.SanitizeContainerName(h.TestName), h.Index)
+	return fmt.Sprintf("%s-%d-hermes", internal.SanitizeDockerResourceName(h.TestName), h.Index)
 }
 
 // Start starts the Hermes relayer.

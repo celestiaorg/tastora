@@ -210,7 +210,7 @@ func (job *Job) Start(ctx context.Context, cmd []string, opts Options) (*Contain
 	}
 
 	var (
-		containerName = internal.SanitizeContainerName(job.testName + "-" + random.LowerCaseLetterString(6))
+		containerName = internal.SanitizeDockerResourceName(job.testName + "-" + random.LowerCaseLetterString(6))
 		hostName      = internal.CondenseHostName(containerName)
 		logger        = job.log.With(
 			zap.String("command", strings.Join(cmd, " ")), //nolint:gosec // testing only so safe to expose credentials in cli

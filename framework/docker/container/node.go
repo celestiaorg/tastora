@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
 
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/file"
@@ -154,7 +155,7 @@ func (n *Node) WriteFile(ctx context.Context, relPath string, content []byte) er
 }
 
 func (n *Node) GetVolumeName(nodeName string) string {
-	return n.TestName + "-" + nodeName + "-vol"
+	return internal.SanitizeDockerResourceName(n.TestName + "-" + nodeName + "-vol")
 }
 
 // CreateAndSetupVolume creates a Docker volume for the node and sets up proper ownership.
