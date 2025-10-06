@@ -153,28 +153,41 @@ func (n *Node) WriteFile(ctx context.Context, relPath string, content []byte) er
 	return fw.WriteFile(ctx, n.VolumeName, relPath, content)
 }
 
+func (n *Node) GetVolumeName(nodeName string) string {
+	return n.TestName + "-" + nodeName + "-vol"
+}
+
 // CreateAndSetupVolume creates a Docker volume for the node and sets up proper ownership.
 // This consolidates the volume creation pattern used across all node types.
 // The nodeName parameter should be the specific name for this node instance.
+// Volume names are deterministic based on testName and nodeName to support re-binding.
 func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error {
-	// create volume with appropriate labels
-	v, err := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
-		Labels: map[string]string{
-			consts.CleanupLabel:   n.TestName,
-			consts.NodeOwnerLabel: nodeName,
-		},
-	})
+	volName := n.GetVolumeName(nodeName)
+
+	// check if volume already exists
+	_, err := n.DockerClient.VolumeInspect(ctx, volName)
 	if err != nil {
-		return fmt.Errorf("creating volume for %s: %w", n.nodeType.String(), err)
+		// volume doesn't exist, create it
+		v, createErr := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
+			Name: volName,
+			Labels: map[string]string{
+				consts.CleanupLabel:   n.TestName,
+				consts.NodeOwnerLabel: nodeName,
+			},
+		})
+		if createErr != nil {
+			return fmt.Errorf("creating volume for %s: %w", n.nodeType.String(), createErr)
+		}
+		volName = v.Name
 	}
 
-	n.VolumeName = v.Name
+	n.VolumeName = volName
 
 	// configure volume ownership
 	if err := volume.SetOwner(ctx, volume.OwnerOptions{
 		Log:        n.Logger,
 		Client:     n.DockerClient,
-		VolumeName: v.Name,
+		VolumeName: volName,
 		ImageRef:   n.Image.Ref(),
 		TestName:   n.TestName,
 		UidGid:     n.Image.UIDGID,
