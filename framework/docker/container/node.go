@@ -88,7 +88,11 @@ func (n *Node) GetType() types.NodeType {
 
 // RemoveContainer gracefully stops and removes the container associated with the Node using the provided context.
 func (n *Node) RemoveContainer(ctx context.Context, opts ...types.RemoveOption) error {
-	return n.ContainerLifecycle.RemoveContainer(ctx, opts...)
+	err := n.ContainerLifecycle.RemoveContainer(ctx, opts...)
+	if err != nil {
+		return err
+	}
+	return n.ContainerLifecycle.RemoveVolumes(ctx, n.TestName)
 }
 
 // StopContainer gracefully stops the container associated with the Node using the provided context.
@@ -111,6 +115,7 @@ func (n *Node) Stop(ctx context.Context) error {
 
 // Remove stops and removes the Node container and its resources.
 func (n *Node) Remove(ctx context.Context, opts ...types.RemoveOption) error {
+	fmt.Printf("\n\nNode.Remove -> n.TestName: %v\n\n", n.TestName)
 	if err := n.StopContainer(ctx); err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
 	}

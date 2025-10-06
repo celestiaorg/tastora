@@ -14,6 +14,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/types"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
@@ -242,6 +243,22 @@ func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOpt
 	if err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("remove container %s: %w", c.containerName, err)
 	}
+	return nil
+}
+
+func (c *Lifecycle) RemoveVolumes(ctx context.Context, cleanupLabel string) error {
+	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, cleanupLabel)))
+	report, err := c.client.VolumesPrune(ctx, filterArgs)
+	if err != nil {
+		return fmt.Errorf("failed to prune volumes for test %s: %w", cleanupLabel, err)
+	}
+
+	c.log.Info("Clean up volumes",
+		zap.String("cleanup label", cleanupLabel),
+		zap.Strings("volumes", report.VolumesDeleted),
+		zap.Uint64("space_reclaimed_bytes", report.SpaceReclaimed),
+		zap.Int("count", len(report.VolumesDeleted)))
+
 	return nil
 }
 

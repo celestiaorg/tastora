@@ -398,10 +398,7 @@ func (c *Chain) Remove(ctx context.Context, opts ...types.RemoveOption) error {
 			return n.Remove(ctx, opts...)
 		})
 	}
-	if err := eg.Wait(); err != nil {
-		return err
-	}
-	return c.pruneOrphanedVolumes(ctx)
+	return eg.Wait()
 }
 
 // UpgradeVersion updates the chain's version across all components, including validators and full nodes, and pulls new images.
