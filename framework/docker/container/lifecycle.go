@@ -229,17 +229,7 @@ func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOpt
 	// Note: RemoveVolumes only removes anonymous volumes attached to the container.
 	// Named volumes created with VolumeCreate() must be removed separately.
 	// Reference: https://github.com/docker/cli/issues/4028 - Docker API behavior for volume removal
-	removeOpts := container.RemoveOptions{
-		Force:         true,
-		RemoveVolumes: true,
-	}
-
-	// Apply functional options
-	for _, opt := range opts {
-		opt(&removeOpts)
-	}
-
-	err := c.client.ContainerRemove(ctx, c.id, removeOpts)
+	err := c.client.ContainerRemove(ctx, c.id, ApplyRemoveOptions(opts...))
 	if err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("remove container %s: %w", c.containerName, err)
 	}
@@ -289,4 +279,15 @@ func (c *Lifecycle) Running(ctx context.Context) error {
 		return nil
 	}
 	return fmt.Errorf("container with name %s and id %s is not running", c.containerName, c.id)
+}
+
+func ApplyRemoveOptions(opts ...types.RemoveOption) container.RemoveOptions {
+	removeOpts := container.RemoveOptions{
+		Force:         true,
+		RemoveVolumes: true,
+	}
+	for _, opt := range opts {
+		opt(&removeOpts)
+	}
+	return removeOpts
 }
