@@ -153,6 +153,8 @@ type ChainBuilder struct {
 	faucetWallet *types.Wallet
 	// additionalExposedPorts are additional ports to expose for all nodes in the chain
 	additionalExposedPorts []string
+	// skipInit indicates whether to skip node initialization on start (useful when reusing volumes)
+	skipInit bool
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -334,6 +336,12 @@ func (b *ChainBuilder) WithAdditionalExposedPorts(ports ...string) *ChainBuilder
 	return b
 }
 
+// WithSkipInit sets whether to skip node initialization on start (useful when reusing volumes from previous chain)
+func (b *ChainBuilder) WithSkipInit(skip bool) *ChainBuilder {
+	b.skipInit = skip
+	return b
+}
+
 // getImage returns the appropriate Docker image for a node, using node-specific override if available,
 // otherwise falling back to the chain's default image
 func (b *ChainBuilder) getImage(nodeConfig ChainNodeConfig) container.Image {
@@ -428,6 +436,7 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 		cdc:          cdc,
 		log:          b.logger,
 		faucetWallet: b.faucetWallet,
+		skipInit:     b.skipInit,
 	}
 
 	return chain, nil

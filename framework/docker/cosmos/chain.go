@@ -41,6 +41,8 @@ type Chain struct {
 	// it is used to determine if files should be initialized at startup or
 	// if the nodes should just be started.
 	started bool
+	// skipInit indicates whether to skip initialization when starting
+	skipInit bool
 }
 
 func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
@@ -177,7 +179,7 @@ func (c *Chain) Height(ctx context.Context) (int64, error) {
 
 // Start initializes and starts all nodes in the chain if not already started, otherwise starts all nodes without initialization.
 func (c *Chain) Start(ctx context.Context) error {
-	if c.started {
+	if c.started || c.skipInit {
 		return c.startAllNodes(ctx)
 	}
 	return c.startAndInitializeNodes(ctx)
