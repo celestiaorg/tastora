@@ -95,7 +95,7 @@ func NewNode(cfg Config, testName string, image container.Image, index int, node
 
 // Name returns the container name for the Node.
 func (n *Node) Name() string {
-	return fmt.Sprintf("da-%s-%d-%s", n.nodeType.String(), n.Index, internal.SanitizeContainerName(n.TestName))
+	return fmt.Sprintf("da-%s-%d-%s", n.nodeType.String(), n.Index, internal.SanitizeDockerResourceName(n.TestName))
 }
 
 // HostName returns the condensed hostname for the Node.

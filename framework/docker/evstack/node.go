@@ -73,7 +73,7 @@ func NewNode(cfg Config, testName string, image container.Image, index int, isAg
 
 // Name of the test node container.
 func (n *Node) Name() string {
-	return fmt.Sprintf("%s-evstack-%d-%s", n.cfg.ChainID, n.Index, internal.SanitizeContainerName(n.TestName))
+	return fmt.Sprintf("%s-evstack-%d-%s", n.cfg.ChainID, n.Index, internal.SanitizeDockerResourceName(n.TestName))
 }
 
 // HostName returns the condensed hostname for the Node.
@@ -294,4 +294,3 @@ func (n *Node) isNodeHealthy(client *http.Client, healthURL string) bool {
 	n.logger().Debug("evstack node not ready yet", zap.String("url", healthURL), zap.Int("status", resp.StatusCode))
 	return false
 }
-

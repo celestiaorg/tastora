@@ -242,7 +242,7 @@ func (cn *ChainNode) GetKeyring() (keyring.Keyring, error) {
 
 // Name of the test node container.
 func (cn *ChainNode) Name() string {
-	return fmt.Sprintf("%s-%s-%d-%s", cn.ChainID, cn.NodeType(), cn.Index, internal.SanitizeContainerName(cn.TestName))
+	return fmt.Sprintf("%s-%s-%d-%s", cn.ChainID, cn.NodeType(), cn.Index, internal.SanitizeDockerResourceName(cn.TestName))
 }
 
 // NodeType returns the type of the ChainNode as a string.

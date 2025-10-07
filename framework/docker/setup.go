@@ -47,7 +47,7 @@ var KeepVolumesOnFailure = os.Getenv("ICTEST_SKIP_FAILURE_CLEANUP") != ""
 func DockerSetup(t DockerSetupTestingT) (*client.Client, string) {
 	t.Helper()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		panic(fmt.Errorf("failed to create docker client: %v", err))
 	}
