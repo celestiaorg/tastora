@@ -92,6 +92,10 @@ func (n *Node) RemoveContainer(ctx context.Context, opts ...types.RemoveOption) 
 	if err != nil {
 		return err
 	}
+	removeOpts := ApplyRemoveOptions(opts...)
+	if !removeOpts.RemoveVolumes {
+		return nil
+	}
 	return n.ContainerLifecycle.RemoveVolumes(ctx, n.TestName)
 }
 
