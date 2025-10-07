@@ -115,14 +115,10 @@ func (n *Node) Stop(ctx context.Context) error {
 
 // Remove stops and removes the Node container and its resources.
 func (n *Node) Remove(ctx context.Context, opts ...types.RemoveOption) error {
-	fmt.Printf("\n\nNode.Remove -> n.TestName: %v\n\n", n.TestName)
 	if err := n.StopContainer(ctx); err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
-	if err := n.RemoveContainer(ctx, opts...); err != nil {
-		return fmt.Errorf("failed to remove container: %w", err)
-	}
-	return nil
+	return n.RemoveContainer(ctx, opts...)
 }
 
 func (n *Node) CreateContainer(ctx context.Context,
