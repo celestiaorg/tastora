@@ -17,6 +17,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
 	dockerclient "github.com/moby/moby/client"
 	"github.com/moby/moby/errdefs"
@@ -238,17 +239,17 @@ func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOpt
 
 func (c *Lifecycle) RemoveVolumes(ctx context.Context, cleanupLabel string) error {
 	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, cleanupLabel)))
-	report, err := c.client.VolumesPrune(ctx, filterArgs)
+	volumeList, err := c.client.VolumeList(ctx, volume.ListOptions{Filters: filterArgs})
 	if err != nil {
-		return fmt.Errorf("failed to prune volumes for test %s: %w", cleanupLabel, err)
+		return fmt.Errorf("failed to list volumes: %w", err)
 	}
 
-	c.log.Info("Clean up volumes",
-		zap.String("cleanup label", cleanupLabel),
-		zap.Strings("volumes", report.VolumesDeleted),
-		zap.Uint64("space_reclaimed_bytes", report.SpaceReclaimed),
-		zap.Int("count", len(report.VolumesDeleted)))
-
+	for _, vol := range volumeList.Volumes {
+		err := c.client.VolumeRemove(ctx, vol.Name, true)
+		if err != nil {
+			c.log.Warn("Failed to force remove volume", zap.String("volume", vol.Name), zap.Error(err))
+		}
+	}
 	return nil
 }
 
