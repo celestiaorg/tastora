@@ -41,6 +41,8 @@ type Chain struct {
 	// it is used to determine if files should be initialized at startup or
 	// if the nodes should just be started.
 	started bool
+	// skipInit indicates whether to skip initialization when starting
+	skipInit bool
 }
 
 func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
@@ -55,7 +57,15 @@ func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
 }
 
 // GetFaucetWallet retrieves the faucet wallet for the chain.
+// If the wallet is not initialized, it attempts to load it from the first node.
 func (c *Chain) GetFaucetWallet() *types.Wallet {
+	if c.faucetWallet == nil {
+		// attempt to load the faucet wallet from the first node
+		if err := c.loadFaucetWallet(context.Background()); err != nil {
+			c.log.Error("failed to load faucet wallet", zap.Error(err))
+			return nil
+		}
+	}
 	return c.faucetWallet
 }
 
@@ -177,7 +187,7 @@ func (c *Chain) Height(ctx context.Context) (int64, error) {
 
 // Start initializes and starts all nodes in the chain if not already started, otherwise starts all nodes without initialization.
 func (c *Chain) Start(ctx context.Context) error {
-	if c.started {
+	if c.started || c.skipInit {
 		return c.startAllNodes(ctx)
 	}
 	return c.startAndInitializeNodes(ctx)
@@ -528,6 +538,34 @@ func (c *Chain) copyWalletToValidator(wallet *types.Wallet, targetValidator *Cha
 		return fmt.Errorf("failed to import faucet key: %w", err)
 	}
 
+	return nil
+}
+
+// loadFaucetWallet loads the faucet wallet from the first node's keyring.
+// This is used when skipInit is true and the wallet wasn't created during initialization.
+func (c *Chain) loadFaucetWallet(ctx context.Context) error {
+	if len(c.Validators) == 0 {
+		return fmt.Errorf("no validators available to load faucet wallet from")
+	}
+
+	node := c.GetNode()
+	kr, err := node.GetKeyring()
+	if err != nil {
+		return fmt.Errorf("failed to get keyring: %w", err)
+	}
+
+	keyInfo, err := kr.Key(consts.FaucetAccountKeyName)
+	if err != nil {
+		return fmt.Errorf("failed to get faucet key from keyring: %w", err)
+	}
+
+	addr, err := keyInfo.GetAddress()
+	if err != nil {
+		return fmt.Errorf("failed to get address from key: %w", err)
+	}
+
+	formattedAddress := sdk.MustBech32ifyAddressBytes(c.Config.Bech32Prefix, addr.Bytes())
+	c.faucetWallet = types.NewWallet(addr.Bytes(), formattedAddress, c.Config.Bech32Prefix, consts.FaucetAccountKeyName)
 	return nil
 }
 
