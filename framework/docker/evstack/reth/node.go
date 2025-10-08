@@ -54,7 +54,7 @@ func newNode(ctx context.Context, cfg Config, testName string, index int) (*Node
 
 // Name returns a stable container name
 func (n *Node) Name() string {
-	return fmt.Sprintf("reth-%d-%s", n.Index, internal.SanitizeContainerName(n.TestName))
+	return fmt.Sprintf("reth-%d-%s", n.Index, internal.SanitizeDockerResourceName(n.TestName))
 }
 
 // HostName returns a condensed hostname

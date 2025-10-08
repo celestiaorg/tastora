@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
 
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/file"
@@ -88,7 +89,15 @@ func (n *Node) GetType() types.NodeType {
 
 // RemoveContainer gracefully stops and removes the container associated with the Node using the provided context.
 func (n *Node) RemoveContainer(ctx context.Context, opts ...types.RemoveOption) error {
-	return n.ContainerLifecycle.RemoveContainer(ctx, opts...)
+	err := n.ContainerLifecycle.RemoveContainer(ctx, opts...)
+	if err != nil {
+		return err
+	}
+	removeOpts := ApplyRemoveOptions(opts...)
+	if !removeOpts.RemoveVolumes {
+		return nil
+	}
+	return n.ContainerLifecycle.RemoveVolumes(ctx, n.TestName)
 }
 
 // StopContainer gracefully stops the container associated with the Node using the provided context.
@@ -114,10 +123,7 @@ func (n *Node) Remove(ctx context.Context, opts ...types.RemoveOption) error {
 	if err := n.StopContainer(ctx); err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
-	if err := n.RemoveContainer(ctx, opts...); err != nil {
-		return fmt.Errorf("failed to remove container: %w", err)
-	}
-	return nil
+	return n.RemoveContainer(ctx, opts...)
 }
 
 func (n *Node) CreateContainer(ctx context.Context,
@@ -153,28 +159,26 @@ func (n *Node) WriteFile(ctx context.Context, relPath string, content []byte) er
 	return fw.WriteFile(ctx, n.VolumeName, relPath, content)
 }
 
+func (n *Node) GetVolumeName(nodeName string) string {
+	return internal.SanitizeDockerResourceName(n.TestName + "-" + nodeName + "-vol")
+}
+
 // CreateAndSetupVolume creates a Docker volume for the node and sets up proper ownership.
 // This consolidates the volume creation pattern used across all node types.
 // The nodeName parameter should be the specific name for this node instance.
+// Volume names are deterministic based on testName and nodeName to support re-binding.
 func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error {
-	// create volume with appropriate labels
-	v, err := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
-		Labels: map[string]string{
-			consts.CleanupLabel:   n.TestName,
-			consts.NodeOwnerLabel: nodeName,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("creating volume for %s: %w", n.nodeType.String(), err)
+	// volume name should be deterministic based on test name and node name.
+	volName := n.GetVolumeName(nodeName)
+	if err := n.ensureVolume(ctx, nodeName, volName); err != nil {
+		return fmt.Errorf("ensure volume %w", err)
 	}
-
-	n.VolumeName = v.Name
 
 	// configure volume ownership
 	if err := volume.SetOwner(ctx, volume.OwnerOptions{
 		Log:        n.Logger,
 		Client:     n.DockerClient,
-		VolumeName: v.Name,
+		VolumeName: volName,
 		ImageRef:   n.Image.Ref(),
 		TestName:   n.TestName,
 		UidGid:     n.Image.UIDGID,
@@ -182,5 +186,28 @@ func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error 
 		return fmt.Errorf("set volume owner: %w", err)
 	}
 
+	return nil
+}
+
+// ensureVolume checks if a volume with the given name exists, and creates it if it doesn't.
+func (n *Node) ensureVolume(ctx context.Context, nodeName, volName string) error {
+	// check if volume already exists
+	_, err := n.DockerClient.VolumeInspect(ctx, volName)
+	if err != nil {
+		// volume doesn't exist, create it
+		v, createErr := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
+			Name: volName,
+			Labels: map[string]string{
+				consts.CleanupLabel:   n.TestName,
+				consts.NodeOwnerLabel: nodeName,
+			},
+		})
+		if createErr != nil {
+			return fmt.Errorf("creating volume for %s: %w", n.nodeType.String(), createErr)
+		}
+		volName = v.Name
+	}
+
+	n.VolumeName = volName
 	return nil
 }

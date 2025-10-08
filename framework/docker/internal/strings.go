@@ -24,11 +24,11 @@ func CondenseHostName(name string) string {
 
 var validContainerCharsRE = regexp.MustCompile(`[^a-zA-Z0-9_.-]`)
 
-// SanitizeContainerName returns name with any
+// SanitizeDockerResourceName returns name with any
 // invalid characters replaced with underscores.
 // Subtests will include slashes, and there may be other
 // invalid characters too.
-func SanitizeContainerName(name string) string {
+func SanitizeDockerResourceName(name string) string {
 	return validContainerCharsRE.ReplaceAllLiteralString(name, "_")
 }
 

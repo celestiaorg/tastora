@@ -86,6 +86,6 @@ func TestSanitizeContainerName(t *testing.T) {
 		{"?", "_"},
 		{"", ""},
 	} {
-		require.Equal(t, tt.Want, internal.SanitizeContainerName(tt.Name), tt)
+		require.Equal(t, tt.Want, internal.SanitizeDockerResourceName(tt.Name), tt)
 	}
 }
