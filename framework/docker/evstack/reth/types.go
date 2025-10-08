@@ -2,6 +2,8 @@ package reth
 
 import "github.com/celestiaorg/tastora/framework/types"
 
+var NodeType types.NodeType = rethNodeType("reth")
+
 // defaultInternalPorts returns the default internal container ports for a Reth node.
 func defaultInternalPorts() types.Ports {
 	return types.Ports{
