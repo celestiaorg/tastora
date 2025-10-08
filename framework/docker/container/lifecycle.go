@@ -3,16 +3,18 @@ package container
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/consts"
-	"github.com/celestiaorg/tastora/framework/docker/internal"
-	"github.com/celestiaorg/tastora/framework/docker/port"
-	"github.com/celestiaorg/tastora/framework/types"
 	"io"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/docker/port"
+	"github.com/celestiaorg/tastora/framework/types"
+
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
@@ -224,20 +226,29 @@ func (c *Lifecycle) StopContainer(ctx context.Context) error {
 
 func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOption) error {
 	// default to force removal and remove volumes
-	removeOpts := container.RemoveOptions{
-		Force:         true,
-		RemoveVolumes: true,
-	}
-
-	// Apply functional options
-	for _, opt := range opts {
-		opt(&removeOpts)
-	}
-
-	err := c.client.ContainerRemove(ctx, c.id, removeOpts)
+	// Note: RemoveVolumes only removes anonymous volumes attached to the container.
+	// Named volumes created with VolumeCreate() must be removed separately.
+	// Reference: https://github.com/docker/cli/issues/4028 - Docker API behavior for volume removal
+	err := c.client.ContainerRemove(ctx, c.id, ApplyRemoveOptions(opts...))
 	if err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("remove container %s: %w", c.containerName, err)
 	}
+	return nil
+}
+
+func (c *Lifecycle) RemoveVolumes(ctx context.Context, cleanupLabel string) error {
+	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, cleanupLabel)))
+	report, err := c.client.VolumesPrune(ctx, filterArgs)
+	if err != nil {
+		return fmt.Errorf("failed to prune volumes for test %s: %w", cleanupLabel, err)
+	}
+
+	c.log.Info("Clean up volumes",
+		zap.String("cleanup label", cleanupLabel),
+		zap.Strings("volumes", report.VolumesDeleted),
+		zap.Uint64("space_reclaimed_bytes", report.SpaceReclaimed),
+		zap.Int("count", len(report.VolumesDeleted)))
+
 	return nil
 }
 
@@ -268,4 +279,15 @@ func (c *Lifecycle) Running(ctx context.Context) error {
 		return nil
 	}
 	return fmt.Errorf("container with name %s and id %s is not running", c.containerName, c.id)
+}
+
+func ApplyRemoveOptions(opts ...types.RemoveOption) container.RemoveOptions {
+	removeOpts := container.RemoveOptions{
+		Force:         true,
+		RemoveVolumes: true,
+	}
+	for _, opt := range opts {
+		opt(&removeOpts)
+	}
+	return removeOpts
 }

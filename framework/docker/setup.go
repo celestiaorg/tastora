@@ -47,17 +47,10 @@ var KeepVolumesOnFailure = os.Getenv("ICTEST_SKIP_FAILURE_CLEANUP") != ""
 func DockerSetup(t DockerSetupTestingT) (*client.Client, string) {
 	t.Helper()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		panic(fmt.Errorf("failed to create docker client: %v", err))
 	}
-
-	// Clean up docker resources at end of test.
-	t.Cleanup(DockerCleanup(t, cli))
-
-	// Also eagerly clean up any leftover resources from a previous test run,
-	// e.g. if the test was interrupted.
-	DockerCleanup(t, cli)()
 
 	name := fmt.Sprintf("%s-%s", consts.CelestiaDockerPrefix, random.LowerCaseLetterString(8))
 	network, err := cli.NetworkCreate(context.TODO(), name, network.CreateOptions{
