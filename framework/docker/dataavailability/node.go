@@ -217,7 +217,7 @@ func (n *Node) initNode(ctx context.Context, chainID string, env []string) error
 	}
 
 	// note: my_celes_key is the default key name for the da node.
-	cmd := []string{n.cfg.Bin, n.nodeType.String(), "init", "--p2p.network", chainID, "--keyring.keyname", "my-key", "--node.store", n.HomeDir()}
+	cmd := []string{n.cfg.Bin, n.nodeType.String(), "init", "--p2p.network", chainID, "--keyring.keyname", "my-key", "--node.store", n.HomeDir(), "--keyring.backend", "test"}
 	_, _, err := n.Exec(ctx, n.Logger, cmd, env)
 	return err
 }
@@ -225,7 +225,8 @@ func (n *Node) initNode(ctx context.Context, chainID string, env []string) error
 // createWallet creates a wallet for use on this node. Creating one explicitly
 // gives us access to the address for use in tests.
 func (n *Node) createWallet(ctx context.Context) error {
-	cmd := []string{"cel-key", "add", "my-key", "--node.type", n.nodeType.String(), "--keyring-dir", path.Join(n.HomeDir(), "keys"), "--output", "json"}
+	// Try using test keyring backend which should be non-interactive and persistent
+	cmd := []string{"cel-key", "add", "my-key", "--node.type", n.nodeType.String(), "--keyring-dir", path.Join(n.HomeDir(), "keys"), "--output", "json", "--no-backup", "--keyring-backend", "test"}
 	_, stderr, err := n.Exec(ctx, n.Logger, cmd, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create wallet: %w", err)
