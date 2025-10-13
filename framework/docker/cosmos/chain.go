@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"io"
 	"path"
 	"sync"
 	"testing"
+	"time"
 
 	sdkmath "cosmossdk.io/math"
 	"github.com/celestiaorg/go-square/v3/share"
@@ -43,6 +47,8 @@ type Chain struct {
 	started bool
 	// skipInit indicates whether to skip initialization when starting
 	skipInit bool
+	// nextProposal is a counter for the next proposal ID to use.
+	nextProposalID uint64
 }
 
 func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
@@ -580,4 +586,56 @@ func (c *Chain) getGenesisFileBz(ctx context.Context, defaultGenesisAmount sdk.C
 	}
 
 	return nil, fmt.Errorf("genesis file must be specified if no validator nodes are present")
+}
+
+// SubmitAndPassGovV1Proposal submits a governance proposal and has all nodes vote "yes" on it.
+func (c *Chain) SubmitAndPassGovV1Proposal(ctx context.Context, proposal *govv1.MsgSubmitProposal) (*govv1.Proposal, error) {
+	networkInfo, err := c.GetNode().GetNetworkInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network info: %w", err)
+	}
+
+	conn, err := grpc.Dial(networkInfo.External.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial grpc: %w", err)
+	}
+	defer conn.Close()
+
+	resp, err := c.BroadcastMessages(ctx, c.GetFaucetWallet(), proposal)
+	if err != nil {
+		return nil, fmt.Errorf("failed to broadcast proposal: %w", err)
+	}
+
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("failed to submit proposal: %s", resp.RawLog)
+	}
+
+	for _, n := range c.Validators {
+		if err := n.VoteOnProposal(ctx, c.nextProposalID, "yes"); err != nil {
+			return nil, fmt.Errorf("node %s failed to vote on proposal: %w", n.Name(), err)
+		}
+	}
+
+	govQueryClient := govv1.NewQueryClient(conn)
+	var finalProp *govv1.QueryProposalResponse
+	err = wait.ForCondition(ctx, time.Minute*2, time.Second*1, func() (bool, error) {
+		prop, err := govQueryClient.Proposal(ctx, &govv1.QueryProposalRequest{ProposalId: c.nextProposalID})
+		if err != nil {
+			return false, fmt.Errorf("failed to query proposal: %w", err)
+		}
+
+		// keep waiting while in deposit or voting period
+		if prop.Proposal.Status == govv1.ProposalStatus_PROPOSAL_STATUS_DEPOSIT_PERIOD ||
+			prop.Proposal.Status == govv1.ProposalStatus_PROPOSAL_STATUS_VOTING_PERIOD {
+			return false, nil
+		}
+
+		// proposal is in a final state (passed, rejected, or failed)
+		finalProp = prop
+		return true, nil
+	})
+
+	c.nextProposalID++
+
+	return finalProp.Proposal, nil
 }

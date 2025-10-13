@@ -705,6 +705,33 @@ func (cn *ChainNode) GetBroadcaster(chain *Chain) types.Broadcaster {
 	return newBroadcasterForNode(chain, cn)
 }
 
+// VoteOnProposal votes on a governance proposal with the specified ID.
+func (cn *ChainNode) VoteOnProposal(ctx context.Context, proposalID uint64, option string) error {
+	netInfo, err := cn.GetNetworkInfo(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get network info: %w", err)
+	}
+
+	rpcAddr := fmt.Sprintf("tcp://%s", netInfo.Internal.RPCAddress())
+
+	_, _, err = cn.Exec(ctx, []string{
+		"gmd", "tx", "gov", "vote", strconv.FormatUint(proposalID, 10), option,
+		"--from", valKey,
+		"--home", cn.HomeDir(),
+		"--chain-id", cn.ChainID,
+		"--keyring-backend", "test",
+		"--node", rpcAddr,
+		"--yes",                    // avoid interactive prompt
+		"--broadcast-mode", "sync", // wait for tx to be included in a block
+	}, nil)
+
+	if err != nil {
+		return fmt.Errorf("failed to vote on proposal %d: %w", proposalID, err)
+	}
+
+	return nil
+}
+
 // CondenseMoniker fits a moniker into the cosmos character limit for monikers.
 // If the moniker already fits, it is returned unmodified.
 // Otherwise, the middle is truncated, and a hash is appended to the end
