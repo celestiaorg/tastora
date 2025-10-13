@@ -202,6 +202,7 @@ func (c *Chain) Start(ctx context.Context) error {
 // startAndInitializeNodes initializes and starts all chain nodes, configures genesis files, and ensures proper setup for the chain.
 func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	c.started = true
+	c.nextProposalID = 1
 	defaultGenesisAmount := sdk.NewCoins(sdk.NewCoin(c.Config.Denom, sdkmath.NewInt(10_000_000_000_000)))
 	defaultGenesisSelfDelegation := sdk.NewCoin(c.Config.Denom, sdkmath.NewInt(5_000_000))
 
@@ -595,11 +596,13 @@ func (c *Chain) SubmitAndVoteOnGovV1Proposal(ctx context.Context, proposal *govv
 		return nil, fmt.Errorf("failed to get network info: %w", err)
 	}
 
-	conn, err := grpc.Dial(networkInfo.External.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(networkInfo.External.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial grpc: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	resp, err := c.BroadcastMessages(ctx, c.GetFaucetWallet(), proposal)
 	if err != nil {
@@ -634,6 +637,10 @@ func (c *Chain) SubmitAndVoteOnGovV1Proposal(ctx context.Context, proposal *govv
 		finalProp = prop
 		return true, nil
 	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to wait for vote to be finished: %w", err)
+	}
 
 	c.nextProposalID++
 
