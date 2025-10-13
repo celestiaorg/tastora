@@ -28,6 +28,7 @@ import (
 	servercfg "github.com/cosmos/cosmos-sdk/server/config"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
+	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/docker/go-connections/nat"
 	dockerclient "github.com/moby/moby/client"
@@ -706,7 +707,7 @@ func (cn *ChainNode) GetBroadcaster(chain *Chain) types.Broadcaster {
 }
 
 // VoteOnProposal votes on a governance proposal with the specified ID.
-func (cn *ChainNode) VoteOnProposal(ctx context.Context, proposalID uint64, option string) error {
+func (cn *ChainNode) VoteOnProposal(ctx context.Context, proposalID uint64, option govv1.VoteOption) error {
 	netInfo, err := cn.GetNetworkInfo(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get network info: %w", err)
@@ -714,15 +715,20 @@ func (cn *ChainNode) VoteOnProposal(ctx context.Context, proposalID uint64, opti
 
 	rpcAddr := fmt.Sprintf("tcp://%s", netInfo.Internal.RPCAddress())
 
+	optionStr, err := voteOptionToString(option)
+	if err != nil {
+		return err
+	}
+
 	_, _, err = cn.Exec(ctx, []string{
-		"gmd", "tx", "gov", "vote", strconv.FormatUint(proposalID, 10), option,
+		"gmd", "tx", "gov", "vote", strconv.FormatUint(proposalID, 10), optionStr,
 		"--from", valKey,
 		"--home", cn.HomeDir(),
 		"--chain-id", cn.ChainID,
 		"--keyring-backend", "test",
 		"--node", rpcAddr,
-		"--yes",                    // avoid interactive prompt
-		"--broadcast-mode", "sync", // wait for tx to be included in a block
+		"--yes",
+		"--broadcast-mode", "sync",
 	}, nil)
 
 	if err != nil {
@@ -730,6 +736,22 @@ func (cn *ChainNode) VoteOnProposal(ctx context.Context, proposalID uint64, opti
 	}
 
 	return nil
+}
+
+// voteOptionToString converts a govv1.VoteOption enum to its corresponding sdk cli string representation.
+func voteOptionToString(option govv1.VoteOption) (string, error) {
+	switch option {
+	case govv1.VoteOption_VOTE_OPTION_YES:
+		return "yes", nil
+	case govv1.VoteOption_VOTE_OPTION_NO:
+		return "no", nil
+	case govv1.VoteOption_VOTE_OPTION_ABSTAIN:
+		return "abstain", nil
+	case govv1.VoteOption_VOTE_OPTION_NO_WITH_VETO:
+		return "no_with_veto", nil
+	default:
+		return "", fmt.Errorf("invalid vote option: %v", option)
+	}
 }
 
 // CondenseMoniker fits a moniker into the cosmos character limit for monikers.

@@ -588,8 +588,8 @@ func (c *Chain) getGenesisFileBz(ctx context.Context, defaultGenesisAmount sdk.C
 	return nil, fmt.Errorf("genesis file must be specified if no validator nodes are present")
 }
 
-// SubmitAndPassGovV1Proposal submits a governance proposal and has all nodes vote "yes" on it.
-func (c *Chain) SubmitAndPassGovV1Proposal(ctx context.Context, proposal *govv1.MsgSubmitProposal) (*govv1.Proposal, error) {
+// SubmitAndVoteOnGovV1Proposal submits a governance proposal and has all nodes vote based on the specified option.
+func (c *Chain) SubmitAndVoteOnGovV1Proposal(ctx context.Context, proposal *govv1.MsgSubmitProposal, option govv1.VoteOption) (*govv1.Proposal, error) {
 	networkInfo, err := c.GetNode().GetNetworkInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get network info: %w", err)
@@ -611,7 +611,7 @@ func (c *Chain) SubmitAndPassGovV1Proposal(ctx context.Context, proposal *govv1.
 	}
 
 	for _, n := range c.Validators {
-		if err := n.VoteOnProposal(ctx, c.nextProposalID, "yes"); err != nil {
+		if err := n.VoteOnProposal(ctx, c.nextProposalID, option); err != nil {
 			return nil, fmt.Errorf("node %s failed to vote on proposal: %w", n.Name(), err)
 		}
 	}
