@@ -96,7 +96,7 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 	// default image for the DA network
 	defaultDAImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "pr-4283",
+		Version:    "v0.26.4",
 		UIDGID:     "10001:10001",
 	}
 
@@ -178,7 +178,7 @@ func TestPerNodeDifferentImages(t *testing.T) {
 
 	alternativeImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
-		Version:    "v4.0.0-rc5", // different version from default
+		Version:    "5.0.9", // different version from default
 		UIDGID:     "10001:10001",
 	}
 
