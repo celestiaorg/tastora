@@ -31,13 +31,13 @@ func TestDANetworkCreation(t *testing.T) {
 	// Configure different images for different DA node types using builder pattern
 	bridgeImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "pr-4283",
+		Version:    "v0.26.4",
 		UIDGID:     "10001:10001",
 	}
 
 	fullImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "pr-4283",
+		Version:    "v0.26.4",
 		UIDGID:     "10001:10001",
 	}
 
@@ -55,7 +55,7 @@ func TestDANetworkCreation(t *testing.T) {
 	// Default image for the network
 	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "pr-4283",
+		Version:    "v0.26.4",
 		UIDGID:     "10001:10001",
 	}
 
@@ -180,7 +180,7 @@ func TestModifyConfigFileDANetwork(t *testing.T) {
 	// Default image for the DA network
 	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "pr-4283",
+		Version:    "v0.26.4",
 		UIDGID:     "10001:10001",
 	}
 
@@ -289,7 +289,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Default image for the DA network
 		defaultImage := container.Image{
 			Repository: "ghcr.io/celestiaorg/celestia-node",
-			Version:    "pr-4283",
+			Version:    "v0.26.4",
 			UIDGID:     "10001:10001",
 		}
 
@@ -367,7 +367,7 @@ func TestDANetworkCustomPorts(t *testing.T) {
 		// Default image for the DA network
 		defaultImage := container.Image{
 			Repository: "ghcr.io/celestiaorg/celestia-node",
-			Version:    "pr-4283",
+			Version:    "v0.26.4",
 			UIDGID:     "10001:10001",
 		}
 
@@ -445,7 +445,7 @@ func TestDANetworkAddNode(t *testing.T) {
 	// Default image for the DA network
 	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "pr-4283",
+		Version:    "v0.26.4",
 		UIDGID:     "10001:10001",
 	}
 
@@ -641,7 +641,7 @@ func TestDANetworkRemoveNode(t *testing.T) {
 	// Default image for the DA network
 	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-node",
-		Version:    "pr-4283",
+		Version:    "v0.26.4",
 		UIDGID:     "10001:10001",
 	}
 

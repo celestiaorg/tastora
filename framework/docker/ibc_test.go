@@ -22,7 +22,7 @@ func createCelestiaChain(t *testing.T, ctx context.Context, client *dockerclient
 		WithDockerNetworkID(networkID).
 		WithChainID("chain-a").
 		WithName("celestia").
-		WithImage(container.NewImage("ghcr.io/celestiaorg/celestia-app", "v5.0.1-rc1", "10001:10001")).
+		WithImage(container.NewImage("ghcr.io/celestiaorg/celestia-app", "v5.0.10", "10001:10001")).
 		WithBinaryName("celestia-appd").
 		WithBech32Prefix("celestia").
 		WithDenom("utia").

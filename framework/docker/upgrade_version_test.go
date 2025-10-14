@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -16,7 +17,9 @@ func TestUpgradeVersion(t *testing.T) {
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
+	chain, err := testCfg.ChainBuilder.
+		WithImage(container.NewImage("ghcr.io/celestiaorg/celestia-app", "v5.0.9", "10001:10001")).
+		Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	err = chain.Start(testCfg.Ctx)
@@ -24,7 +27,7 @@ func TestUpgradeVersion(t *testing.T) {
 
 	require.NoError(t, wait.ForBlocks(testCfg.Ctx, 5, chain))
 
-	err = chain.UpgradeVersion(testCfg.Ctx, "v4.0.2-mocha")
+	err = chain.UpgradeVersion(testCfg.Ctx, "v5.0.10")
 	require.NoError(t, err)
 
 	// chain is producing blocks at the next version
@@ -38,6 +41,6 @@ func TestUpgradeVersion(t *testing.T) {
 
 	abciInfo, err := rpcClient.ABCIInfo(testCfg.Ctx)
 	require.NoError(t, err, "failed to fetch ABCI info")
-	require.Equal(t, "4.0.2-mocha", abciInfo.Response.GetVersion(), "version mismatch")
-	require.Equal(t, uint64(4), abciInfo.Response.GetAppVersion(), "app_version mismatch")
+	require.Equal(t, "5.0.10", abciInfo.Response.GetVersion(), "version mismatch")
+	require.Equal(t, uint64(5), abciInfo.Response.GetAppVersion(), "app_version mismatch")
 }
