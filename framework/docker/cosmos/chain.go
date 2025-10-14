@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/testutil/maps"
 	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"io"
 	"path"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -47,8 +49,6 @@ type Chain struct {
 	started bool
 	// skipInit indicates whether to skip initialization when starting
 	skipInit bool
-	// nextProposal is a counter for the next proposal ID to use.
-	nextProposalID uint64
 }
 
 func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
@@ -202,7 +202,6 @@ func (c *Chain) Start(ctx context.Context) error {
 // startAndInitializeNodes initializes and starts all chain nodes, configures genesis files, and ensures proper setup for the chain.
 func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	c.started = true
-	c.nextProposalID = 1
 	defaultGenesisAmount := sdk.NewCoins(sdk.NewCoin(c.Config.Denom, sdkmath.NewInt(10_000_000_000_000)))
 	defaultGenesisSelfDelegation := sdk.NewCoin(c.Config.Denom, sdkmath.NewInt(5_000_000))
 
@@ -361,7 +360,35 @@ func (c *Chain) initDefaultGenesis(ctx context.Context, defaultGenesisAmount sdk
 	if err != nil {
 		return nil, err
 	}
+
+	// modify the genesis to have short voting and deposit periods for gov proposals
+	// to make possible to test gov proposals within tests without additional  configuration.
+	genbz, err = maps.SetFields(genbz,
+		maps.Entry{
+			Path:  "app_state.gov.params.voting_period",
+			Value: "30s",
+		},
+		maps.Entry{
+			Path:  "app_state.gov.params.max_deposit_period",
+			Value: "10s",
+		},
+		maps.Entry{
+			Path: "app_state.gov.params.min_deposit",
+			Value: []map[string]interface{}{
+				{
+					"denom":  c.Config.Denom,
+					"amount": "1",
+				},
+			},
+		},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
 	genbz = bytes.ReplaceAll(genbz, []byte(`"stake"`), []byte(fmt.Sprintf(`"%s"`, c.Config.Denom)))
+
 	return genbz, nil
 }
 
@@ -613,16 +640,40 @@ func (c *Chain) SubmitAndVoteOnGovV1Proposal(ctx context.Context, proposal *govv
 		return nil, fmt.Errorf("failed to submit proposal: %s", resp.RawLog)
 	}
 
+	proposalID, err := extractProposalIDFromResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract proposal ID from response: %w", err)
+	}
+
+	govQueryClient := govv1.NewQueryClient(conn)
+
+	// wait for the proposal to be indexed before voting
+	err = wait.ForCondition(ctx, time.Second*30, time.Millisecond*500, func() (bool, error) {
+		_, err := govQueryClient.Proposal(ctx, &govv1.QueryProposalRequest{ProposalId: proposalID})
+		if err != nil {
+			// proposal not yet indexed, keep waiting
+			return false, nil
+		}
+		// proposal exists, we can proceed
+		return true, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("proposal was not indexed after submission: %w", err)
+	}
+
 	for _, n := range c.Validators {
-		if err := n.VoteOnProposal(ctx, c.nextProposalID, option); err != nil {
+		if err := n.VoteOnProposal(ctx, proposalID, option); err != nil {
 			return nil, fmt.Errorf("node %s failed to vote on proposal: %w", n.Name(), err)
 		}
 	}
 
-	govQueryClient := govv1.NewQueryClient(conn)
+	if err := wait.ForBlocks(ctx, 2, c.GetNode()); err != nil {
+		return nil, fmt.Errorf("failed to wait for blocks after voting: %w", err)
+	}
+
 	var finalProp *govv1.QueryProposalResponse
 	err = wait.ForCondition(ctx, time.Minute*2, time.Second*1, func() (bool, error) {
-		prop, err := govQueryClient.Proposal(ctx, &govv1.QueryProposalRequest{ProposalId: c.nextProposalID})
+		prop, err := govQueryClient.Proposal(ctx, &govv1.QueryProposalRequest{ProposalId: proposalID})
 		if err != nil {
 			return false, fmt.Errorf("failed to query proposal: %w", err)
 		}
@@ -642,7 +693,23 @@ func (c *Chain) SubmitAndVoteOnGovV1Proposal(ctx context.Context, proposal *govv
 		return nil, fmt.Errorf("failed to wait for vote to be finished: %w", err)
 	}
 
-	c.nextProposalID++
-
 	return finalProp.Proposal, nil
+}
+
+// extractProposalIDFromResponse extracts the proposal ID from the transaction response events.
+func extractProposalIDFromResponse(resp sdk.TxResponse) (uint64, error) {
+	for _, event := range resp.Events {
+		if event.Type == "submit_proposal" {
+			for _, attr := range event.Attributes {
+				if attr.Key == "proposal_id" {
+					proposalID, err := strconv.ParseUint(attr.Value, 10, 64)
+					if err != nil {
+						return 0, fmt.Errorf("failed to parse proposal ID %q: %w", attr.Value, err)
+					}
+					return proposalID, nil
+				}
+			}
+		}
+	}
+	return 0, fmt.Errorf("proposal_id not found in transaction events")
 }

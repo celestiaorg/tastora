@@ -721,12 +721,13 @@ func (cn *ChainNode) VoteOnProposal(ctx context.Context, proposalID uint64, opti
 	}
 
 	_, _, err = cn.Exec(ctx, []string{
-		"gmd", "tx", "gov", "vote", strconv.FormatUint(proposalID, 10), optionStr,
+		cn.BinaryName, "tx", "gov", "vote", strconv.FormatUint(proposalID, 10), optionStr,
 		"--from", valKey,
 		"--home", cn.HomeDir(),
 		"--chain-id", cn.ChainID,
 		"--keyring-backend", "test",
 		"--node", rpcAddr,
+		"--gas-prices", cn.GasPrices,
 		"--yes",
 		"--broadcast-mode", "sync",
 	}, nil)

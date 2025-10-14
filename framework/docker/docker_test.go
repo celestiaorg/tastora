@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
-	reth "github.com/celestiaorg/tastora/framework/docker/evstack/reth"
-	evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
 	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
+	evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
+	reth "github.com/celestiaorg/tastora/framework/docker/evstack/reth"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/celestiaorg/tastora/framework/types"
+	govmodule "github.com/cosmos/cosmos-sdk/x/gov"
 	"github.com/moby/moby/client"
 	"sync"
 	"testing"
@@ -39,17 +40,17 @@ func configureBech32PrefixOnce() {
 
 // TestSetupConfig contains all the components needed for a Docker test
 type TestSetupConfig struct {
-	DockerClient     *client.Client
-	NetworkID        string
-	TestName         string
-	Logger           *zap.Logger
-	EncConfig        testutil.TestEncodingConfig
-	ChainBuilder     *cosmos.ChainBuilder
-	DANetworkBuilder *da.NetworkBuilder
-	RethBuilder      *reth.NodeBuilder
+	DockerClient          *client.Client
+	NetworkID             string
+	TestName              string
+	Logger                *zap.Logger
+	EncConfig             testutil.TestEncodingConfig
+	ChainBuilder          *cosmos.ChainBuilder
+	DANetworkBuilder      *da.NetworkBuilder
+	RethBuilder           *reth.NodeBuilder
 	EVMSingleChainBuilder *evmsingle.ChainBuilder
-	Chain            *cosmos.Chain
-	Ctx              context.Context
+	Chain                 *cosmos.Chain
+	Ctx                   context.Context
 }
 
 // setupDockerTest creates an isolated Docker test environment
@@ -69,11 +70,11 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 	t.Cleanup(DockerCleanupWithTestName(t, dockerClient, uniqueTestName))
 
 	logger := zaptest.NewLogger(t)
-	encConfig := testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{})
+	encConfig := testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{}, govmodule.AppModuleBasic{})
 
 	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
-		Version:    "v4.0.0-rc6",
+		Version:    "v5.0.10",
 		UIDGID:     "10001:10001",
 	}
 
@@ -130,16 +131,16 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 		WithDockerNetworkID(networkID)
 
 	return &TestSetupConfig{
-		DockerClient:     dockerClient,
-		NetworkID:        networkID,
-		TestName:         uniqueTestName,
-		Logger:           logger,
-		EncConfig:        encConfig,
-		ChainBuilder:     builder,
-		DANetworkBuilder: daNetworkBuilder,
-		RethBuilder:      rethBuilder,
+		DockerClient:          dockerClient,
+		NetworkID:             networkID,
+		TestName:              uniqueTestName,
+		Logger:                logger,
+		EncConfig:             encConfig,
+		ChainBuilder:          builder,
+		DANetworkBuilder:      daNetworkBuilder,
+		RethBuilder:           rethBuilder,
 		EVMSingleChainBuilder: evSingleBuilder,
-		Ctx:              ctx,
+		Ctx:                   ctx,
 	}
 }
 

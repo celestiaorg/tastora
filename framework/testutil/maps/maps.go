@@ -6,6 +6,23 @@ import (
 	"strings"
 )
 
+type Entry struct {
+	Path  string
+	Value interface{}
+}
+
+// SetFields modifies a JSON-encoded byte slice by updating or inserting multiple values at the given dot-delimited paths.
+func SetFields(bz []byte, entries ...Entry) ([]byte, error) {
+	var err error
+	for _, entry := range entries {
+		bz, err = SetField(bz, entry.Path, entry.Value)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set field %s: %w", entry.Path, err)
+		}
+	}
+	return bz, err
+}
+
 // SetField modifies a JSON-encoded byte slice by updating or inserting a value at the given dot-delimited path.
 // Returns the updated JSON-encoded byte slice or an error if unmarshalling, marshaling, or setting the field fails.
 func SetField(bz []byte, path string, value interface{}) ([]byte, error) {
