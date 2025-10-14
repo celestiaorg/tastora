@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/testutil/maps"
 	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"io"
 	"path"
 	"strconv"
@@ -618,19 +616,6 @@ func (c *Chain) getGenesisFileBz(ctx context.Context, defaultGenesisAmount sdk.C
 
 // SubmitAndVoteOnGovV1Proposal submits a governance proposal and has all nodes vote based on the specified option.
 func (c *Chain) SubmitAndVoteOnGovV1Proposal(ctx context.Context, proposal *govv1.MsgSubmitProposal, option govv1.VoteOption) (*govv1.Proposal, error) {
-	networkInfo, err := c.GetNode().GetNetworkInfo(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get network info: %w", err)
-	}
-
-	conn, err := grpc.NewClient(networkInfo.External.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial grpc: %w", err)
-	}
-	defer func() {
-		_ = conn.Close()
-	}()
-
 	resp, err := c.BroadcastMessages(ctx, c.GetFaucetWallet(), proposal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to broadcast proposal: %w", err)
@@ -645,7 +630,7 @@ func (c *Chain) SubmitAndVoteOnGovV1Proposal(ctx context.Context, proposal *govv
 		return nil, fmt.Errorf("failed to extract proposal ID from response: %w", err)
 	}
 
-	govQueryClient := govv1.NewQueryClient(conn)
+	govQueryClient := govv1.NewQueryClient(c.GetNode().GrpcConn)
 
 	// wait for the proposal to be indexed before voting
 	err = wait.ForCondition(ctx, time.Second*30, time.Millisecond*500, func() (bool, error) {
