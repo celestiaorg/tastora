@@ -178,7 +178,7 @@ func TestPerNodeDifferentImages(t *testing.T) {
 
 	alternativeImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
-		Version:    "5.0.9", // different version from default
+		Version:    "v5.0.9", // different version from default
 		UIDGID:     "10001:10001",
 	}
 
