@@ -217,7 +217,6 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 		"--txpool.max-account-slots", "2048",
 		"--txpool.max-new-txns", "2048",
 		"--txpool.additional-validation-tasks", "16",
-		"--ev-reth.enable",
 		"--rpc.eth-proof-window", "120000",
 	}
 
