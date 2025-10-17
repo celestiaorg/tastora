@@ -32,5 +32,5 @@ type Config struct {
 
 // DefaultImage returns the default container image for Reth nodes.
 func DefaultImage() container.Image {
-	return container.Image{Repository: "ghcr.io/evstack/ev-reth", Version: "pr-2765"}
+	return container.Image{Repository: "ghcr.io/evstack/ev-reth", Version: "latest"}
 }
