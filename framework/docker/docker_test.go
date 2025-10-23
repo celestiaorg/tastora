@@ -40,7 +40,7 @@ func configureBech32PrefixOnce() {
 
 // TestSetupConfig contains all the components needed for a Docker test
 type TestSetupConfig struct {
-	DockerClient          *client.Client
+	DockerClient          client.CommonAPIClient
 	NetworkID             string
 	TestName              string
 	Logger                *zap.Logger
@@ -65,9 +65,7 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 
 	ctx := context.Background()
 	dockerClient, networkID := DockerSetup(t)
-
-	// Override the default cleanup to use our unique test name
-	t.Cleanup(DockerCleanupWithTestName(t, dockerClient, uniqueTestName))
+	// DockerSetup now registers cleanup automatically using the LabeledClient's label
 
 	logger := zaptest.NewLogger(t)
 	encConfig := testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{}, govmodule.AppModuleBasic{})

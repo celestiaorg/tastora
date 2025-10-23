@@ -25,7 +25,7 @@ var (
 
 const BusyboxRef = "busybox:stable"
 
-func EnsureBusybox(ctx context.Context, cli *client.Client) error {
+func EnsureBusybox(ctx context.Context, cli client.CommonAPIClient) error {
 	ensureBusyboxMu.Lock()
 	defer ensureBusyboxMu.Unlock()
 

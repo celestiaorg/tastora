@@ -20,7 +20,7 @@ type NetworkBuilder struct {
 	// nodes is the array of node configurations that define the network topology and individual node settings
 	nodes []NodeConfig
 	// dockerClient is the Docker client instance used for all container operations
-	dockerClient *client.Client
+	dockerClient client.CommonAPIClient
 	// dockerNetworkID is the ID of the Docker network where all Nodes are deployed
 	dockerNetworkID string
 	// logger is the structured logger for network operations and debugging. Defaults to test logger.
@@ -97,8 +97,8 @@ func (b *NetworkBuilder) WithBinaryName(binaryName string) *NetworkBuilder {
 }
 
 // WithDockerClient sets the Docker client
-func (b *NetworkBuilder) WithDockerClient(client *client.Client) *NetworkBuilder {
-	b.dockerClient = client
+func (b *NetworkBuilder) WithDockerClient(c client.CommonAPIClient) *NetworkBuilder {
+	b.dockerClient = c
 	return b
 }
 

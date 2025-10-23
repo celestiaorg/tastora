@@ -23,7 +23,7 @@ var _ keyring.Keyring = &dockerKeyring{}
 // Any writes to the keyring are also propagated to the container filesystem.
 type dockerKeyring struct {
 	mu                  sync.RWMutex
-	dockerClient        *client.Client
+	dockerClient        client.CommonAPIClient
 	containerID         string
 	containerKeyringDir string
 	cdc                 codec.Codec
@@ -34,7 +34,7 @@ type dockerKeyring struct {
 }
 
 // NewDockerKeyring creates a new dockerKeyring instance.
-func NewDockerKeyring(dockerClient *client.Client, containerID, containerKeyringDir string, cdc codec.Codec) keyring.Keyring {
+func NewDockerKeyring(dockerClient client.CommonAPIClient, containerID, containerKeyringDir string, cdc codec.Codec) keyring.Keyring {
 	return &dockerKeyring{
 		dockerClient:        dockerClient,
 		containerID:         containerID,

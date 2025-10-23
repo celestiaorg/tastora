@@ -20,7 +20,7 @@ import (
 type Node struct {
 	VolumeName         string
 	NetworkID          string
-	DockerClient       *dockerclient.Client
+	DockerClient       dockerclient.CommonAPIClient
 	TestName           string
 	Image              Image
 	ContainerLifecycle *Lifecycle
@@ -33,7 +33,7 @@ type Node struct {
 // NewNode creates a new Node instance with the required parameters.
 func NewNode(
 	networkID string,
-	dockerClient *dockerclient.Client,
+	dockerClient dockerclient.CommonAPIClient,
 	testName string,
 	image Image,
 	homeDir string,
@@ -189,16 +189,26 @@ func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error 
 	return nil
 }
 
+// getCleanupLabel extracts the cleanup label from the client if it's a LabeledClient,
+// otherwise falls back to the TestName field.
+func (n *Node) getCleanupLabel() string {
+	if lc, ok := n.DockerClient.(labeledClient); ok {
+		return lc.CleanupLabel()
+	}
+	return n.TestName
+}
+
 // ensureVolume checks if a volume with the given name exists, and creates it if it doesn't.
 func (n *Node) ensureVolume(ctx context.Context, nodeName, volName string) error {
 	// check if volume already exists
 	_, err := n.DockerClient.VolumeInspect(ctx, volName)
 	if err != nil {
+		cleanupLabel := n.getCleanupLabel()
 		// volume doesn't exist, create it
 		v, createErr := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 			Name: volName,
 			Labels: map[string]string{
-				consts.CleanupLabel:   n.TestName,
+				consts.CleanupLabel:   cleanupLabel,
 				consts.NodeOwnerLabel: nodeName,
 			},
 		})

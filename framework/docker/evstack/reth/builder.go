@@ -15,7 +15,7 @@ type NodeBuilder struct {
 	t                   *testing.T
 	testName            string
 	logger              *zap.Logger
-	dockerClient        *dockerclient.Client
+	dockerClient        dockerclient.CommonAPIClient
 	networkID           string
 	image               container.Image
 	env                 []string
@@ -51,7 +51,7 @@ func (b *NodeBuilder) WithLogger(l *zap.Logger) *NodeBuilder {
 	b.logger = l
 	return b
 }
-func (b *NodeBuilder) WithDockerClient(c *dockerclient.Client) *NodeBuilder {
+func (b *NodeBuilder) WithDockerClient(c dockerclient.CommonAPIClient) *NodeBuilder {
 	b.dockerClient = c
 	return b
 }

@@ -19,13 +19,22 @@ import (
 // Retriever allows retrieving a single file from a Docker volume.
 type Retriever struct {
 	log      *zap.Logger
-	cli      *client.Client
+	cli      client.CommonAPIClient
 	testName string
 }
 
 // NewRetriever returns a new Retriever.
-func NewRetriever(log *zap.Logger, cli *client.Client, testName string) *Retriever {
+func NewRetriever(log *zap.Logger, cli client.CommonAPIClient, testName string) *Retriever {
 	return &Retriever{log: log, cli: cli, testName: testName}
+}
+
+// getCleanupLabel extracts the cleanup label from the client if it's a LabeledClient,
+// otherwise falls back to the testName field.
+func (r *Retriever) getCleanupLabel() string {
+	if lc, ok := r.cli.(labeledClient); ok {
+		return lc.CleanupLabel()
+	}
+	return r.testName
 }
 
 // SingleFileContent returns the content of the file named at relPath,
@@ -39,13 +48,15 @@ func (r *Retriever) SingleFileContent(ctx context.Context, volumeName, relPath s
 
 	containerName := fmt.Sprintf("%s-getfile-%d-%s", consts.CelestiaDockerPrefix, time.Now().UnixNano(), random.LowerCaseLetterString(5))
 
+	cleanupLabel := r.getCleanupLabel()
+
 	cc, err := r.cli.ContainerCreate(
 		ctx,
 		&container.Config{
 			Image: internaldocker.BusyboxRef,
 			// Use root user to avoid permission issues when reading files from the volume.
 			User:   consts.UserRootString,
-			Labels: map[string]string{consts.CleanupLabel: r.testName},
+			Labels: map[string]string{consts.CleanupLabel: cleanupLabel},
 		},
 		&container.HostConfig{
 			Binds:      []string{volumeName + ":" + mountPath},

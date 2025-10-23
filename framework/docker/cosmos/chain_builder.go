@@ -115,7 +115,7 @@ type ChainBuilder struct {
 	// nodes is the array of node configurations that define the chain topology and individual node settings
 	nodes []ChainNodeConfig
 	// dockerClient is the Docker client instance used for all container operations (create, start, stop, etc.)
-	dockerClient *client.Client
+	dockerClient client.CommonAPIClient
 	// dockerNetworkID is the ID of the Docker network where all chain nodes are deployed
 	dockerNetworkID string
 	// genesisBz contains raw bytes that should be written as the config/genesis.json file for the chain (optional)
@@ -247,8 +247,8 @@ func (b *ChainBuilder) WithNodes(nodeConfigs ...ChainNodeConfig) *ChainBuilder {
 }
 
 // WithDockerClient sets the Docker client
-func (b *ChainBuilder) WithDockerClient(client *client.Client) *ChainBuilder {
-	b.dockerClient = client
+func (b *ChainBuilder) WithDockerClient(c client.CommonAPIClient) *ChainBuilder {
+	b.dockerClient = c
 	return b
 }
 

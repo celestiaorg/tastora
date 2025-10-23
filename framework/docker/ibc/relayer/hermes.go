@@ -37,7 +37,7 @@ type Hermes struct {
 }
 
 // NewHermes creates a new Hermes relayer instance.
-func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName, networkID string, index int, logger *zap.Logger) (*Hermes, error) {
+func NewHermes(ctx context.Context, dockerClient dockerclient.CommonAPIClient, testName, networkID string, index int, logger *zap.Logger) (*Hermes, error) {
 	image := container.Image{
 		Repository: hermesDefaultImage,
 		Version:    hermesDefaultVersion,

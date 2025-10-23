@@ -27,7 +27,7 @@ import (
 // Job is a docker job runner.
 type Job struct {
 	log             *zap.Logger
-	client          *client.Client
+	client          client.CommonAPIClient
 	repository, tag string
 
 	networkID string
@@ -42,7 +42,7 @@ type Job struct {
 // Most arguments (except tag) must be non-zero values or this function panics.
 // If tag is absent, defaults to "latest".
 // Currently, only public docker images are supported.
-func NewJob(logger *zap.Logger, cli *client.Client, networkID string, testName string, repository, tag string) *Job {
+func NewJob(logger *zap.Logger, cli client.CommonAPIClient, networkID string, testName string, repository, tag string) *Job {
 	if logger == nil {
 		panic(errors.New("nil Logger"))
 	}
@@ -75,6 +75,15 @@ func NewJob(logger *zap.Logger, cli *client.Client, networkID string, testName s
 		zap.String("test_name", testName),
 	)
 	return i
+}
+
+// getCleanupLabel extracts the cleanup label from the client if it's a LabeledClient,
+// otherwise falls back to the testName field.
+func (job *Job) getCleanupLabel() string {
+	if lc, ok := job.client.(labeledClient); ok {
+		return lc.CleanupLabel()
+	}
+	return job.testName
 }
 
 // Options optionally configures starting a Container.
@@ -163,6 +172,8 @@ func (job *Job) CreateContainer(ctx context.Context, containerName, hostName str
 		}
 	}
 
+	cleanupLabel := job.getCleanupLabel()
+
 	cc, err := job.client.ContainerCreate(
 		ctx,
 		&container.Config{
@@ -177,7 +188,7 @@ func (job *Job) CreateContainer(ctx context.Context, containerName, hostName str
 			Hostname: hostName,
 			User:     opts.User,
 
-			Labels: map[string]string{consts.CleanupLabel: job.testName},
+			Labels: map[string]string{consts.CleanupLabel: cleanupLabel},
 		},
 		&container.HostConfig{
 			Binds:           opts.Binds,

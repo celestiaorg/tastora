@@ -31,7 +31,7 @@ func (i Image) Ref() string {
 	return i.Repository + ":" + i.Version
 }
 
-func (i Image) PullImage(ctx context.Context, client *client.Client) error {
+func (i Image) PullImage(ctx context.Context, client client.CommonAPIClient) error {
 	ref := i.Ref()
 	_, _, err := client.ImageInspectWithRaw(ctx, ref)
 	if err != nil {

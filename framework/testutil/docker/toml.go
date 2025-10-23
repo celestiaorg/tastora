@@ -16,7 +16,7 @@ import (
 func ModifyConfigFile(
 	ctx context.Context,
 	logger *zap.Logger,
-	dockerClient *client.Client,
+	dockerClient client.CommonAPIClient,
 	testName string,
 	volumeName string,
 	filePath string,

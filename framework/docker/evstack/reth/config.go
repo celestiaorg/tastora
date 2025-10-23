@@ -9,7 +9,7 @@ import (
 // Config holds node-level configuration for Reth
 type Config struct {
 	Logger          *zap.Logger
-	DockerClient    *dockerclient.Client
+	DockerClient    dockerclient.CommonAPIClient
 	DockerNetworkID string
 
 	// Image is the default image for all nodes

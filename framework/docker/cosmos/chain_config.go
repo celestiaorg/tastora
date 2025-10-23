@@ -11,7 +11,7 @@ import (
 type ChainConfig struct {
 	Logger *zap.Logger
 	// DockerClient is a Docker client instance used for the tests.
-	DockerClient *client.Client
+	DockerClient client.CommonAPIClient
 	// DockerNetworkID is the ID of the docker network the nodes are deployed to.
 	DockerNetworkID string
 	

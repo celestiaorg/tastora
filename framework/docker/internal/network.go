@@ -9,7 +9,7 @@ import (
 
 // GetContainerInternalIP returns the internal IP address of a container within the docker network.
 // Returns empty string if container is not yet networked (no error).
-func GetContainerInternalIP(ctx context.Context, client dockerclient.APIClient, containerID string) (string, error) {
+func GetContainerInternalIP(ctx context.Context, client dockerclient.CommonAPIClient, containerID string) (string, error) {
 	inspect, err := client.ContainerInspect(ctx, containerID)
 	if err != nil {
 		return "", fmt.Errorf("inspecting container: %w", err)

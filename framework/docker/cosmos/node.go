@@ -115,7 +115,7 @@ type ChainNodeParams struct {
 // NewChainNode creates a new ChainNode with injected dependencies
 func NewChainNode(
 	logger *zap.Logger,
-	dockerClient *dockerclient.Client,
+	dockerClient dockerclient.CommonAPIClient,
 	dockerNetworkID string,
 	testName string,
 	image container.Image,

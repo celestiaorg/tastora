@@ -16,11 +16,25 @@ import (
 // OwnerOptions contain the configuration for the SetOwner function.
 type OwnerOptions struct {
 	Log        *zap.Logger
-	Client     *client.Client
+	Client     client.CommonAPIClient
 	VolumeName string
 	ImageRef   string
 	TestName   string
 	UidGid     string //nolint: stylecheck
+}
+
+// labeledClient is an interface that matches the LabeledClient type from the docker package.
+type labeledClient interface {
+	CleanupLabel() string
+}
+
+// getCleanupLabel extracts the cleanup label from the client if it's a LabeledClient,
+// otherwise falls back to the provided testName.
+func getCleanupLabel(cli client.CommonAPIClient, testName string) string {
+	if lc, ok := cli.(labeledClient); ok {
+		return lc.CleanupLabel()
+	}
+	return testName
 }
 
 // SetOwner configures the owner of a volume to match the default user in the supplied image reference.
@@ -39,6 +53,9 @@ func SetOwner(ctx context.Context, opts OwnerOptions) error {
 	}
 
 	const mountPath = "/mnt/dockervolume"
+
+	cleanupLabel := getCleanupLabel(opts.Client, opts.TestName)
+
 	cc, err := opts.Client.ContainerCreate(
 		ctx,
 		&container.Config{
@@ -52,7 +69,7 @@ func SetOwner(ctx context.Context, opts OwnerOptions) error {
 			},
 			// Root user so we have permissions to set ownership and mode.
 			User:   consts.UserRootString,
-			Labels: map[string]string{consts.CleanupLabel: opts.TestName},
+			Labels: map[string]string{consts.CleanupLabel: cleanupLabel},
 		},
 		&container.HostConfig{
 			Binds:      []string{opts.VolumeName + ":" + mountPath},

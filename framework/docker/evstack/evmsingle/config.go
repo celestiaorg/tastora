@@ -9,7 +9,7 @@ import (
 // Config holds chain-level configuration for ev-node-evm-single nodes
 type Config struct {
 	Logger          *zap.Logger
-	DockerClient    *dockerclient.Client
+	DockerClient    dockerclient.CommonAPIClient
 	DockerNetworkID string
 	// Image is the default image for all nodes
 	Image container.Image

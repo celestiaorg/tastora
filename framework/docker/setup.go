@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/moby/moby/client"
 	"github.com/moby/moby/errdefs"
 )
@@ -44,7 +45,7 @@ var KeepVolumesOnFailure = os.Getenv("ICTEST_SKIP_FAILURE_CLEANUP") != ""
 // DockerSetup returns a new Docker Client and the ID of a configured network, associated with t.
 //
 // If any part of the setup fails, DockerSetup panics because the test cannot continue.
-func DockerSetup(t DockerSetupTestingT) (*client.Client, string) {
+func DockerSetup(t DockerSetupTestingT) (*LabeledClient, string) {
 	t.Helper()
 
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -52,26 +53,35 @@ func DockerSetup(t DockerSetupTestingT) (*client.Client, string) {
 		panic(fmt.Errorf("failed to create docker client: %v", err))
 	}
 
+	cleanupLabel := fmt.Sprintf("%s-%s", t.Name(), random.LowerCaseLetterString(8))
+	labeledClient := NewLabeledClient(cli, cleanupLabel)
+
 	name := fmt.Sprintf("%s-%s", consts.CelestiaDockerPrefix, random.LowerCaseLetterString(8))
-	network, err := cli.NetworkCreate(context.TODO(), name, network.CreateOptions{
+	network, err := labeledClient.NetworkCreate(context.TODO(), name, network.CreateOptions{
 		Driver: "bridge",
 		IPAM:   &network.IPAM{},
-		Labels: map[string]string{consts.CleanupLabel: t.Name()},
+		Labels: map[string]string{consts.CleanupLabel: cleanupLabel},
 	})
 	if err != nil {
 		panic(fmt.Errorf("failed to create docker network: %v", err))
 	}
 
-	return cli, network.ID
+	// Register cleanup using the LabeledClient's label to ensure consistency
+	t.Cleanup(DockerCleanup(t, labeledClient))
+
+	return labeledClient, network.ID
 }
 
 // DockerCleanup will clean up Docker containers, networks, and the other various config files generated in testing.
-func DockerCleanup(t DockerSetupTestingT, cli *client.Client) func() {
+func DockerCleanup(t DockerSetupTestingT, cli client.CommonAPIClient) func() {
+	if labeledClient, ok := cli.(*LabeledClient); ok {
+		return DockerCleanupWithTestName(t, cli, labeledClient.CleanupLabel())
+	}
 	return DockerCleanupWithTestName(t, cli, t.Name())
 }
 
 // DockerCleanupWithTestName will clean up Docker containers, networks, and other config files using a custom test name.
-func DockerCleanupWithTestName(t DockerSetupTestingT, cli *client.Client, testName string) func() {
+func DockerCleanupWithTestName(t DockerSetupTestingT, cli client.CommonAPIClient, testName string) func() {
 	return func() {
 		showContainerLogs := os.Getenv("SHOW_CONTAINER_LOGS")
 		containerLogTail := os.Getenv("CONTAINER_LOG_TAIL")
@@ -138,31 +148,48 @@ func DockerCleanupWithTestName(t DockerSetupTestingT, cli *client.Client, testNa
 	}
 }
 
-func PruneVolumesWithRetry(ctx context.Context, t DockerSetupTestingT, cli *client.Client) {
+func PruneVolumesWithRetry(ctx context.Context, t DockerSetupTestingT, cli client.CommonAPIClient) {
+	if labeledClient, ok := cli.(*LabeledClient); ok {
+		PruneVolumesWithRetryAndTestName(ctx, t, cli, labeledClient.CleanupLabel())
+		return
+	}
 	PruneVolumesWithRetryAndTestName(ctx, t, cli, t.Name())
 }
 
-func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT, cli *client.Client, testName string) {
+func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT, cli client.CommonAPIClient, testName string) {
 	if KeepVolumesOnFailure && t.Failed() {
 		return
 	}
 
-	var msg string
+	var deletedCount int
+	var spaceReclaimed uint64
 	err := retry.Do(
 		func() error {
-			res, err := cli.VolumesPrune(ctx, filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+testName)))
+			// List volumes with the cleanup label
+			filterArgs := filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+testName))
+			volumeList, err := cli.VolumeList(ctx, volume.ListOptions{Filters: filterArgs})
 			if err != nil {
-				if errdefs.IsConflict(err) {
-					// Prune is already in progress; try again.
-					return err
-				}
-
-				// Give up on any other error.
-				return retry.Unrecoverable(err)
+				return retry.Unrecoverable(fmt.Errorf("listing volumes: %w", err))
 			}
 
-			if len(res.VolumesDeleted) > 0 {
-				msg = fmt.Sprintf("Pruned %d volumes, reclaiming approximately %.1f MB", len(res.VolumesDeleted), float64(res.SpaceReclaimed)/(1024*1024))
+			// Explicitly remove each volume (VolumesPrune doesn't work for named volumes)
+			for _, vol := range volumeList.Volumes {
+				// Try to get volume size before removal (best effort)
+				if vol.UsageData != nil {
+					spaceReclaimed += uint64(vol.UsageData.Size)
+				}
+
+				err := cli.VolumeRemove(ctx, vol.Name, true)
+				if err != nil {
+					if errdefs.IsConflict(err) {
+						// Volume is in use; retry
+						return err
+					}
+					// Log but continue with other volumes
+					t.Logf("Failed to remove volume %s: %v", vol.Name, err)
+				} else {
+					deletedCount++
+				}
 			}
 
 			return nil
@@ -171,22 +198,25 @@ func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT
 		retry.DelayType(retry.FixedDelay),
 	)
 	if err != nil {
-		t.Logf("Failed to prune volumes during docker cleanup: %v", err)
+		t.Logf("Failed to remove volumes during docker cleanup: %v", err)
 		return
 	}
 
-	if msg != "" {
-		// Odd to Logf %s, but this is a defensive way to keep the DockerSetupTestingT interface
-		// with only Logf and not need to add Log.
+	if deletedCount > 0 {
+		msg := fmt.Sprintf("Removed %d volumes, reclaiming approximately %.1f MB", deletedCount, float64(spaceReclaimed)/(1024*1024))
 		t.Logf("%s", msg)
 	}
 }
 
-func PruneNetworksWithRetry(ctx context.Context, t DockerSetupTestingT, cli *client.Client) {
+func PruneNetworksWithRetry(ctx context.Context, t DockerSetupTestingT, cli client.CommonAPIClient) {
+	if labeledClient, ok := cli.(*LabeledClient); ok {
+		PruneNetworksWithRetryAndTestName(ctx, t, cli, labeledClient.CleanupLabel())
+		return
+	}
 	PruneNetworksWithRetryAndTestName(ctx, t, cli, t.Name())
 }
 
-func PruneNetworksWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT, cli *client.Client, testName string) {
+func PruneNetworksWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT, cli client.CommonAPIClient, testName string) {
 	var deleted []string
 	err := retry.Do(
 		func() error {
@@ -253,7 +283,7 @@ func configureLogOptions(testFailed bool, containerLogTail string) container.Log
 func displayContainerLogs(
 	ctx context.Context,
 	t DockerSetupTestingT,
-	cli *client.Client,
+	cli client.CommonAPIClient,
 	containerID string,
 	containerNames []string,
 	logOptions container.LogsOptions,
