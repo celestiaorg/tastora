@@ -172,9 +172,9 @@ func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT
 				return retry.Unrecoverable(fmt.Errorf("listing volumes: %w", err))
 			}
 
-			// Explicitly remove each volume (VolumesPrune doesn't work for named volumes)
+			// explicitly remove each volume.
 			for _, vol := range volumeList.Volumes {
-				// Try to get volume size before removal (best effort)
+				// try to get volume size before removal
 				if vol.UsageData != nil {
 					spaceReclaimed += uint64(vol.UsageData.Size)
 				}
@@ -182,7 +182,6 @@ func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT
 				err := cli.VolumeRemove(ctx, vol.Name, true)
 				if err != nil {
 					if errdefs.IsConflict(err) {
-						// Volume is in use; retry
 						return err
 					}
 					// Log but continue with other volumes
