@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/types"
 
 	"github.com/BurntSushi/toml"
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	tomlutil "github.com/celestiaorg/tastora/framework/testutil/toml"
-	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -16,7 +16,7 @@ import (
 func ModifyConfigFile(
 	ctx context.Context,
 	logger *zap.Logger,
-	dockerClient client.CommonAPIClient,
+	dockerClient types.TastoraDockerClient,
 	testName string,
 	volumeName string,
 	filePath string,

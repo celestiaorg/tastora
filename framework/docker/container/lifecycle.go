@@ -19,7 +19,6 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
-	"github.com/moby/moby/client"
 	"github.com/moby/moby/errdefs"
 	"go.uber.org/zap"
 )
@@ -29,33 +28,18 @@ var panicRe = regexp.MustCompile(`panic:.*\n`)
 
 type Lifecycle struct {
 	log               *zap.Logger
-	client            client.CommonAPIClient
+	client            types.TastoraDockerClient
 	containerName     string
 	id                string
 	preStartListeners port.Listeners
 }
 
-func NewLifecycle(log *zap.Logger, c client.CommonAPIClient, containerName string) *Lifecycle {
+func NewLifecycle(log *zap.Logger, c types.TastoraDockerClient, containerName string) *Lifecycle {
 	return &Lifecycle{
 		log:           log,
 		client:        c,
 		containerName: containerName,
 	}
-}
-
-// labeledClient is an interface that matches the LabeledClient type from the docker package.
-// this is defined here to avoid circular imports.
-type labeledClient interface {
-	CleanupLabel() string
-}
-
-// getCleanupLabel extracts the cleanup label from the client if it's a LabeledClient,
-// otherwise falls back to the provided testName parameter.
-func (c *Lifecycle) getCleanupLabel(testName string) string {
-	if lc, ok := c.client.(labeledClient); ok {
-		return lc.CleanupLabel()
-	}
-	return testName
 }
 
 func (c *Lifecycle) CreateContainer(
@@ -107,8 +91,6 @@ func (c *Lifecycle) CreateContainer(
 		}
 	}
 
-	cleanupLabel := c.getCleanupLabel(testName)
-
 	cc, err := c.client.ContainerCreate(
 		ctx,
 		&container.Config{
@@ -118,7 +100,7 @@ func (c *Lifecycle) CreateContainer(
 			Cmd:          cmd,
 			Env:          env,
 			Hostname:     hostName,
-			Labels:       map[string]string{consts.CleanupLabel: cleanupLabel},
+			Labels:       map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
 			ExposedPorts: pS,
 		},
 		&container.HostConfig{
@@ -254,9 +236,8 @@ func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOpt
 	return nil
 }
 
-func (c *Lifecycle) RemoveVolumes(ctx context.Context, cleanupLabel string) error {
-	label := c.getCleanupLabel(cleanupLabel)
-	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, label)))
+func (c *Lifecycle) RemoveVolumes(ctx context.Context) error {
+	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, c.client.CleanupLabel())))
 	volumeList, err := c.client.VolumeList(ctx, volume.ListOptions{Filters: filterArgs})
 	if err != nil {
 		return fmt.Errorf("failed to list volumes: %w", err)

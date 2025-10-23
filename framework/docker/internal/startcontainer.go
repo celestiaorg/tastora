@@ -2,11 +2,11 @@ package internal
 
 import (
 	"context"
+	"github.com/celestiaorg/tastora/framework/types"
 	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/moby/moby/client"
 )
 
 // portAssignmentMu prevents race conditions during the critical window between
@@ -15,7 +15,7 @@ import (
 var portAssignmentMu sync.Mutex
 
 // StartContainer attempts to start the container with the given ID.
-func StartContainer(ctx context.Context, cli client.CommonAPIClient, id string) error {
+func StartContainer(ctx context.Context, cli types.TastoraDockerClient, id string) error {
 	// add a deadline for the request if the calling context does not provide one
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel func()

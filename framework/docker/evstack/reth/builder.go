@@ -2,10 +2,10 @@ package reth
 
 import (
 	"context"
+	"github.com/celestiaorg/tastora/framework/types"
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
@@ -15,7 +15,7 @@ type NodeBuilder struct {
 	t                   *testing.T
 	testName            string
 	logger              *zap.Logger
-	dockerClient        dockerclient.CommonAPIClient
+	dockerClient        types.TastoraDockerClient
 	networkID           string
 	image               container.Image
 	env                 []string
@@ -51,7 +51,7 @@ func (b *NodeBuilder) WithLogger(l *zap.Logger) *NodeBuilder {
 	b.logger = l
 	return b
 }
-func (b *NodeBuilder) WithDockerClient(c dockerclient.CommonAPIClient) *NodeBuilder {
+func (b *NodeBuilder) WithDockerClient(c types.TastoraDockerClient) *NodeBuilder {
 	b.dockerClient = c
 	return b
 }

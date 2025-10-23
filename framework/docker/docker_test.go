@@ -11,7 +11,6 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/celestiaorg/tastora/framework/types"
 	govmodule "github.com/cosmos/cosmos-sdk/x/gov"
-	"github.com/moby/moby/client"
 	"sync"
 	"testing"
 
@@ -40,7 +39,7 @@ func configureBech32PrefixOnce() {
 
 // TestSetupConfig contains all the components needed for a Docker test
 type TestSetupConfig struct {
-	DockerClient          client.CommonAPIClient
+	DockerClient          types.TastoraDockerClient
 	NetworkID             string
 	TestName              string
 	Logger                *zap.Logger
@@ -65,7 +64,6 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 
 	ctx := context.Background()
 	dockerClient, networkID := DockerSetup(t)
-	// DockerSetup now registers cleanup automatically using the LabeledClient's label
 
 	logger := zaptest.NewLogger(t)
 	encConfig := testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{}, govmodule.AppModuleBasic{})

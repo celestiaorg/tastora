@@ -3,10 +3,10 @@ package evstack
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/types"
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
@@ -20,7 +20,7 @@ type ChainBuilder struct {
 	// nodes is the array of node configurations that define the chain topology and individual node settings
 	nodes []NodeConfig
 	// dockerClient is the Docker client instance used for all container operations
-	dockerClient client.CommonAPIClient
+	dockerClient types.TastoraDockerClient
 	// dockerNetworkID is the ID of the Docker network where all Nodes are deployed
 	dockerNetworkID string
 	// logger is the structured logger for chain operations and debugging. Defaults to test logger.
@@ -90,7 +90,7 @@ func (b *ChainBuilder) WithAggregatorPassphrase(passphrase string) *ChainBuilder
 }
 
 // WithDockerClient sets the Docker client
-func (b *ChainBuilder) WithDockerClient(client client.CommonAPIClient) *ChainBuilder {
+func (b *ChainBuilder) WithDockerClient(client types.TastoraDockerClient) *ChainBuilder {
 	b.dockerClient = client
 	return b
 }

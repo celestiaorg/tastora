@@ -8,10 +8,10 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	internaldocker "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
+	"github.com/celestiaorg/tastora/framework/types"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -19,27 +19,13 @@ import (
 // In the future it may allow retrieving an entire directory.
 type Writer struct {
 	log      *zap.Logger
-	cli      client.CommonAPIClient
+	cli      types.TastoraDockerClient
 	testName string
 }
 
 // NewWriter returns a new Writer.
-func NewWriter(log *zap.Logger, cli client.CommonAPIClient, testName string) *Writer {
+func NewWriter(log *zap.Logger, cli types.TastoraDockerClient, testName string) *Writer {
 	return &Writer{log: log, cli: cli, testName: testName}
-}
-
-// labeledClient is an interface that matches the LabeledClient type from the docker package.
-type labeledClient interface {
-	CleanupLabel() string
-}
-
-// getCleanupLabel extracts the cleanup label from the client if it's a LabeledClient,
-// otherwise falls back to the testName field.
-func (w *Writer) getCleanupLabel() string {
-	if lc, ok := w.cli.(labeledClient); ok {
-		return lc.CleanupLabel()
-	}
-	return w.testName
 }
 
 // WriteFile writes the single file containing content, at relPath within the given volume.
@@ -51,8 +37,6 @@ func (w *Writer) WriteFile(ctx context.Context, volumeName, relPath string, cont
 	}
 
 	containerName := fmt.Sprintf("%s-writefile-%d-%s", consts.CelestiaDockerPrefix, time.Now().UnixNano(), random.LowerCaseLetterString(5))
-
-	cleanupLabel := w.getCleanupLabel()
 
 	cc, err := w.cli.ContainerCreate(
 		ctx,
@@ -69,7 +53,7 @@ func (w *Writer) WriteFile(ctx context.Context, volumeName, relPath string, cont
 			},
 			// Use root user to avoid permission issues when reading files from the volume.
 			User:   consts.UserRootString,
-			Labels: map[string]string{consts.CleanupLabel: cleanupLabel},
+			Labels: map[string]string{consts.CleanupLabel: w.cli.CleanupLabel()},
 		},
 		&container.HostConfig{
 			Binds:      []string{volumeName + ":" + mountPath},
