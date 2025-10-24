@@ -90,7 +90,7 @@ func (b *ChainBuilder) WithNodes(cfgs ...NodeConfig) *ChainBuilder {
 	return b
 }
 
-// Build constructs a Chain with nodes created and volumes initialized (not started)
+// Build constructs a Chain with nodes created and volumes initialized (not isInitialized)
 func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 	cfg := Config{
 		Logger:              b.logger,

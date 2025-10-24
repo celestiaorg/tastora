@@ -24,10 +24,10 @@ type Node struct {
 	nodeCfg NodeConfig
 	logger  *zap.Logger
 
-	started  bool
-	mu       sync.Mutex
-	internal types.Ports
-	external types.Ports
+	isInitialized bool
+	mu            sync.Mutex
+	internal      types.Ports
+	external      types.Ports
 }
 
 func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCfg NodeConfig) (*Node, error) {
@@ -77,12 +77,11 @@ func (n *Node) Start(ctx context.Context) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	if n.started {
-		return n.StartContainer(ctx)
-	}
-
-	if err := n.initContainer(ctx); err != nil {
-		return fmt.Errorf("init container: %w", err)
+	if !n.isInitialized {
+		if err := n.initContainer(ctx); err != nil {
+			return fmt.Errorf("init container: %w", err)
+		}
+		n.isInitialized = true
 	}
 
 	if err := n.createNodeContainer(ctx); err != nil {
@@ -108,7 +107,6 @@ func (n *Node) Start(ctx context.Context) error {
 		return fmt.Errorf("wait for self ready: %w", err)
 	}
 
-	n.started = true
 	return nil
 }
 
