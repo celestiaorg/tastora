@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	internaldocker "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/celestiaorg/tastora/framework/types"
-	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"go.uber.org/zap"
@@ -56,8 +57,7 @@ func (w *Writer) WriteFile(ctx context.Context, volumeName, relPath string, cont
 			Labels: map[string]string{consts.CleanupLabel: w.cli.CleanupLabel()},
 		},
 		&container.HostConfig{
-			Binds:      []string{volumeName + ":" + mountPath},
-			AutoRemove: true,
+			Binds: []string{volumeName + ":" + mountPath},
 		},
 		nil, // No networking necessary.
 		nil,
@@ -67,13 +67,8 @@ func (w *Writer) WriteFile(ctx context.Context, volumeName, relPath string, cont
 		return fmt.Errorf("creating container: %w", err)
 	}
 
-	autoRemoved := false
 	defer func() {
-		if autoRemoved {
-			// No need to attempt removing the container if we successfully started and waited for it to complete.
-			return
-		}
-
+		// Always remove the container since we're not using AutoRemove
 		if err := w.cli.ContainerRemove(ctx, cc.ID, container.RemoveOptions{
 			Force: true,
 		}); err != nil {
@@ -124,8 +119,6 @@ func (w *Writer) WriteFile(ctx context.Context, volumeName, relPath string, cont
 	case err := <-errCh:
 		return err
 	case res := <-waitCh:
-		autoRemoved = true
-
 		if res.Error != nil {
 			return fmt.Errorf("waiting for write-file container: %s", res.Error.Message)
 		}

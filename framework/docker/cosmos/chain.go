@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/testutil/maps"
-	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
 	"io"
 	"path"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/celestiaorg/tastora/framework/testutil/maps"
+	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
 
 	sdkmath "cosmossdk.io/math"
 	"github.com/celestiaorg/go-square/v3/share"
@@ -298,7 +299,10 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	}
 
 	// Wait for blocks before considering the chains "started"
-	if err := wait.ForBlocks(ctx, 2, c.GetNode()); err != nil {
+	// Use a longer timeout for block waiting to handle slow chain startup
+	blockWaitCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	if err := wait.ForBlocks(blockWaitCtx, 2, c.GetNode()); err != nil {
 		return err
 	}
 
