@@ -277,7 +277,7 @@ func (n *Node) startNode(ctx context.Context, additionalStartArgs []string, conf
 
 // createNodeContainer creates and initializes a container for the Node with specified context, options, and environment variables.
 func (n *Node) createNodeContainer(ctx context.Context, additionalStartArgs []string, env []string) error {
-	cmd := []string{n.cfg.Bin, n.nodeType.String(), "start"}
+	cmd := []string{n.cfg.Bin, n.nodeType.String(), "start", "--node.store", n.HomeDir()}
 	cmd = append(cmd, additionalStartArgs...)
 	usingPorts := n.getPortMap()
 	return n.ContainerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.cfg.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, env, []string{})

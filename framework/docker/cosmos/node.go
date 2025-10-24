@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net"
+	"net/http"
 	"os"
 	"path"
 	"strconv"
@@ -408,7 +409,17 @@ func (cn *ChainNode) initClient(addr string) error {
 		return err
 	}
 
-	httpClient.Timeout = 10 * time.Second
+	// Increase timeout and add connection pooling for better reliability
+	httpClient.Timeout = 150 * time.Second
+	httpClient.Transport = &http.Transport{
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   20,
+		IdleConnTimeout:       120 * time.Second,
+		DisableKeepAlives:     false,
+		MaxConnsPerHost:       50,
+		ResponseHeaderTimeout: 30 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 	rpcClient, err := rpchttp.NewWithClient(addr, "/websocket", httpClient)
 	if err != nil {
 		return err

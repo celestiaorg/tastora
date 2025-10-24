@@ -4,12 +4,13 @@ import (
 	"archive/tar"
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/consts"
-	internaldocker "github.com/celestiaorg/tastora/framework/docker/internal"
-	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"io"
 	"path"
 	"time"
+
+	"github.com/celestiaorg/tastora/framework/docker/consts"
+	internaldocker "github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/testutil/random"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/moby/moby/client"
@@ -48,8 +49,7 @@ func (r *Retriever) SingleFileContent(ctx context.Context, volumeName, relPath s
 			Labels: map[string]string{consts.CleanupLabel: r.testName},
 		},
 		&container.HostConfig{
-			Binds:      []string{volumeName + ":" + mountPath},
-			AutoRemove: true,
+			Binds: []string{volumeName + ":" + mountPath},
 		},
 		nil, // No networking necessary.
 		nil,
