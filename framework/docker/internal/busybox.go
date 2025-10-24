@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/types"
 	"io"
 	"sync"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/docker/docker/api/types/filters"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
-	"github.com/moby/moby/client"
 )
 
 // Allow multiple goroutines to check for busybox
@@ -25,7 +25,7 @@ var (
 
 const BusyboxRef = "busybox:stable"
 
-func EnsureBusybox(ctx context.Context, cli *client.Client) error {
+func EnsureBusybox(ctx context.Context, cli types.TastoraDockerClient) error {
 	ensureBusyboxMu.Lock()
 	defer ensureBusyboxMu.Unlock()
 

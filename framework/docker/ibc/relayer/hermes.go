@@ -18,7 +18,6 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/go-bip39"
-	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -37,7 +36,7 @@ type Hermes struct {
 }
 
 // NewHermes creates a new Hermes relayer instance.
-func NewHermes(ctx context.Context, dockerClient *dockerclient.Client, testName, networkID string, index int, logger *zap.Logger) (*Hermes, error) {
+func NewHermes(ctx context.Context, dockerClient types.TastoraDockerClient, testName, networkID string, index int, logger *zap.Logger) (*Hermes, error) {
 	image := container.Image{
 		Repository: hermesDefaultImage,
 		Version:    hermesDefaultVersion,

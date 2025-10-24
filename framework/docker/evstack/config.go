@@ -2,7 +2,7 @@ package evstack
 
 import (
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/moby/moby/client"
+	"github.com/celestiaorg/tastora/framework/types"
 	"go.uber.org/zap"
 )
 
@@ -10,8 +10,8 @@ import (
 type Config struct {
 	// Logger is the logger instance used for all operations
 	Logger *zap.Logger
-	// DockerClient is the docker client instance  
-	DockerClient *client.Client
+	// DockerClient is the docker client instance
+	DockerClient types.TastoraDockerClient
 	// DockerNetworkID is the ID of the docker network to use
 	DockerNetworkID string
 	// ChainID, e.g. test-evstack

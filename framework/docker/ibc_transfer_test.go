@@ -50,9 +50,6 @@ func setupIBCDockerTest(t *testing.T) *IBCTestSetupConfig {
 
 	dockerClient, networkID := DockerSetup(t)
 
-	// Override the default cleanup to use our unique test name
-	t.Cleanup(DockerCleanupWithTestName(t, dockerClient, uniqueTestName))
-
 	// Create celestia-app chain (chain A)
 	chainA, err := createCelestiaChain(t, ctx, dockerClient, networkID, encConfig, uniqueTestName)
 	require.NoError(t, err, "failed to create celestia chain")

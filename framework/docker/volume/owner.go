@@ -8,16 +8,16 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	dockerinternal "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
+	"github.com/celestiaorg/tastora/framework/types"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
 // OwnerOptions contain the configuration for the SetOwner function.
 type OwnerOptions struct {
 	Log        *zap.Logger
-	Client     *client.Client
+	Client     types.TastoraDockerClient
 	VolumeName string
 	ImageRef   string
 	TestName   string
@@ -40,6 +40,7 @@ func SetOwner(ctx context.Context, opts OwnerOptions) error {
 	}
 
 	const mountPath = "/mnt/dockervolume"
+
 	cc, err := opts.Client.ContainerCreate(
 		ctx,
 		&container.Config{
@@ -53,7 +54,7 @@ func SetOwner(ctx context.Context, opts OwnerOptions) error {
 			},
 			// Root user so we have permissions to set ownership and mode.
 			User:   consts.UserRootString,
-			Labels: map[string]string{consts.CleanupLabel: opts.TestName},
+			Labels: map[string]string{consts.CleanupLabel: opts.Client.CleanupLabel()},
 		},
 		&container.HostConfig{
 			Binds: []string{opts.VolumeName + ":" + mountPath},

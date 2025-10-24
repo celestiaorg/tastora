@@ -19,7 +19,6 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
-	dockerclient "github.com/moby/moby/client"
 	"github.com/moby/moby/errdefs"
 	"go.uber.org/zap"
 )
@@ -29,16 +28,16 @@ var panicRe = regexp.MustCompile(`panic:.*\n`)
 
 type Lifecycle struct {
 	log               *zap.Logger
-	client            *dockerclient.Client
+	client            types.TastoraDockerClient
 	containerName     string
 	id                string
 	preStartListeners port.Listeners
 }
 
-func NewLifecycle(log *zap.Logger, client *dockerclient.Client, containerName string) *Lifecycle {
+func NewLifecycle(log *zap.Logger, c types.TastoraDockerClient, containerName string) *Lifecycle {
 	return &Lifecycle{
 		log:           log,
-		client:        client,
+		client:        c,
 		containerName: containerName,
 	}
 }
@@ -101,7 +100,7 @@ func (c *Lifecycle) CreateContainer(
 			Cmd:          cmd,
 			Env:          env,
 			Hostname:     hostName,
-			Labels:       map[string]string{consts.CleanupLabel: testName},
+			Labels:       map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
 			ExposedPorts: pS,
 		},
 		&container.HostConfig{
@@ -237,8 +236,8 @@ func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOpt
 	return nil
 }
 
-func (c *Lifecycle) RemoveVolumes(ctx context.Context, cleanupLabel string) error {
-	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, cleanupLabel)))
+func (c *Lifecycle) RemoveVolumes(ctx context.Context) error {
+	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, c.client.CleanupLabel())))
 	volumeList, err := c.client.VolumeList(ctx, volume.ListOptions{Filters: filterArgs})
 	if err != nil {
 		return fmt.Errorf("failed to list volumes: %w", err)

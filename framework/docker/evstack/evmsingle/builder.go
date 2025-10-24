@@ -2,10 +2,10 @@ package evmsingle
 
 import (
 	"context"
+	"github.com/celestiaorg/tastora/framework/types"
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
@@ -15,7 +15,7 @@ type ChainBuilder struct {
 	t            *testing.T
 	testName     string
 	logger       *zap.Logger
-	dockerClient *dockerclient.Client
+	dockerClient types.TastoraDockerClient
 	networkID    string
 	image        container.Image
 	env          []string
@@ -51,7 +51,7 @@ func (b *ChainBuilder) WithLogger(l *zap.Logger) *ChainBuilder {
 	return b
 }
 
-func (b *ChainBuilder) WithDockerClient(c *dockerclient.Client) *ChainBuilder {
+func (b *ChainBuilder) WithDockerClient(c types.TastoraDockerClient) *ChainBuilder {
 	b.dockerClient = c
 	return b
 }

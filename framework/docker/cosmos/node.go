@@ -32,7 +32,6 @@ import (
 	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/docker/go-connections/nat"
-	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -116,7 +115,7 @@ type ChainNodeParams struct {
 // NewChainNode creates a new ChainNode with injected dependencies
 func NewChainNode(
 	logger *zap.Logger,
-	dockerClient *dockerclient.Client,
+	dockerClient types.TastoraDockerClient,
 	dockerNetworkID string,
 	testName string,
 	image container.Image,
