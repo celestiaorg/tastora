@@ -1,7 +1,6 @@
 package evstack
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -258,7 +257,7 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 
 // waitForNodeReady polls the health endpoint until the node is ready or timeout is reached
 func (n *Node) waitForNodeReady(ctx context.Context, timeout time.Duration) error {
-	healthURL := fmt.Sprintf("http://0.0.0.0:%s/evnode.v1.HealthService/Livez", n.externalPorts.RPC)
+	healthURL := fmt.Sprintf("http://0.0.0.0:%s/health/ready", n.externalPorts.RPC)
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	timeoutCh := time.After(timeout)
@@ -280,14 +279,13 @@ func (n *Node) waitForNodeReady(ctx context.Context, timeout time.Duration) erro
 	}
 }
 
-// isNodeHealthy checks if the node health endpoint returns 200
+// isNodeHealthy checks if the node health endpoint returns 200 with READY response
 func (n *Node) isNodeHealthy(client *http.Client, healthURL string) bool {
-	req, err := http.NewRequest("POST", healthURL, bytes.NewBufferString("{}"))
+	req, err := http.NewRequest("GET", healthURL, nil)
 	if err != nil {
 		n.logger().Debug("failed to create health check request", zap.Error(err))
 		return false
 	}
-	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
