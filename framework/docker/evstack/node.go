@@ -93,6 +93,11 @@ func (n *Node) isAggregator() bool {
 	return n.isAggregatorFlag
 }
 
+// passphraseFilePath returns the path to the passphrase file
+func (n *Node) passphraseFilePath() string {
+	return filepath.Join(n.HomeDir(), "config", "passphrase.txt")
+}
+
 // Init initializes the Node.
 func (n *Node) Init(ctx context.Context, initArguments ...string) error {
 	n.mu.Lock()
@@ -100,10 +105,14 @@ func (n *Node) Init(ctx context.Context, initArguments ...string) error {
 
 	cmd := []string{n.cfg.Bin, "--home", n.HomeDir(), "--chain_id", n.cfg.ChainID, "init"}
 	if n.isAggregator() {
+		if err := n.WriteFile(ctx, filepath.Join("config", "passphrase.txt"), []byte(n.cfg.AggregatorPassphrase)); err != nil {
+			return fmt.Errorf("failed to write passphrase file: %w", err)
+		}
+
 		signerPath := filepath.Join(n.HomeDir(), "config")
 		cmd = append(cmd,
 			"--evnode.node.aggregator",
-			"--evnode.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
+			"--evnode.signer.passphrase_file="+n.passphraseFilePath(), //nolint:gosec // used for testing only
 			"--evnode.signer.signer_path="+signerPath)
 	}
 
@@ -147,7 +156,7 @@ func (n *Node) createEvstackContainer(ctx context.Context, additionalStartArgs .
 		signerPath := filepath.Join(n.HomeDir(), "config")
 		startCmd = append(startCmd,
 			"--evnode.node.aggregator",
-			"--evnode.signer.passphrase="+n.cfg.AggregatorPassphrase, //nolint:gosec // used for testing only
+			"--evnode.signer.passphrase_file="+n.passphraseFilePath(), //nolint:gosec // used for testing only
 			"--evnode.signer.signer_path="+signerPath)
 	}
 

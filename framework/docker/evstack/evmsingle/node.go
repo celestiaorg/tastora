@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -59,6 +60,11 @@ func (n *Node) Name() string {
 
 // HostName returns a condensed hostname
 func (n *Node) HostName() string { return internal.CondenseHostName(n.Name()) }
+
+// passphraseFilePath returns the path to the passphrase file
+func (n *Node) passphraseFilePath() string {
+	return filepath.Join(n.HomeDir(), "config", "passphrase.txt")
+}
 
 // GetNetworkInfo returns internal/external addressing
 func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
@@ -115,9 +121,13 @@ func (n *Node) initContainer(ctx context.Context) error {
 	// Always run init to ensure config exists and is up to date
 	initCmd := []string{n.cfg.Bin, "init", "--home", n.HomeDir()}
 	if n.nodeCfg.EVMSignerPassphrase != "" {
+		if err := n.WriteFile(ctx, filepath.Join("config", "passphrase.txt"), []byte(n.nodeCfg.EVMSignerPassphrase)); err != nil {
+			return fmt.Errorf("failed to write passphrase file: %w", err)
+		}
+
 		initCmd = append(initCmd,
 			"--rollkit.node.aggregator=true",
-			"--rollkit.signer.passphrase", n.nodeCfg.EVMSignerPassphrase,
+			"--rollkit.signer.passphrase_file", n.passphraseFilePath(),
 		)
 	}
 
@@ -156,7 +166,7 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 		cmd = append(cmd, "--evnode.node.block_time", n.nodeCfg.EVMBlockTime)
 	}
 	if n.nodeCfg.EVMSignerPassphrase != "" {
-		cmd = append(cmd, "--evnode.node.aggregator=true", "--evnode.signer.passphrase", n.nodeCfg.EVMSignerPassphrase)
+		cmd = append(cmd, "--evnode.node.aggregator=true", "--evnode.signer.passphrase_file", n.passphraseFilePath())
 	}
 
 	if n.nodeCfg.DAAddress != "" {
