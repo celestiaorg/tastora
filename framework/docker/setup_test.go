@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockTestingT implements DockerSetupTestingT for testing purposes
+// mockTestingT implements SetupTestingT for testing purposes
 type mockTestingT struct {
 	name     string
 	failed   bool
@@ -130,7 +130,7 @@ func TestLogBehaviorLogic(t *testing.T) {
 			showContainerLogs := os.Getenv("SHOW_CONTAINER_LOGS")
 			containerLogTail := os.Getenv("CONTAINER_LOG_TAIL")
 
-			// This replicates the logic from DockerCleanup
+			// This replicates the logic from Cleanup
 			shouldShowLogs := (mockT.Failed() && showContainerLogs == "") || showContainerLogs == "always"
 			require.Equal(t, tc.expectedShowLogs, shouldShowLogs, "Log display decision should match expected")
 
@@ -213,7 +213,7 @@ func TestLogHeaderGeneration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Simulate the header logic from DockerCleanup
+			// Simulate the header logic from Cleanup
 			var tailValue string
 
 			if tc.tailSet {
@@ -348,7 +348,7 @@ func TestDockerCleanupBehaviorSimulation(t *testing.T) {
 		showContainerLogs := ""  // Default - shows logs on failure
 		containerLogTail := "50" // This should be ignored for failed tests
 
-		// Logic from DockerCleanup: should show logs because test failed
+		// Logic from Cleanup: should show logs because test failed
 		shouldShowLogs := (mockT.Failed() && showContainerLogs == "") || showContainerLogs == "always"
 		require.True(t, shouldShowLogs, "Failed test should trigger log display")
 

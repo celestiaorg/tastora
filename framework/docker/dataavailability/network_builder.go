@@ -3,10 +3,10 @@ package dataavailability
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/types"
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
@@ -20,7 +20,7 @@ type NetworkBuilder struct {
 	// nodes is the array of node configurations that define the network topology and individual node settings
 	nodes []NodeConfig
 	// dockerClient is the Docker client instance used for all container operations
-	dockerClient *client.Client
+	dockerClient types.TastoraDockerClient
 	// dockerNetworkID is the ID of the Docker network where all Nodes are deployed
 	dockerNetworkID string
 	// logger is the structured logger for network operations and debugging. Defaults to test logger.
@@ -97,8 +97,8 @@ func (b *NetworkBuilder) WithBinaryName(binaryName string) *NetworkBuilder {
 }
 
 // WithDockerClient sets the Docker client
-func (b *NetworkBuilder) WithDockerClient(client *client.Client) *NetworkBuilder {
-	b.dockerClient = client
+func (b *NetworkBuilder) WithDockerClient(c types.TastoraDockerClient) *NetworkBuilder {
+	b.dockerClient = c
 	return b
 }
 

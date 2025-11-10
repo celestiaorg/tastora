@@ -3,8 +3,8 @@ package container
 import (
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/types"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
-	"github.com/moby/moby/client"
 	"io"
 )
 
@@ -31,7 +31,7 @@ func (i Image) Ref() string {
 	return i.Repository + ":" + i.Version
 }
 
-func (i Image) PullImage(ctx context.Context, client *client.Client) error {
+func (i Image) PullImage(ctx context.Context, client types.TastoraDockerClient) error {
 	ref := i.Ref()
 	_, _, err := client.ImageInspectWithRaw(ctx, ref)
 	if err != nil {
