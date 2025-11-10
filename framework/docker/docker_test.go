@@ -63,7 +63,7 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 	uniqueTestName := fmt.Sprintf("%s-%s", t.Name(), random.LowerCaseLetterString(8))
 
 	ctx := context.Background()
-	dockerClient, networkID := DockerSetup(t)
+	dockerClient, networkID := Setup(t)
 
 	logger := zaptest.NewLogger(t)
 	encConfig := testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{}, govmodule.AppModuleBasic{})

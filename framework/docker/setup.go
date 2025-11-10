@@ -22,8 +22,8 @@ import (
 	"github.com/moby/moby/errdefs"
 )
 
-// DockerSetupTestingT is a subset of testing.T required for DockerSetup.
-type DockerSetupTestingT interface {
+// SetupTestingT is a subset of testing.T required for Setup.
+type SetupTestingT interface {
 	Helper()
 
 	Name() string
@@ -35,19 +35,19 @@ type DockerSetupTestingT interface {
 }
 
 // KeepVolumesOnFailure determines whether volumes associated with a test
-// using DockerSetup are retained or deleted following a test failure.
+// using Setup are retained or deleted following a test failure.
 //
 // The value is false by default, but can be initialized to true by setting the
-// environment variable ICTEST_SKIP_FAILURE_CLEANUP to a non-empty value.
+// environment variable TASTORA_SKIP_FAILURE_CLEANUP to a non-empty value.
 // Alternatively, importers of the dockerutil package may set the variable to true.
 // Because dockerutil is an internal package, the public API for setting this value
 // is interchaintest.KeepDockerVolumesOnFailure(bool).
-var KeepVolumesOnFailure = os.Getenv("ICTEST_SKIP_FAILURE_CLEANUP") != ""
+var KeepVolumesOnFailure = os.Getenv("TASTORA_SKIP_FAILURE_CLEANUP") != ""
 
-// DockerSetup returns a new Docker Client and the ID of a configured network, associated with t.
+// Setup returns a new Docker Client and the ID of a configured network, associated with t.
 //
-// If any part of the setup fails, DockerSetup panics because the test cannot continue.
-func DockerSetup(t DockerSetupTestingT) (types.TastoraDockerClient, string) {
+// If any part of the setup fails, Setup panics because the test cannot continue.
+func Setup(t SetupTestingT) (types.TastoraDockerClient, string) {
 	t.Helper()
 
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -68,18 +68,18 @@ func DockerSetup(t DockerSetupTestingT) (types.TastoraDockerClient, string) {
 		panic(fmt.Errorf("failed to create docker network: %v", err))
 	}
 
-	t.Cleanup(DockerCleanup(t, dockerClient))
+	t.Cleanup(Cleanup(t, dockerClient))
 
 	return dockerClient, network.ID
 }
 
-// DockerCleanup will clean up Docker containers, networks, and the other various config files generated in testing.
-func DockerCleanup(t DockerSetupTestingT, cli types.TastoraDockerClient) func() {
-	return DockerCleanupWithTestName(t, cli, cli.CleanupLabel())
+// Cleanup will clean up Docker containers, networks, and the other various config files generated in testing.
+func Cleanup(t SetupTestingT, cli types.TastoraDockerClient) func() {
+	return CleanupWithLabel(t, cli, cli.CleanupLabel())
 }
 
-// DockerCleanupWithTestName will clean up Docker containers, networks, and other config files using a custom test name.
-func DockerCleanupWithTestName(t DockerSetupTestingT, cli types.TastoraDockerClient, testName string) func() {
+// CleanupWithLabel will clean up Docker containers, networks, and other config files using a custom test name.
+func CleanupWithLabel(t SetupTestingT, cli types.TastoraDockerClient, cleanupLabel string) func() {
 	return func() {
 		showContainerLogs := os.Getenv("SHOW_CONTAINER_LOGS")
 		containerLogTail := os.Getenv("CONTAINER_LOG_TAIL")
@@ -90,7 +90,7 @@ func DockerCleanupWithTestName(t DockerSetupTestingT, cli types.TastoraDockerCli
 		cs, err := cli.ContainerList(ctx, container.ListOptions{
 			All: true,
 			Filters: filters.NewArgs(
-				filters.Arg("label", consts.CleanupLabel+"="+testName),
+				filters.Arg("label", consts.CleanupLabel+"="+cleanupLabel),
 			),
 		})
 		if err != nil {
@@ -138,29 +138,29 @@ func DockerCleanupWithTestName(t DockerSetupTestingT, cli types.TastoraDockerCli
 		}
 
 		if !keepContainers {
-			PruneVolumesWithRetryAndTestName(ctx, t, cli, testName)
-			PruneNetworksWithRetryAndTestName(ctx, t, cli, testName)
+			PruneVolumesWithRetryAndCleanupLabel(ctx, t, cli, cleanupLabel)
+			PruneNetworksWithRetryAndCleanupLabel(ctx, t, cli, cleanupLabel)
 		} else {
 			t.Logf("Keeping containers - Docker cleanup skipped")
 		}
 	}
 }
 
-func PruneVolumesWithRetry(ctx context.Context, t DockerSetupTestingT, cli types.TastoraDockerClient) {
-	PruneVolumesWithRetryAndTestName(ctx, t, cli, cli.CleanupLabel())
+func PruneVolumesWithRetry(ctx context.Context, t SetupTestingT, cli types.TastoraDockerClient) {
+	PruneVolumesWithRetryAndCleanupLabel(ctx, t, cli, cli.CleanupLabel())
 }
 
-func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT, cli types.TastoraDockerClient, testName string) {
+func PruneVolumesWithRetryAndCleanupLabel(ctx context.Context, t SetupTestingT, cli types.TastoraDockerClient, cleanupLabel string) {
 	if KeepVolumesOnFailure && t.Failed() {
 		return
 	}
 
 	var deletedCount int
-	var spaceReclaimed uint64
+	var totalSpaceReclaimed uint64
 	err := retry.Do(
 		func() error {
 			// List volumes with the cleanup label
-			filterArgs := filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+testName))
+			filterArgs := filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+cleanupLabel))
 			volumeList, err := cli.VolumeList(ctx, volume.ListOptions{Filters: filterArgs})
 			if err != nil {
 				return retry.Unrecoverable(fmt.Errorf("listing volumes: %w", err))
@@ -168,9 +168,10 @@ func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT
 
 			// explicitly remove each volume.
 			for _, vol := range volumeList.Volumes {
+				var spaceReclaimed uint64
 				// try to get volume size before removal
 				if vol.UsageData != nil {
-					spaceReclaimed += uint64(vol.UsageData.Size)
+					spaceReclaimed = uint64(vol.UsageData.Size)
 				}
 
 				err := cli.VolumeRemove(ctx, vol.Name, true)
@@ -181,6 +182,7 @@ func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT
 					// Log but continue with other volumes
 					t.Logf("Failed to remove volume %s: %v", vol.Name, err)
 				} else {
+					totalSpaceReclaimed += spaceReclaimed
 					deletedCount++
 				}
 			}
@@ -196,20 +198,20 @@ func PruneVolumesWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT
 	}
 
 	if deletedCount > 0 {
-		msg := fmt.Sprintf("Removed %d volumes, reclaiming approximately %.1f MB", deletedCount, float64(spaceReclaimed)/(1024*1024))
+		msg := fmt.Sprintf("Removed %d volumes, reclaiming %.1f MB", deletedCount, float64(totalSpaceReclaimed)/(1024*1024))
 		t.Logf("%s", msg)
 	}
 }
 
-func PruneNetworksWithRetry(ctx context.Context, t DockerSetupTestingT, cli types.TastoraDockerClient) {
-	PruneNetworksWithRetryAndTestName(ctx, t, cli, cli.CleanupLabel())
+func PruneNetworksWithRetry(ctx context.Context, t SetupTestingT, cli types.TastoraDockerClient) {
+	PruneNetworksWithRetryAndCleanupLabel(ctx, t, cli, cli.CleanupLabel())
 }
 
-func PruneNetworksWithRetryAndTestName(ctx context.Context, t DockerSetupTestingT, cli types.TastoraDockerClient, testName string) {
+func PruneNetworksWithRetryAndCleanupLabel(ctx context.Context, t SetupTestingT, cli types.TastoraDockerClient, cleanupLabel string) {
 	var deleted []string
 	err := retry.Do(
 		func() error {
-			res, err := cli.NetworksPrune(ctx, filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+testName)))
+			res, err := cli.NetworksPrune(ctx, filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+cleanupLabel)))
 			if err != nil {
 				if errdefs.IsConflict(err) {
 					// Prune is already in progress; try again.
@@ -271,7 +273,7 @@ func configureLogOptions(testFailed bool, containerLogTail string) container.Log
 // displayContainerLogs fetches and displays container logs
 func displayContainerLogs(
 	ctx context.Context,
-	t DockerSetupTestingT,
+	t SetupTestingT,
 	cli types.TastoraDockerClient,
 	containerID string,
 	containerNames []string,
