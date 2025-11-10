@@ -153,9 +153,15 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 	if n.nodeCfg.EVMEngineURL == "" || n.nodeCfg.EVMETHURL == "" || n.nodeCfg.EVMJWTSecret == "" {
 		return fmt.Errorf("missing EVM connection details: engine-url, eth-url, and jwt-secret are required")
 	}
+
+	// write the contents of the provided secret.
+	if err := n.WriteFile(ctx, "jwt-secret.txt", []byte(n.nodeCfg.EVMJWTSecret)); err != nil {
+		return fmt.Errorf("failed to write jwt-secret.txt: %w", err)
+	}
+
 	cmd = append(cmd, "--evm.engine-url", n.nodeCfg.EVMEngineURL)
 	cmd = append(cmd, "--evm.eth-url", n.nodeCfg.EVMETHURL)
-	cmd = append(cmd, "--evm.jwt-secret", n.nodeCfg.EVMJWTSecret)
+	cmd = append(cmd, "--evm.jwt-secret-file", "jwt-secret.txt")
 
 	if n.nodeCfg.EVMGenesisHash == "" {
 		return fmt.Errorf("missing --evm.genesis-hash. must match block 0 hash of execution client")
