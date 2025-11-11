@@ -3,18 +3,18 @@ package cosmos
 import (
 	"context"
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
-	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
 type ChainConfig struct {
 	Logger *zap.Logger
 	// DockerClient is a Docker client instance used for the tests.
-	DockerClient *client.Client
+	DockerClient types.TastoraDockerClient
 	// DockerNetworkID is the ID of the docker network the nodes are deployed to.
 	DockerNetworkID string
-	
+
 	// Chain configuration fields (previously in ChainConfig)
 	// Chain name, e.g. celestia.
 	Name string

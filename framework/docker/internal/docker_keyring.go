@@ -5,13 +5,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	tastoratypes "github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	"github.com/docker/docker/api/types/container"
-	"github.com/moby/moby/client"
 	"os"
 	"path/filepath"
 	"sync"
@@ -23,7 +23,7 @@ var _ keyring.Keyring = &dockerKeyring{}
 // Any writes to the keyring are also propagated to the container filesystem.
 type dockerKeyring struct {
 	mu                  sync.RWMutex
-	dockerClient        *client.Client
+	dockerClient        tastoratypes.TastoraDockerClient
 	containerID         string
 	containerKeyringDir string
 	cdc                 codec.Codec
@@ -34,7 +34,7 @@ type dockerKeyring struct {
 }
 
 // NewDockerKeyring creates a new dockerKeyring instance.
-func NewDockerKeyring(dockerClient *client.Client, containerID, containerKeyringDir string, cdc codec.Codec) keyring.Keyring {
+func NewDockerKeyring(dockerClient tastoratypes.TastoraDockerClient, containerID, containerKeyringDir string, cdc codec.Codec) keyring.Keyring {
 	return &dockerKeyring{
 		dockerClient:        dockerClient,
 		containerID:         containerID,

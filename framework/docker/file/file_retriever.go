@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"context"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/types"
 	"io"
 	"path"
 	"time"
@@ -13,19 +14,18 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
 // Retriever allows retrieving a single file from a Docker volume.
 type Retriever struct {
 	log      *zap.Logger
-	cli      *client.Client
+	cli      types.TastoraDockerClient
 	testName string
 }
 
 // NewRetriever returns a new Retriever.
-func NewRetriever(log *zap.Logger, cli *client.Client, testName string) *Retriever {
+func NewRetriever(log *zap.Logger, cli types.TastoraDockerClient, testName string) *Retriever {
 	return &Retriever{log: log, cli: cli, testName: testName}
 }
 
@@ -46,7 +46,7 @@ func (r *Retriever) SingleFileContent(ctx context.Context, volumeName, relPath s
 			Image: internaldocker.BusyboxRef,
 			// Use root user to avoid permission issues when reading files from the volume.
 			User:   consts.UserRootString,
-			Labels: map[string]string{consts.CleanupLabel: r.testName},
+			Labels: map[string]string{consts.CleanupLabel: r.cli.CleanupLabel()},
 		},
 		&container.HostConfig{
 			Binds: []string{volumeName + ":" + mountPath},

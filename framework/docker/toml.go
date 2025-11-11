@@ -7,7 +7,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	tomlutil "github.com/celestiaorg/tastora/framework/testutil/toml"
-	"github.com/moby/moby/client"
+	"github.com/celestiaorg/tastora/framework/types"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +15,7 @@ import (
 func ModifyConfigFile(
 	ctx context.Context,
 	logger *zap.Logger,
-	dockerClient *client.Client,
+	dockerClient types.TastoraDockerClient,
 	testName string,
 	volumeName string,
 	filePath string,

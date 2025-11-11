@@ -8,6 +8,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
+	"github.com/celestiaorg/tastora/framework/types"
 	"io"
 	"strconv"
 	"strings"
@@ -18,7 +19,6 @@ import (
 	dockerimagetypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
-	"github.com/moby/moby/client"
 	"github.com/moby/moby/errdefs"
 	"github.com/moby/moby/pkg/stdcopy"
 	"go.uber.org/zap"
@@ -27,7 +27,7 @@ import (
 // Job is a docker job runner.
 type Job struct {
 	log             *zap.Logger
-	client          *client.Client
+	client          types.TastoraDockerClient
 	repository, tag string
 
 	networkID string
@@ -42,7 +42,7 @@ type Job struct {
 // Most arguments (except tag) must be non-zero values or this function panics.
 // If tag is absent, defaults to "latest".
 // Currently, only public docker images are supported.
-func NewJob(logger *zap.Logger, cli *client.Client, networkID string, testName string, repository, tag string) *Job {
+func NewJob(logger *zap.Logger, cli types.TastoraDockerClient, networkID string, testName string, repository, tag string) *Job {
 	if logger == nil {
 		panic(errors.New("nil Logger"))
 	}
@@ -177,7 +177,7 @@ func (job *Job) CreateContainer(ctx context.Context, containerName, hostName str
 			Hostname: hostName,
 			User:     opts.User,
 
-			Labels: map[string]string{consts.CleanupLabel: job.testName},
+			Labels: map[string]string{consts.CleanupLabel: job.client.CleanupLabel()},
 		},
 		&container.HostConfig{
 			Binds:           opts.Binds,

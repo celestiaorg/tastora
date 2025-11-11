@@ -3,8 +3,8 @@ package file_test
 import (
 	"context"
 	"github.com/celestiaorg/tastora/framework/docker"
-	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/consts"
+	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/stretchr/testify/require"
@@ -19,7 +19,7 @@ func TestFileRetriever(t *testing.T) {
 
 	t.Parallel()
 
-	cli, network := docker.DockerSetup(t)
+	cli, network := docker.Setup(t)
 
 	ctx := context.Background()
 	v, err := cli.VolumeCreate(ctx, volumetypes.CreateOptions{

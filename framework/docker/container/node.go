@@ -12,7 +12,6 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/go-connections/nat"
-	dockerclient "github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -20,7 +19,7 @@ import (
 type Node struct {
 	VolumeName         string
 	NetworkID          string
-	DockerClient       *dockerclient.Client
+	DockerClient       types.TastoraDockerClient
 	TestName           string
 	Image              Image
 	ContainerLifecycle *Lifecycle
@@ -33,7 +32,7 @@ type Node struct {
 // NewNode creates a new Node instance with the required parameters.
 func NewNode(
 	networkID string,
-	dockerClient *dockerclient.Client,
+	dockerClient types.TastoraDockerClient,
 	testName string,
 	image Image,
 	homeDir string,
@@ -97,7 +96,7 @@ func (n *Node) RemoveContainer(ctx context.Context, opts ...types.RemoveOption) 
 	if !removeOpts.RemoveVolumes {
 		return nil
 	}
-	return n.ContainerLifecycle.RemoveVolumes(ctx, n.TestName)
+	return n.ContainerLifecycle.RemoveVolumes(ctx)
 }
 
 // StopContainer gracefully stops the container associated with the Node using the provided context.
@@ -198,7 +197,7 @@ func (n *Node) ensureVolume(ctx context.Context, nodeName, volName string) error
 		v, createErr := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
 			Name: volName,
 			Labels: map[string]string{
-				consts.CleanupLabel:   n.TestName,
+				consts.CleanupLabel:   n.DockerClient.CleanupLabel(),
 				consts.NodeOwnerLabel: nodeName,
 			},
 		})

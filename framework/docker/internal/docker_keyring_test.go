@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	tastoraclient "github.com/celestiaorg/tastora/framework/docker/client"
 	"io"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ import (
 
 type DockerKeyringTestSuite struct {
 	suite.Suite
-	dockerClient *client.Client
+	dockerClient *tastoraclient.Client
 	containerID  string
 	keyringDir   string
 	cdc          codec.Codec
@@ -35,7 +36,7 @@ func (s *DockerKeyringTestSuite) SetupSuite() {
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	s.Require().NoError(err)
 
-	s.dockerClient = dockerClient
+	s.dockerClient = tastoraclient.NewClient(dockerClient, "docker-keyring-test-suite")
 
 	registry := codectypes.NewInterfaceRegistry()
 	cryptocodec.RegisterInterfaces(registry)
