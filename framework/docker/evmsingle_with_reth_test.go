@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -189,10 +188,9 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	require.NotEmpty(t, eni.External.Ports.RPC)
 
 	// Health check via evnode health endpoint
-	healthURL := fmt.Sprintf("http://0.0.0.0:%s/evnode.v1.HealthService/Livez", eni.External.Ports.RPC)
+	healthURL := fmt.Sprintf("http://0.0.0.0:%s/health/ready", eni.External.Ports.RPC)
 	require.Eventually(t, func() bool {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, healthURL, bytes.NewBufferString("{}"))
-		req.Header.Set("Content-Type", "application/json")
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return false

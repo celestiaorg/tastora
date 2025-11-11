@@ -1,7 +1,6 @@
 package evmsingle
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -206,11 +205,10 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, n.cfg.Env, []string{})
 }
 
-// waitForSelfReady runs `evm-single net-info` inside the container until it succeeds,
-// indicating the internal RPC (127.0.0.1:7331) is serving.
+// waitForSelfReady polls the HTTP health endpoint until the node is ready
 func (n *Node) waitForSelfReady(ctx context.Context) error {
 	deadline := time.Now().Add(120 * time.Second)
-	httpURL := fmt.Sprintf("http://0.0.0.0:%s/evnode.v1.HealthService/Livez", n.external.RPC)
+	httpURL := fmt.Sprintf("http://0.0.0.0:%s/health/ready", n.external.RPC)
 	for {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("evm-single health not ready within timeout at %s", httpURL)
@@ -227,8 +225,7 @@ func (n *Node) waitForSelfReady(ctx context.Context) error {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, httpURL, bytes.NewBufferString("{}"))
-		req.Header.Set("Content-Type", "application/json")
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, httpURL, nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
 			_ = resp.Body.Close()
