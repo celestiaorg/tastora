@@ -1,11 +1,11 @@
 package evmsingle
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"net/http"
+	"path"
 	"path/filepath"
 	"sync"
 	"time"
@@ -126,8 +126,8 @@ func (n *Node) initContainer(ctx context.Context) error {
 		}
 
 		initCmd = append(initCmd,
-			"--rollkit.node.aggregator=true",
-			"--rollkit.signer.passphrase_file", n.passphraseFilePath(),
+			"--evnode.node.aggregator=true",
+			"--evnode.signer.passphrase_file", n.passphraseFilePath(),
 		)
 	}
 
@@ -153,9 +153,15 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 	if n.nodeCfg.EVMEngineURL == "" || n.nodeCfg.EVMETHURL == "" || n.nodeCfg.EVMJWTSecret == "" {
 		return fmt.Errorf("missing EVM connection details: engine-url, eth-url, and jwt-secret are required")
 	}
+
+	// write the contents of the provided secret.
+	if err := n.WriteFile(ctx, "jwt-secret.txt", []byte(n.nodeCfg.EVMJWTSecret)); err != nil {
+		return fmt.Errorf("failed to write jwt-secret.txt: %w", err)
+	}
+
 	cmd = append(cmd, "--evm.engine-url", n.nodeCfg.EVMEngineURL)
 	cmd = append(cmd, "--evm.eth-url", n.nodeCfg.EVMETHURL)
-	cmd = append(cmd, "--evm.jwt-secret", n.nodeCfg.EVMJWTSecret)
+	cmd = append(cmd, "--evm.jwt-secret-file", path.Join(n.HomeDir(), "jwt-secret.txt"))
 
 	if n.nodeCfg.EVMGenesisHash == "" {
 		return fmt.Errorf("missing --evm.genesis-hash. must match block 0 hash of execution client")
@@ -199,11 +205,10 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, n.cfg.Env, []string{})
 }
 
-// waitForSelfReady runs `evm-single net-info` inside the container until it succeeds,
-// indicating the internal RPC (127.0.0.1:7331) is serving.
+// waitForSelfReady polls the HTTP health endpoint until the node is ready
 func (n *Node) waitForSelfReady(ctx context.Context) error {
 	deadline := time.Now().Add(120 * time.Second)
-	httpURL := fmt.Sprintf("http://0.0.0.0:%s/evnode.v1.HealthService/Livez", n.external.RPC)
+	httpURL := fmt.Sprintf("http://0.0.0.0:%s/health/ready", n.external.RPC)
 	for {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("evm-single health not ready within timeout at %s", httpURL)
@@ -220,8 +225,7 @@ func (n *Node) waitForSelfReady(ctx context.Context) error {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, httpURL, bytes.NewBufferString("{}"))
-		req.Header.Set("Content-Type", "application/json")
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, httpURL, nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
 			_ = resp.Body.Close()
