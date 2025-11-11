@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path"
 	"path/filepath"
 	"sync"
 	"time"
@@ -126,8 +127,8 @@ func (n *Node) initContainer(ctx context.Context) error {
 		}
 
 		initCmd = append(initCmd,
-			"--rollkit.node.aggregator=true",
-			"--rollkit.signer.passphrase_file", n.passphraseFilePath(),
+			"--evnode.node.aggregator=true",
+			"--evnode.signer.passphrase_file", n.passphraseFilePath(),
 		)
 	}
 
@@ -161,7 +162,7 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 
 	cmd = append(cmd, "--evm.engine-url", n.nodeCfg.EVMEngineURL)
 	cmd = append(cmd, "--evm.eth-url", n.nodeCfg.EVMETHURL)
-	cmd = append(cmd, "--evm.jwt-secret-file", "jwt-secret.txt")
+	cmd = append(cmd, "--evm.jwt-secret-file", path.Join(n.HomeDir(), "jwt-secret.txt"))
 
 	if n.nodeCfg.EVMGenesisHash == "" {
 		return fmt.Errorf("missing --evm.genesis-hash. must match block 0 hash of execution client")
