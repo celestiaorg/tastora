@@ -26,13 +26,13 @@ func TestBuildRelayerConfig_SingleEVMChain(t *testing.T) {
 			DisplayName: "Rethlocal",
 			Protocol:    "ethereum",
 			IsTestnet:   true,
-			RPCURLs:     []string{"http://reth:8545"},
-			NativeToken: TokenMetadata{
+			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+			NativeToken: NativeToken{
 				Name:     "Ether",
 				Symbol:   "ETH",
 				Decimals: 18,
 			},
-			BlockConfig: &BlockMetadata{
+			Blocks: &BlockConfig{
 				Confirmations:     1,
 				EstimateBlockTime: 3,
 				ReorgPeriod:       0,
@@ -55,7 +55,7 @@ func TestBuildRelayerConfig_SingleEVMChain(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "rethlocal", chain.Name)
 	require.Equal(t, 1234, chain.ChainID)
-	require.Equal(t, 1234, chain.DomainID)
+	require.Equal(t, uint32(1234), chain.DomainID)
 	require.Equal(t, "ethereum", chain.Protocol)
 	require.True(t, chain.IsTestnet)
 
@@ -75,8 +75,8 @@ func TestBuildRelayerConfig_SingleEVMChain(t *testing.T) {
 	require.Equal(t, 1, chain.Blocks.Confirmations)
 	require.Equal(t, 3, chain.Blocks.EstimateBlockTime)
 
-	require.Len(t, chain.RPCUrls, 1)
-	require.Equal(t, "http://reth:8545", chain.RPCUrls[0].HTTP)
+	require.Len(t, chain.RpcURLs, 1)
+	require.Equal(t, "http://reth:8545", chain.RpcURLs[0].HTTP)
 }
 
 func TestBuildRelayerConfig_SingleCosmosChain(t *testing.T) {
@@ -88,26 +88,26 @@ func TestBuildRelayerConfig_SingleCosmosChain(t *testing.T) {
 			DisplayName:  "Celestia",
 			Protocol:     "cosmosnative",
 			IsTestnet:    true,
-			RPCURLs:      []string{"http://celestia-validator:26657"},
-			RESTURLs:     []string{"http://celestia-validator:1317"},
-			GRPCURLs:     []string{"http://celestia-validator:9090"},
+			RpcURLs:      []Endpoint{{HTTP: "http://celestia-validator:26657"}},
+			RestURLs:     []Endpoint{{HTTP: "http://celestia-validator:1317"}},
+			GrpcURLs:     []Endpoint{{HTTP: "http://celestia-validator:9090"}},
 			Bech32Prefix: "celestia",
-			NativeToken: TokenMetadata{
+			NativeToken: NativeToken{
 				Name:     "TIA",
 				Symbol:   "TIA",
 				Decimals: 6,
 				Denom:    "utia",
 			},
-			BlockConfig: &BlockMetadata{
+			Blocks: &BlockConfig{
 				Confirmations:     1,
 				EstimateBlockTime: 6,
 				ReorgPeriod:       1,
 			},
-			GasPrice: &GasPriceMetadata{
+			GasPrice: &GasPrice{
 				Denom:  "utia",
 				Amount: "0.002",
 			},
-			IndexConfig: &IndexMetadata{
+			IndexConfig: &IndexConfig{
 				From:  1150,
 				Chunk: 10,
 			},
@@ -147,9 +147,9 @@ func TestBuildRelayerConfig_SingleCosmosChain(t *testing.T) {
 	require.Equal(t, 1150, chain.Index.From)
 	require.Equal(t, 10, chain.Index.Chunk)
 
-	require.Len(t, chain.RPCUrls, 1)
-	require.Len(t, chain.RESTUrls, 1)
-	require.Len(t, chain.GRPCUrls, 1)
+	require.Len(t, chain.RpcURLs, 1)
+	require.Len(t, chain.RestURLs, 1)
+	require.Len(t, chain.GrpcURLs, 1)
 }
 
 func TestBuildRelayerConfig_MultipleChains(t *testing.T) {
@@ -161,8 +161,8 @@ func TestBuildRelayerConfig_MultipleChains(t *testing.T) {
 			DisplayName: "Rethlocal",
 			Protocol:    "ethereum",
 			IsTestnet:   true,
-			RPCURLs:     []string{"http://reth:8545"},
-			NativeToken: TokenMetadata{
+			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+			NativeToken: NativeToken{
 				Name:     "Ether",
 				Symbol:   "ETH",
 				Decimals: 18,
@@ -179,9 +179,9 @@ func TestBuildRelayerConfig_MultipleChains(t *testing.T) {
 			DisplayName:  "Celestia",
 			Protocol:     "cosmosnative",
 			IsTestnet:    true,
-			RPCURLs:      []string{"http://celestia-validator:26657"},
+			RpcURLs:      []Endpoint{{HTTP: "http://celestia-validator:26657"}},
 			Bech32Prefix: "celestia",
-			NativeToken: TokenMetadata{
+			NativeToken: NativeToken{
 				Name:     "TIA",
 				Symbol:   "TIA",
 				Decimals: 6,
@@ -217,8 +217,8 @@ func TestSerializeRelayerConfig(t *testing.T) {
 			DisplayName: "Rethlocal",
 			Protocol:    "ethereum",
 			IsTestnet:   true,
-			RPCURLs:     []string{"http://reth:8545"},
-			NativeToken: TokenMetadata{
+			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+			NativeToken: NativeToken{
 				Name:     "Ether",
 				Symbol:   "ETH",
 				Decimals: 18,
@@ -284,7 +284,7 @@ func TestBuildRelayerConfig_SignerTypes(t *testing.T) {
 					DomainID:     1,
 					Protocol:     tt.protocol,
 					Bech32Prefix: tt.bech32Prefix,
-					NativeToken: TokenMetadata{
+					NativeToken: NativeToken{
 						Name:     "Test",
 						Symbol:   "TST",
 						Decimals: 6,

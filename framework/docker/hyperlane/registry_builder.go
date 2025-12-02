@@ -1,32 +1,31 @@
 package hyperlane
 
 import (
-	"github.com/celestiaorg/tastora/framework/docker/hyperlane/registry"
 	"gopkg.in/yaml.v3"
 )
 
 // BuildRegistry generates a Registry from chain config providers.
-func BuildRegistry(chains []ChainConfigProvider) (*registry.Registry, error) {
-	reg := &registry.Registry{
-		Chains: make(map[string]*registry.ChainEntry),
-		Deployments: registry.Deployments{
-			Core: make(map[string][]registry.CoreDeployment),
+func BuildRegistry(chains []ChainConfigProvider) (*Registry, error) {
+	reg := &Registry{
+		Chains: make(map[string]*ChainEntry),
+		Deployments: Deployments{
+			Core: make(map[string][]CoreDeployment),
 		},
 	}
 
 	for _, chain := range chains {
 		metadata := chain.GetHyperlaneChainMetadata()
 
-		chainEntry := &registry.ChainEntry{
+		chainEntry := &ChainEntry{
 			Name:      metadata.Name,
-			Metadata:  buildChainMetadata(metadata),
+			Metadata:  metadata,
 			Addresses: buildChainAddresses(metadata),
 		}
 
 		reg.Chains[metadata.Name] = chainEntry
 
 		if metadata.CoreContracts != nil && metadata.CoreContracts.Mailbox != "" {
-			reg.Deployments.Core[metadata.Name] = []registry.CoreDeployment{
+			reg.Deployments.Core[metadata.Name] = []CoreDeployment{
 				{
 					Chain:     metadata.Name,
 					Addresses: buildCoreAddressesMap(metadata.CoreContracts),
@@ -39,69 +38,16 @@ func BuildRegistry(chains []ChainConfigProvider) (*registry.Registry, error) {
 }
 
 // SerializeRegistry converts Registry to YAML bytes.
-func SerializeRegistry(reg *registry.Registry) ([]byte, error) {
+func SerializeRegistry(reg *Registry) ([]byte, error) {
 	return yaml.Marshal(reg)
 }
 
-func buildChainMetadata(meta ChainMetadata) registry.ChainMetadata {
-	chainMeta := registry.ChainMetadata{
-		ChainID:              meta.ChainID,
-		DomainID:             uint32(meta.DomainID),
-		Name:                 meta.Name,
-		DisplayName:          meta.DisplayName,
-		Protocol:             meta.Protocol,
-		IsTestnet:            meta.IsTestnet,
-		NativeToken:          buildNativeToken(meta.NativeToken),
-		RpcURLs:              buildEndpoints(meta.RPCURLs),
-		RestURLs:             buildEndpoints(meta.RESTURLs),
-		GrpcURLs:             buildEndpoints(meta.GRPCURLs),
-		Bech32Prefix:         meta.Bech32Prefix,
-		CanonicalAsset:       meta.CanonicalAsset,
-		ContractAddressBytes: meta.ContractAddressBytes,
-		Slip44:               meta.Slip44,
-	}
-
-	if meta.BlockConfig != nil {
-		chainMeta.Blocks = &registry.BlockConfig{
-			Confirmations:     meta.BlockConfig.Confirmations,
-			EstimateBlockTime: meta.BlockConfig.EstimateBlockTime,
-			ReorgPeriod:       meta.BlockConfig.ReorgPeriod,
-		}
-	}
-
-	if meta.GasPrice != nil {
-		chainMeta.GasPrice = &registry.GasPrice{
-			Denom:  meta.GasPrice.Denom,
-			Amount: meta.GasPrice.Amount,
-		}
-	}
-
-	return chainMeta
-}
-
-func buildNativeToken(token TokenMetadata) registry.NativeToken {
-	return registry.NativeToken{
-		Name:     token.Name,
-		Symbol:   token.Symbol,
-		Decimals: uint8(token.Decimals),
-		Denom:    token.Denom,
-	}
-}
-
-func buildEndpoints(urls []string) []registry.Endpoint {
-	endpoints := make([]registry.Endpoint, len(urls))
-	for i, url := range urls {
-		endpoints[i] = registry.Endpoint{HTTP: url}
-	}
-	return endpoints
-}
-
-func buildChainAddresses(meta ChainMetadata) registry.ChainAddresses {
+func buildChainAddresses(meta ChainMetadata) ChainAddresses {
 	if meta.CoreContracts == nil {
-		return registry.ChainAddresses{}
+		return ChainAddresses{}
 	}
 
-	addresses := registry.ChainAddresses{}
+	addresses := ChainAddresses{}
 
 	if meta.CoreContracts.Mailbox != "" {
 		addresses["mailbox"] = meta.CoreContracts.Mailbox

@@ -34,13 +34,13 @@ func TestBuildRegistry_SingleEVMChain(t *testing.T) {
 			DisplayName: "Rethlocal",
 			Protocol:    "ethereum",
 			IsTestnet:   true,
-			RPCURLs:     []string{"http://reth:8545"},
-			NativeToken: TokenMetadata{
+			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+			NativeToken: NativeToken{
 				Name:     "Ether",
 				Symbol:   "ETH",
 				Decimals: 18,
 			},
-			BlockConfig: &BlockMetadata{
+			Blocks: &BlockConfig{
 				Confirmations:     1,
 				EstimateBlockTime: 3,
 				ReorgPeriod:       0,
@@ -74,22 +74,22 @@ func TestBuildRegistry_SingleCosmosChain(t *testing.T) {
 			DisplayName:  "Celestia",
 			Protocol:     "cosmosnative",
 			IsTestnet:    true,
-			RPCURLs:      []string{"http://celestia-validator:26657"},
-			RESTURLs:     []string{"http://celestia-validator:1317"},
-			GRPCURLs:     []string{"http://celestia-validator:9090"},
+			RpcURLs:      []Endpoint{{HTTP: "http://celestia-validator:26657"}},
+			RestURLs:     []Endpoint{{HTTP: "http://celestia-validator:1317"}},
+			GrpcURLs:     []Endpoint{{HTTP: "http://celestia-validator:9090"}},
 			Bech32Prefix: "celestia",
-			NativeToken: TokenMetadata{
+			NativeToken: NativeToken{
 				Name:     "TIA",
 				Symbol:   "TIA",
 				Decimals: 6,
 				Denom:    "utia",
 			},
-			BlockConfig: &BlockMetadata{
+			Blocks: &BlockConfig{
 				Confirmations:     1,
 				EstimateBlockTime: 6,
 				ReorgPeriod:       1,
 			},
-			GasPrice: &GasPriceMetadata{
+			GasPrice: &GasPrice{
 				Denom:  "utia",
 				Amount: "0.002",
 			},
@@ -127,8 +127,8 @@ func TestBuildRegistry_WithCoreContracts(t *testing.T) {
 			DisplayName: "Rethlocal",
 			Protocol:    "ethereum",
 			IsTestnet:   true,
-			RPCURLs:     []string{"http://reth:8545"},
-			NativeToken: TokenMetadata{
+			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+			NativeToken: NativeToken{
 				Name:     "Ether",
 				Symbol:   "ETH",
 				Decimals: 18,
@@ -169,8 +169,8 @@ func TestBuildRegistry_MultipleChains(t *testing.T) {
 			DisplayName: "Rethlocal",
 			Protocol:    "ethereum",
 			IsTestnet:   true,
-			RPCURLs:     []string{"http://reth:8545"},
-			NativeToken: TokenMetadata{
+			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+			NativeToken: NativeToken{
 				Name:     "Ether",
 				Symbol:   "ETH",
 				Decimals: 18,
@@ -187,9 +187,9 @@ func TestBuildRegistry_MultipleChains(t *testing.T) {
 			DisplayName:  "Celestia",
 			Protocol:     "cosmosnative",
 			IsTestnet:    true,
-			RPCURLs:      []string{"http://celestia-validator:26657"},
+			RpcURLs:      []Endpoint{{HTTP: "http://celestia-validator:26657"}},
 			Bech32Prefix: "celestia",
-			NativeToken: TokenMetadata{
+			NativeToken: NativeToken{
 				Name:     "TIA",
 				Symbol:   "TIA",
 				Decimals: 6,
@@ -219,8 +219,8 @@ func TestSerializeRegistry(t *testing.T) {
 			DisplayName: "Rethlocal",
 			Protocol:    "ethereum",
 			IsTestnet:   true,
-			RPCURLs:     []string{"http://reth:8545"},
-			NativeToken: TokenMetadata{
+			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+			NativeToken: NativeToken{
 				Name:     "Ether",
 				Symbol:   "ETH",
 				Decimals: 18,

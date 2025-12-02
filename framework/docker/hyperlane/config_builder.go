@@ -29,10 +29,10 @@ func BuildRelayerConfig(chains []ChainConfigProvider) (*RelayerConfig, error) {
 			DisplayName: metadata.DisplayName,
 			Protocol:    metadata.Protocol,
 			IsTestnet:   metadata.IsTestnet,
-			NativeToken: buildNativeTokenConfig(metadata.NativeToken),
-			Blocks:      buildBlockConfigForRelayer(metadata.BlockConfig),
+			NativeToken: &metadata.NativeToken,
+			Blocks:      metadata.Blocks,
 			Signer:      buildSignerConfig(metadata),
-			RPCUrls:     buildURLItemsConfig(metadata.RPCURLs),
+			RpcURLs:     metadata.RpcURLs,
 		}
 
 		switch metadata.Protocol {
@@ -92,54 +92,9 @@ func applyCosmosFields(config *ChainConfig, meta ChainMetadata) {
 	config.ContractAddressBytes = meta.ContractAddressBytes
 	config.Slip44 = meta.Slip44
 
-	config.RESTUrls = buildURLItemsConfig(meta.RESTURLs)
-	config.GRPCUrls = buildURLItemsConfig(meta.GRPCURLs)
+	config.RestURLs = meta.RestURLs
+	config.GrpcURLs = meta.GrpcURLs
 
-	if meta.GasPrice != nil {
-		config.GasPrice = &GasPrice{
-			Denom:  meta.GasPrice.Denom,
-			Amount: meta.GasPrice.Amount,
-		}
-	}
-
-	if meta.IndexConfig != nil {
-		config.Index = &IndexConfig{
-			From:  meta.IndexConfig.From,
-			Chunk: meta.IndexConfig.Chunk,
-		}
-	}
-}
-
-func buildNativeTokenConfig(token TokenMetadata) *NativeToken {
-	nativeToken := &NativeToken{
-		Name:     token.Name,
-		Symbol:   token.Symbol,
-		Decimals: token.Decimals,
-	}
-
-	if token.Denom != "" {
-		nativeToken.Denom = token.Denom
-	}
-
-	return nativeToken
-}
-
-func buildBlockConfigForRelayer(block *BlockMetadata) *BlockConfig {
-	if block == nil {
-		return nil
-	}
-
-	return &BlockConfig{
-		Confirmations:     block.Confirmations,
-		EstimateBlockTime: block.EstimateBlockTime,
-		ReorgPeriod:       block.ReorgPeriod,
-	}
-}
-
-func buildURLItemsConfig(urls []string) []URLItem {
-	items := make([]URLItem, len(urls))
-	for i, url := range urls {
-		items[i] = URLItem{HTTP: url}
-	}
-	return items
+	config.GasPrice = meta.GasPrice
+	config.Index = meta.IndexConfig
 }

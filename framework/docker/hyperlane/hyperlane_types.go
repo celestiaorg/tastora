@@ -6,52 +6,39 @@ type ChainConfigProvider interface {
 }
 
 // ChainMetadata contains all information needed to configure Hyperlane for a chain.
+// includes fields for both registry and relayer config generation.
 type ChainMetadata struct {
 	// chain identity
-	Name        string
-	ChainID     interface{}
-	DomainID    int
-	DisplayName string
-	Protocol    string
-	IsTestnet   bool
+	ChainID     interface{}     `json:"chainId" yaml:"chainId"`
+	DomainID    uint32          `json:"domainId" yaml:"domainId"`
+	Name        string          `json:"name" yaml:"name"`
+	DisplayName string          `json:"displayName" yaml:"displayName"`
+	Protocol    string          `json:"protocol" yaml:"protocol"`
+	IsTestnet   bool            `json:"isTestnet" yaml:"isTestnet"`
+	NativeToken NativeToken     `json:"nativeToken" yaml:"nativeToken"`
 
 	// network endpoints
-	RPCURLs  []string
-	RESTURLs []string
-	GRPCURLs []string
-
-	// token info
-	NativeToken TokenMetadata
+	RpcURLs  []Endpoint      `json:"rpcUrls,omitempty" yaml:"rpcUrls,omitempty"`
+	RestURLs []Endpoint      `json:"restUrls,omitempty" yaml:"restUrls,omitempty"`
+	GrpcURLs []Endpoint      `json:"grpcUrls,omitempty" yaml:"grpcUrls,omitempty"`
 
 	// block configuration
-	BlockConfig *BlockMetadata
-
-	// signer configuration (private key hex string)
-	SignerKey string
-
-	// EVM-specific: Core contract addresses (empty if not deployed)
-	CoreContracts *CoreContractAddresses
+	Blocks                 *BlockConfig    `json:"blocks,omitempty" yaml:"blocks,omitempty"`
+	BlockExplorers         []BlockExplorer `json:"blockExplorers,omitempty" yaml:"blockExplorers,omitempty"`
+	TechnicalStack         string          `json:"technicalStack,omitempty" yaml:"technicalStack,omitempty"`
+	GasCurrencyCoinGeckoId string          `json:"gasCurrencyCoinGeckoId,omitempty" yaml:"gasCurrencyCoinGeckoId,omitempty"`
 
 	// Cosmos-specific fields
-	Bech32Prefix         string
-	CanonicalAsset       string
-	ContractAddressBytes int
-	GasPrice             *GasPriceMetadata
-	Slip44               int
-	IndexConfig          *IndexMetadata
-}
+	Bech32Prefix         string       `json:"bech32Prefix,omitempty" yaml:"bech32Prefix,omitempty"`
+	CanonicalAsset       string       `json:"canonicalAsset,omitempty" yaml:"canonicalAsset,omitempty"`
+	ContractAddressBytes int          `json:"contractAddressBytes,omitempty" yaml:"contractAddressBytes,omitempty"`
+	GasPrice             *GasPrice    `json:"gasPrice,omitempty" yaml:"gasPrice,omitempty"`
+	Slip44               int          `json:"slip44,omitempty" yaml:"slip44,omitempty"`
 
-type TokenMetadata struct {
-	Name     string
-	Symbol   string
-	Decimals int
-	Denom    string
-}
-
-type BlockMetadata struct {
-	Confirmations     int
-	EstimateBlockTime int
-	ReorgPeriod       int
+	// config-only fields (not in registry)
+	SignerKey       string        `json:"-" yaml:"-"`
+	CoreContracts   *CoreContractAddresses `json:"-" yaml:"-"`
+	IndexConfig     *IndexConfig  `json:"-" yaml:"-"`
 }
 
 type CoreContractAddresses struct {
@@ -67,14 +54,4 @@ type CoreContractAddresses struct {
 	ProtocolFee              string
 	StorageGasOracle         string
 	TestRecipient            string
-}
-
-type GasPriceMetadata struct {
-	Denom  string
-	Amount string
-}
-
-type IndexMetadata struct {
-	From  int
-	Chunk int
 }
