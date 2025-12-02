@@ -1,8 +1,10 @@
 package hyperlane
 
+import "context"
+
 // ChainConfigProvider is the interface chains must implement to provide Hyperlane configuration.
 type ChainConfigProvider interface {
-	GetHyperlaneChainMetadata() (ChainMetadata, error)
+	GetHyperlaneChainMetadata(ctx context.Context) (ChainMetadata, error)
 }
 
 // ChainMetadata contains all information needed to configure Hyperlane for a chain.

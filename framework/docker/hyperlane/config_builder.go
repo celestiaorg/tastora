@@ -1,15 +1,16 @@
 package hyperlane
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 )
 
 // BuildRelayerConfig generates a RelayerConfig from chain config providers.
-func BuildRelayerConfig(chains []ChainConfigProvider) (*RelayerConfig, error) {
+func BuildRelayerConfig(ctx context.Context, chains []ChainConfigProvider) (*RelayerConfig, error) {
 	relayChains := make([]string, len(chains))
 	for i, c := range chains {
-		metadata, err := c.GetHyperlaneChainMetadata()
+		metadata, err := c.GetHyperlaneChainMetadata(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -23,7 +24,7 @@ func BuildRelayerConfig(chains []ChainConfigProvider) (*RelayerConfig, error) {
 	}
 
 	for _, chain := range chains {
-		metadata, err := chain.GetHyperlaneChainMetadata()
+		metadata, err := chain.GetHyperlaneChainMetadata(ctx)
 		if err != nil {
 			return nil, err
 		}

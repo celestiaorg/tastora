@@ -1,6 +1,7 @@
 package hyperlane
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,14 +12,14 @@ type mockChainConfigProvider struct {
 	metadata ChainMetadata
 }
 
-func (m *mockChainConfigProvider) GetHyperlaneChainMetadata() (ChainMetadata, error) {
+func (m *mockChainConfigProvider) GetHyperlaneChainMetadata(ctx context.Context) (ChainMetadata, error) {
 	return m.metadata, nil
 }
 
 func TestBuildRegistry_Empty(t *testing.T) {
 	chains := []ChainConfigProvider{}
 
-	reg, err := BuildRegistry(chains)
+	reg, err := BuildRegistry(context.Background(), chains)
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 	require.Empty(t, reg.Chains)
@@ -49,7 +50,7 @@ func TestBuildRegistry_SingleEVMChain(t *testing.T) {
 		},
 	}
 
-	reg, err := BuildRegistry([]ChainConfigProvider{evmChain})
+	reg, err := BuildRegistry(context.Background(), []ChainConfigProvider{evmChain})
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 	require.Len(t, reg.Chains, 1)
@@ -98,7 +99,7 @@ func TestBuildRegistry_SingleCosmosChain(t *testing.T) {
 		},
 	}
 
-	reg, err := BuildRegistry([]ChainConfigProvider{cosmosChain})
+	reg, err := BuildRegistry(context.Background(), []ChainConfigProvider{cosmosChain})
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 	require.Len(t, reg.Chains, 1)
@@ -145,7 +146,7 @@ func TestBuildRegistry_WithCoreContracts(t *testing.T) {
 		},
 	}
 
-	reg, err := BuildRegistry([]ChainConfigProvider{evmChain})
+	reg, err := BuildRegistry(context.Background(), []ChainConfigProvider{evmChain})
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 
@@ -199,7 +200,7 @@ func TestBuildRegistry_MultipleChains(t *testing.T) {
 		},
 	}
 
-	reg, err := BuildRegistry([]ChainConfigProvider{evmChain, cosmosChain})
+	reg, err := BuildRegistry(context.Background(), []ChainConfigProvider{evmChain, cosmosChain})
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 	require.Len(t, reg.Chains, 2)
@@ -229,7 +230,7 @@ func TestSerializeRegistry(t *testing.T) {
 		},
 	}
 
-	reg, err := BuildRegistry([]ChainConfigProvider{evmChain})
+	reg, err := BuildRegistry(context.Background(), []ChainConfigProvider{evmChain})
 	require.NoError(t, err)
 
 	yamlBytes, err := SerializeRegistry(reg)

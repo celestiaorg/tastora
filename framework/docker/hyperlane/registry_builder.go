@@ -1,11 +1,12 @@
 package hyperlane
 
 import (
+	"context"
 	"gopkg.in/yaml.v3"
 )
 
 // BuildRegistry generates a Registry from chain config providers.
-func BuildRegistry(chains []ChainConfigProvider) (*Registry, error) {
+func BuildRegistry(ctx context.Context, chains []ChainConfigProvider) (*Registry, error) {
 	reg := &Registry{
 		Chains: make(map[string]*ChainEntry),
 		Deployments: Deployments{
@@ -14,7 +15,7 @@ func BuildRegistry(chains []ChainConfigProvider) (*Registry, error) {
 	}
 
 	for _, chain := range chains {
-		metadata, err := chain.GetHyperlaneChainMetadata()
+		metadata, err := chain.GetHyperlaneChainMetadata(ctx)
 		if err != nil {
 			return nil, err
 		}

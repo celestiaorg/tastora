@@ -1,9 +1,9 @@
 package hyperlane
 
-import "github.com/celestiaorg/tastora/framework/docker/container"
+//import "github.com/celestiaorg/tastora/framework/docker/container"
 
 type Hyperlane struct {
-	*container.Node
+	//*container.Node
 }
 
 func NewHyperlane() *Hyperlane {
