@@ -11,8 +11,8 @@ type mockChainConfigProvider struct {
 	metadata ChainMetadata
 }
 
-func (m *mockChainConfigProvider) GetHyperlaneChainMetadata() ChainMetadata {
-	return m.metadata
+func (m *mockChainConfigProvider) GetHyperlaneChainMetadata() (ChainMetadata, error) {
+	return m.metadata, nil
 }
 
 func TestBuildRegistry_Empty(t *testing.T) {

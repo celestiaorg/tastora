@@ -7,10 +7,13 @@ import (
 
 // BuildRelayerConfig generates a RelayerConfig from chain config providers.
 func BuildRelayerConfig(chains []ChainConfigProvider) (*RelayerConfig, error) {
-
 	relayChains := make([]string, len(chains))
 	for i, c := range chains {
-		relayChains[i] = c.GetHyperlaneChainMetadata().Name
+		metadata, err := c.GetHyperlaneChainMetadata()
+		if err != nil {
+			return nil, err
+		}
+		relayChains[i] = metadata.Name
 	}
 
 	config := &RelayerConfig{
@@ -20,7 +23,10 @@ func BuildRelayerConfig(chains []ChainConfigProvider) (*RelayerConfig, error) {
 	}
 
 	for _, chain := range chains {
-		metadata := chain.GetHyperlaneChainMetadata()
+		metadata, err := chain.GetHyperlaneChainMetadata()
+		if err != nil {
+			return nil, err
+		}
 
 		chainConfig := ChainConfig{
 			ChainID:     metadata.ChainID,
@@ -70,20 +76,22 @@ func buildSignerConfig(meta ChainMetadata) *SignerConfig {
 }
 
 func applyEVMFields(config *ChainConfig, meta ChainMetadata) {
-	if meta.CoreContracts != nil {
-		config.Mailbox = meta.CoreContracts.Mailbox
-		config.InterchainSecurityModule = meta.CoreContracts.InterchainSecurityModule
-		config.InterchainGasPaymaster = meta.CoreContracts.InterchainGasPaymaster
-		config.MerkleTreeHook = meta.CoreContracts.MerkleTreeHook
-		config.ProxyAdmin = meta.CoreContracts.ProxyAdmin
-		config.ValidatorAnnounce = meta.CoreContracts.ValidatorAnnounce
-		config.AggregationHook = meta.CoreContracts.AggregationHook
-		config.DomainRoutingIsm = meta.CoreContracts.DomainRoutingIsm
-		config.FallbackRoutingHook = meta.CoreContracts.FallbackRoutingHook
-		config.ProtocolFee = meta.CoreContracts.ProtocolFee
-		config.StorageGasOracle = meta.CoreContracts.StorageGasOracle
-		config.TestRecipient = meta.CoreContracts.TestRecipient
+	if meta.CoreContracts == nil {
+		return
 	}
+
+	config.Mailbox = meta.CoreContracts.Mailbox
+	config.InterchainSecurityModule = meta.CoreContracts.InterchainSecurityModule
+	config.InterchainGasPaymaster = meta.CoreContracts.InterchainGasPaymaster
+	config.MerkleTreeHook = meta.CoreContracts.MerkleTreeHook
+	config.ProxyAdmin = meta.CoreContracts.ProxyAdmin
+	config.ValidatorAnnounce = meta.CoreContracts.ValidatorAnnounce
+	config.AggregationHook = meta.CoreContracts.AggregationHook
+	config.DomainRoutingIsm = meta.CoreContracts.DomainRoutingIsm
+	config.FallbackRoutingHook = meta.CoreContracts.FallbackRoutingHook
+	config.ProtocolFee = meta.CoreContracts.ProtocolFee
+	config.StorageGasOracle = meta.CoreContracts.StorageGasOracle
+	config.TestRecipient = meta.CoreContracts.TestRecipient
 }
 
 func applyCosmosFields(config *ChainConfig, meta ChainMetadata) {

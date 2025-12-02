@@ -2,25 +2,25 @@ package hyperlane
 
 // ChainConfigProvider is the interface chains must implement to provide Hyperlane configuration.
 type ChainConfigProvider interface {
-	GetHyperlaneChainMetadata() ChainMetadata
+	GetHyperlaneChainMetadata() (ChainMetadata, error)
 }
 
 // ChainMetadata contains all information needed to configure Hyperlane for a chain.
 // includes fields for both registry and relayer config generation.
 type ChainMetadata struct {
 	// chain identity
-	ChainID     interface{}     `json:"chainId" yaml:"chainId"`
-	DomainID    uint32          `json:"domainId" yaml:"domainId"`
-	Name        string          `json:"name" yaml:"name"`
-	DisplayName string          `json:"displayName" yaml:"displayName"`
-	Protocol    string          `json:"protocol" yaml:"protocol"`
-	IsTestnet   bool            `json:"isTestnet" yaml:"isTestnet"`
-	NativeToken NativeToken     `json:"nativeToken" yaml:"nativeToken"`
+	ChainID     interface{} `json:"chainId" yaml:"chainId"`
+	DomainID    uint32      `json:"domainId" yaml:"domainId"`
+	Name        string      `json:"name" yaml:"name"`
+	DisplayName string      `json:"displayName" yaml:"displayName"`
+	Protocol    string      `json:"protocol" yaml:"protocol"`
+	IsTestnet   bool        `json:"isTestnet" yaml:"isTestnet"`
+	NativeToken NativeToken `json:"nativeToken" yaml:"nativeToken"`
 
 	// network endpoints
-	RpcURLs  []Endpoint      `json:"rpcUrls,omitempty" yaml:"rpcUrls,omitempty"`
-	RestURLs []Endpoint      `json:"restUrls,omitempty" yaml:"restUrls,omitempty"`
-	GrpcURLs []Endpoint      `json:"grpcUrls,omitempty" yaml:"grpcUrls,omitempty"`
+	RpcURLs  []Endpoint `json:"rpcUrls,omitempty" yaml:"rpcUrls,omitempty"`
+	RestURLs []Endpoint `json:"restUrls,omitempty" yaml:"restUrls,omitempty"`
+	GrpcURLs []Endpoint `json:"grpcUrls,omitempty" yaml:"grpcUrls,omitempty"`
 
 	// block configuration
 	Blocks                 *BlockConfig    `json:"blocks,omitempty" yaml:"blocks,omitempty"`
@@ -29,16 +29,16 @@ type ChainMetadata struct {
 	GasCurrencyCoinGeckoId string          `json:"gasCurrencyCoinGeckoId,omitempty" yaml:"gasCurrencyCoinGeckoId,omitempty"`
 
 	// Cosmos-specific fields
-	Bech32Prefix         string       `json:"bech32Prefix,omitempty" yaml:"bech32Prefix,omitempty"`
-	CanonicalAsset       string       `json:"canonicalAsset,omitempty" yaml:"canonicalAsset,omitempty"`
-	ContractAddressBytes int          `json:"contractAddressBytes,omitempty" yaml:"contractAddressBytes,omitempty"`
-	GasPrice             *GasPrice    `json:"gasPrice,omitempty" yaml:"gasPrice,omitempty"`
-	Slip44               int          `json:"slip44,omitempty" yaml:"slip44,omitempty"`
+	Bech32Prefix         string    `json:"bech32Prefix,omitempty" yaml:"bech32Prefix,omitempty"`
+	CanonicalAsset       string    `json:"canonicalAsset,omitempty" yaml:"canonicalAsset,omitempty"`
+	ContractAddressBytes int       `json:"contractAddressBytes,omitempty" yaml:"contractAddressBytes,omitempty"`
+	GasPrice             *GasPrice `json:"gasPrice,omitempty" yaml:"gasPrice,omitempty"`
+	Slip44               int       `json:"slip44,omitempty" yaml:"slip44,omitempty"`
 
 	// config-only fields (not in registry)
-	SignerKey       string        `json:"-" yaml:"-"`
-	CoreContracts   *CoreContractAddresses `json:"-" yaml:"-"`
-	IndexConfig     *IndexConfig  `json:"-" yaml:"-"`
+	SignerKey     string                 `json:"-" yaml:"-"`
+	CoreContracts *CoreContractAddresses `json:"-" yaml:"-"`
+	IndexConfig   *IndexConfig           `json:"-" yaml:"-"`
 }
 
 type CoreContractAddresses struct {

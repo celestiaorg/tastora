@@ -14,7 +14,10 @@ func BuildRegistry(chains []ChainConfigProvider) (*Registry, error) {
 	}
 
 	for _, chain := range chains {
-		metadata := chain.GetHyperlaneChainMetadata()
+		metadata, err := chain.GetHyperlaneChainMetadata()
+		if err != nil {
+			return nil, err
+		}
 
 		chainEntry := &ChainEntry{
 			Name:      metadata.Name,

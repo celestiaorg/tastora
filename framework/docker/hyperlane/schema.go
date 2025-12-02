@@ -2,8 +2,27 @@ package hyperlane
 
 // Schema contains all Hyperlane configuration structures.
 type Schema struct {
-	RelayerConfig RelayerConfig
-	Registry      Registry
+	RelayerConfig *RelayerConfig
+	Registry      *Registry
+	// TODO: add hyperlane core and warp configs
+}
+
+// BuildSchema builds a hyperlane scheme from the provided set of chains.
+func BuildSchema(chains []ChainConfigProvider) (*Schema, error) {
+	config, err := BuildRelayerConfig(chains)
+	if err != nil {
+		return nil, err
+	}
+
+	registry, err := BuildRegistry(chains)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Schema{
+		RelayerConfig: config,
+		Registry:      registry,
+	}, nil
 }
 
 // Registry models the contents of a hyperlane registry.
@@ -123,8 +142,6 @@ type IndexConfig struct {
 	From  int `json:"from" yaml:"from"`
 	Chunk int `json:"chunk" yaml:"chunk"`
 }
-
-// shared types with both json and yaml tags
 
 type NativeToken struct {
 	Name     string `json:"name" yaml:"name"`
