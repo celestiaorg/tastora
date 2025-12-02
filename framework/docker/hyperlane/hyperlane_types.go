@@ -1,7 +1,7 @@
 package hyperlane
 
-// HyperlaneChainConfigProvider is the interface chains must implement to provide Hyperlane configuration.
-type HyperlaneChainConfigProvider interface {
+// ChainConfigProvider is the interface chains must implement to provide Hyperlane configuration.
+type ChainConfigProvider interface {
 	GetHyperlaneChainMetadata() ChainMetadata
 }
 

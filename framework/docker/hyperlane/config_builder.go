@@ -6,7 +6,13 @@ import (
 )
 
 // BuildRelayerConfig generates a RelayerConfig from chain config providers.
-func BuildRelayerConfig(chains []HyperlaneChainConfigProvider, relayChains []string) (*RelayerConfig, error) {
+func BuildRelayerConfig(chains []ChainConfigProvider) (*RelayerConfig, error) {
+
+	relayChains := make([]string, len(chains))
+	for i, c := range chains {
+		relayChains[i] = c.GetHyperlaneChainMetadata().Name
+	}
+
 	config := &RelayerConfig{
 		Chains:                  make(map[string]ChainConfig),
 		DefaultRpcConsensusType: "fallback",

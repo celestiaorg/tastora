@@ -6,7 +6,7 @@ import (
 )
 
 // BuildRegistry generates a Registry from chain config providers.
-func BuildRegistry(chains []HyperlaneChainConfigProvider) (*registry.Registry, error) {
+func BuildRegistry(chains []ChainConfigProvider) (*registry.Registry, error) {
 	reg := &registry.Registry{
 		Chains: make(map[string]*registry.ChainEntry),
 		Deployments: registry.Deployments{
@@ -45,20 +45,20 @@ func SerializeRegistry(reg *registry.Registry) ([]byte, error) {
 
 func buildChainMetadata(meta ChainMetadata) registry.ChainMetadata {
 	chainMeta := registry.ChainMetadata{
-		ChainID:                meta.ChainID,
-		DomainID:               uint32(meta.DomainID),
-		Name:                   meta.Name,
-		DisplayName:            meta.DisplayName,
-		Protocol:               meta.Protocol,
-		IsTestnet:              meta.IsTestnet,
-		NativeToken:            buildNativeToken(meta.NativeToken),
-		RpcURLs:                buildEndpoints(meta.RPCURLs),
-		RestURLs:               buildEndpoints(meta.RESTURLs),
-		GrpcURLs:               buildEndpoints(meta.GRPCURLs),
-		Bech32Prefix:           meta.Bech32Prefix,
-		CanonicalAsset:         meta.CanonicalAsset,
-		ContractAddressBytes:   meta.ContractAddressBytes,
-		Slip44:                 meta.Slip44,
+		ChainID:              meta.ChainID,
+		DomainID:             uint32(meta.DomainID),
+		Name:                 meta.Name,
+		DisplayName:          meta.DisplayName,
+		Protocol:             meta.Protocol,
+		IsTestnet:            meta.IsTestnet,
+		NativeToken:          buildNativeToken(meta.NativeToken),
+		RpcURLs:              buildEndpoints(meta.RPCURLs),
+		RestURLs:             buildEndpoints(meta.RESTURLs),
+		GrpcURLs:             buildEndpoints(meta.GRPCURLs),
+		Bech32Prefix:         meta.Bech32Prefix,
+		CanonicalAsset:       meta.CanonicalAsset,
+		ContractAddressBytes: meta.ContractAddressBytes,
+		Slip44:               meta.Slip44,
 	}
 
 	if meta.BlockConfig != nil {

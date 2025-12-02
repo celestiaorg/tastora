@@ -16,7 +16,7 @@ func (m *mockChainConfigProvider) GetHyperlaneChainMetadata() ChainMetadata {
 }
 
 func TestBuildRegistry_Empty(t *testing.T) {
-	chains := []HyperlaneChainConfigProvider{}
+	chains := []ChainConfigProvider{}
 
 	reg, err := BuildRegistry(chains)
 	require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestBuildRegistry_SingleEVMChain(t *testing.T) {
 		},
 	}
 
-	reg, err := BuildRegistry([]HyperlaneChainConfigProvider{evmChain})
+	reg, err := BuildRegistry([]ChainConfigProvider{evmChain})
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 	require.Len(t, reg.Chains, 1)
@@ -93,12 +93,12 @@ func TestBuildRegistry_SingleCosmosChain(t *testing.T) {
 				Denom:  "utia",
 				Amount: "0.002",
 			},
-			Slip44:     118,
-			SignerKey:  "0x456",
+			Slip44:    118,
+			SignerKey: "0x456",
 		},
 	}
 
-	reg, err := BuildRegistry([]HyperlaneChainConfigProvider{cosmosChain})
+	reg, err := BuildRegistry([]ChainConfigProvider{cosmosChain})
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 	require.Len(t, reg.Chains, 1)
@@ -145,7 +145,7 @@ func TestBuildRegistry_WithCoreContracts(t *testing.T) {
 		},
 	}
 
-	reg, err := BuildRegistry([]HyperlaneChainConfigProvider{evmChain})
+	reg, err := BuildRegistry([]ChainConfigProvider{evmChain})
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 
@@ -199,7 +199,7 @@ func TestBuildRegistry_MultipleChains(t *testing.T) {
 		},
 	}
 
-	reg, err := BuildRegistry([]HyperlaneChainConfigProvider{evmChain, cosmosChain})
+	reg, err := BuildRegistry([]ChainConfigProvider{evmChain, cosmosChain})
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 	require.Len(t, reg.Chains, 2)
@@ -229,7 +229,7 @@ func TestSerializeRegistry(t *testing.T) {
 		},
 	}
 
-	reg, err := BuildRegistry([]HyperlaneChainConfigProvider{evmChain})
+	reg, err := BuildRegistry([]ChainConfigProvider{evmChain})
 	require.NoError(t, err)
 
 	yamlBytes, err := SerializeRegistry(reg)
