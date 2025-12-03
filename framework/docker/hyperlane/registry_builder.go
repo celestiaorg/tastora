@@ -2,7 +2,6 @@ package hyperlane
 
 import (
 	"context"
-	"gopkg.in/yaml.v3"
 )
 
 // BuildRegistry generates a Registry from chain config providers.
@@ -20,10 +19,3 @@ func BuildRegistry(ctx context.Context, chains []ChainConfigProvider) (*Registry
 
 	return reg, nil
 }
-
-// SerializeRegistry converts Registry to YAML bytes.
-func SerializeRegistry(reg *Registry) ([]byte, error) {
-	return yaml.Marshal(reg)
-}
-
-// no helper required; addresses are provided by the chain provider as part of the entry
