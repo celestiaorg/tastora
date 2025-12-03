@@ -3,6 +3,7 @@ package cosmos
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/cosmos/cosmos-sdk/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
 	"go.uber.org/zap"
@@ -57,6 +59,11 @@ func (c *Chain) GetHyperlaneChainMetadata(ctx context.Context) (hyperlane.ChainM
 	networkInfo, err := c.GetNetworkInfo(ctx)
 	if err != nil {
 		return hyperlane.ChainMetadata{}, err
+	}
+
+	signerKey, err := c.getFaucetPrivateKeyHex()
+	if err != nil {
+		return hyperlane.ChainMetadata{}, fmt.Errorf("failed to get faucet private key: %w", err)
 	}
 
 	return hyperlane.ChainMetadata{
@@ -95,9 +102,15 @@ func (c *Chain) GetHyperlaneChainMetadata(ctx context.Context) (hyperlane.ChainM
 			Denom:  c.Config.Denom,
 			Amount: c.Config.GasPrices,
 		},
-		Slip44:        118,
-		SignerKey:     "0x6e30efb1d3ebd30d1ba08c8d5fc9b190e08394009dc1dd787a69e60c33288a8c", // TODO dynamic
-		CoreContracts: nil,
+		Slip44:    118,
+		SignerKey: signerKey,
+		CoreContracts: &hyperlane.CoreContractAddresses{
+			Mailbox:                  "0x68797065726c616e650000000000000000000000000000000000000000000000",
+			InterchainSecurityModule: "0x726f757465725f69736d00000000000000000000000000000000000000000000",
+			InterchainGasPaymaster:   "0x726f757465725f706f73745f6469737061746368000000000000000000000000",
+			MerkleTreeHook:           "0x726f757465725f706f73745f6469737061746368000000030000000000000001",
+			ValidatorAnnounce:        "0x68797065726c616e650000000000000000000000000000000000000000000000",
+		},
 		IndexConfig: &hyperlane.IndexConfig{
 			From:  1150,
 			Chunk: 10,
@@ -127,6 +140,36 @@ func (c *Chain) GetFaucetWallet() *types.Wallet {
 		}
 	}
 	return c.faucetWallet
+}
+
+// getFaucetPrivateKeyHex retrieves the faucet wallet's private key in hex format.
+func (c *Chain) getFaucetPrivateKeyHex() (string, error) {
+	if c.GetFaucetWallet() == nil {
+		return "", fmt.Errorf("faucet wallet not initialized")
+	}
+
+	if len(c.Validators) == 0 {
+		return "", fmt.Errorf("no validators available")
+	}
+
+	node := c.GetNode()
+	kr, err := node.GetKeyring()
+	if err != nil {
+		return "", fmt.Errorf("failed to get keyring: %w", err)
+	}
+
+	armoredKey, err := kr.ExportPrivKeyArmor(consts.FaucetAccountKeyName, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to export faucet key: %w", err)
+	}
+
+	privKey, _, err := crypto.UnarmorDecryptPrivKey(armoredKey, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt armored key: %w", err)
+	}
+
+	privKeyBytes := privKey.Bytes()
+	return "0x" + hex.EncodeToString(privKeyBytes), nil
 }
 
 // GetChainID returns the chain ID.
