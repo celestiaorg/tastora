@@ -5,6 +5,9 @@ package reth
 //
 // using a hard coded genesis to align with the e2e tests in the ev-node repo.
 func DefaultEvolveGenesisJSON() string {
+
+	// NOTE: the 0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d address here is associated with the
+	// default hyperlane private key that is used in tests.
 	return `{
   "config": {
     "chainId": 1234,
@@ -40,6 +43,9 @@ func DefaultEvolveGenesisJSON() string {
       "balance": "0x4a47e3c12448f4ad000000"
     },
     "0x4567BF59F76c18cEa2131BDA24A7b70744308f54": {
+      "balance": "0x4a47e3c12448f4ad000000"
+    },
+    "0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d": {
       "balance": "0x4a47e3c12448f4ad000000"
     }
   },
