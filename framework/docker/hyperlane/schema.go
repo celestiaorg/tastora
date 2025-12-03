@@ -35,20 +35,18 @@ type Registry struct {
 }
 
 type Deployments struct {
-	Core       map[string][]CoreDeployment      `yaml:"core,omitempty" json:"core,omitempty"`
-	WarpRoutes map[string][]WarpRouteDeployment `yaml:"warpRoutes,omitempty" json:"warpRoutes,omitempty"`
+    Core       map[string][]CoreDeployment      `yaml:"core,omitempty" json:"core,omitempty"`
+    WarpRoutes map[string][]WarpRouteDeployment `yaml:"warpRoutes,omitempty" json:"warpRoutes,omitempty"`
 }
 
 type CoreDeployment struct {
-	Chain     string            `yaml:"chain" json:"chain"`
-	Version   string            `yaml:"version,omitempty" json:"version,omitempty"`
-	Addresses map[string]string `yaml:"addresses" json:"addresses"`
+    Version   string            `yaml:"version,omitempty" json:"version,omitempty"`
+    Addresses map[string]string `yaml:"addresses" json:"addresses"`
 }
 
 type WarpRouteDeployment struct {
-	RouteName string                      `yaml:"routeName" json:"routeName"`
-	Config    *WarpRouteConfig            `yaml:"config,omitempty" json:"config,omitempty"`
-	Deploy    map[string]*WarpRouteDeploy `yaml:"deploy,omitempty" json:"deploy,omitempty"`
+    Config *WarpRouteConfig            `yaml:"config,omitempty" json:"config,omitempty"`
+    Deploy map[string]*WarpRouteDeploy `yaml:"deploy,omitempty" json:"deploy,omitempty"`
 }
 
 type WarpRouteConfig struct {
@@ -71,10 +69,8 @@ type WarpRouteDeploy struct {
 }
 
 type ChainEntry struct {
-	Name      string         `yaml:"name" json:"name"`
-	Metadata  ChainMetadata  `yaml:"metadata" json:"metadata"`
-	Addresses ChainAddresses `yaml:"addresses" json:"addresses"`
-	LogoPath  string         `yaml:"logoPath,omitempty" json:"logoPath,omitempty"`
+    Metadata  ChainMetadata  `yaml:"metadata" json:"metadata"`
+    Addresses ChainAddresses `yaml:"addresses" json:"addresses"`
 }
 
 type ChainAddresses map[string]string
@@ -91,21 +87,23 @@ type Submitter struct {
 }
 
 type RelayerConfig struct {
-	Chains                  map[string]ChainConfig `json:"chains" yaml:"chains"`
-	DefaultRpcConsensusType string                 `json:"defaultRpcConsensusType" yaml:"defaultRpcConsensusType"`
-	RelayChains             string                 `json:"relayChains" yaml:"relayChains"`
+    Chains                  map[string]RelayerChainConfig `json:"chains" yaml:"chains"`
+    DefaultRpcConsensusType string                 `json:"defaultRpcConsensusType" yaml:"defaultRpcConsensusType"`
+    RelayChains             string                 `json:"relayChains" yaml:"relayChains"`
 }
 
-type ChainConfig struct {
-	Blocks      *BlockConfig  `json:"blocks,omitempty" yaml:"blocks,omitempty"`
-	ChainID     interface{}   `json:"chainId" yaml:"chainId"`
-	DisplayName string        `json:"displayName" yaml:"displayName"`
-	DomainID    uint32        `json:"domainId" yaml:"domainId"`
-	IsTestnet   bool          `json:"isTestnet" yaml:"isTestnet"`
-	Name        string        `json:"name" yaml:"name"`
-	NativeToken *NativeToken  `json:"nativeToken" yaml:"nativeToken"`
-	Protocol    string        `json:"protocol" yaml:"protocol"`
-	Signer      *SignerConfig `json:"signer" yaml:"signer"`
+// RelayerChainConfig represents a single chain's relayer config (relayer/chains/<name>.json).
+type RelayerChainConfig struct {
+    // Name is not serialized; used only as the map key.
+    Name        string        `json:"-" yaml:"-"`
+    Blocks      *BlockConfig  `json:"blocks,omitempty" yaml:"blocks,omitempty"`
+    ChainID     interface{}   `json:"chainId" yaml:"chainId"`
+    DisplayName string        `json:"displayName" yaml:"displayName"`
+    DomainID    uint32        `json:"domainId" yaml:"domainId"`
+    IsTestnet   bool          `json:"isTestnet" yaml:"isTestnet"`
+    NativeToken *NativeToken  `json:"nativeToken" yaml:"nativeToken"`
+    Protocol    string        `json:"protocol" yaml:"protocol"`
+    Signer      *SignerConfig `json:"signer" yaml:"signer"`
 
 	RpcURLs  []Endpoint `json:"rpcUrls,omitempty" yaml:"rpcUrls,omitempty"`
 	RestURLs []Endpoint `json:"restUrls,omitempty" yaml:"restUrls,omitempty"`

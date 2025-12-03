@@ -15,27 +15,25 @@ func BuildRegistry(ctx context.Context, chains []ChainConfigProvider) (*Registry
 	}
 
 	for _, chain := range chains {
-		metadata, err := chain.GetHyperlaneChainMetadata(ctx)
-		if err != nil {
-			return nil, err
-		}
+        metadata, err := chain.GetHyperlaneRegistryMetadata(ctx)
+        if err != nil {
+            return nil, err
+        }
 
-		chainEntry := &ChainEntry{
-			Name:      metadata.Name,
-			Metadata:  metadata,
-			Addresses: buildChainAddresses(metadata),
-		}
+        chainEntry := &ChainEntry{
+            Metadata:  metadata,
+            Addresses: buildChainAddresses(metadata),
+        }
 
 		reg.Chains[metadata.Name] = chainEntry
 
-		if metadata.CoreContracts != nil && metadata.CoreContracts.Mailbox != "" {
-			reg.Deployments.Core[metadata.Name] = []CoreDeployment{
-				{
-					Chain:     metadata.Name,
-					Addresses: buildCoreAddressesMap(metadata.CoreContracts),
-				},
-			}
-		}
+        if metadata.CoreContracts != nil && metadata.CoreContracts.Mailbox != "" {
+            reg.Deployments.Core[metadata.Name] = []CoreDeployment{
+                {
+                    Addresses: buildCoreAddressesMap(metadata.CoreContracts),
+                },
+            }
+        }
 	}
 
 	return reg, nil

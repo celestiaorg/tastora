@@ -2,9 +2,12 @@ package hyperlane
 
 import "context"
 
-// ChainConfigProvider is the interface chains must implement to provide Hyperlane configuration.
+// ChainConfigProvider provides exact models for registry and relayer configs.
 type ChainConfigProvider interface {
-	GetHyperlaneChainMetadata(ctx context.Context) (ChainMetadata, error)
+    // GetHyperlaneRegistryMetadata returns the on-disk registry metadata model (metadata.yaml).
+    GetHyperlaneRegistryMetadata(ctx context.Context) (ChainMetadata, error)
+    // GetHyperlaneRelayerChainConfig returns the on-disk relayer chain config model.
+    GetHyperlaneRelayerChainConfig(ctx context.Context) (RelayerChainConfig, error)
 }
 
 // ChainMetadata contains all information needed to configure Hyperlane for a chain.
@@ -35,12 +38,12 @@ type ChainMetadata struct {
 	CanonicalAsset       string    `json:"canonicalAsset,omitempty" yaml:"canonicalAsset,omitempty"`
 	ContractAddressBytes int       `json:"contractAddressBytes,omitempty" yaml:"contractAddressBytes,omitempty"`
 	GasPrice             *GasPrice `json:"gasPrice,omitempty" yaml:"gasPrice,omitempty"`
-	Slip44               int       `json:"slip44,omitempty" yaml:"slip44,omitempty"`
+    Slip44               int       `json:"slip44,omitempty" yaml:"slip44,omitempty"`
 
-	// config-only fields (not in registry)
-	SignerKey     string                 `json:"-" yaml:"-"`
-	CoreContracts *CoreContractAddresses `json:"-" yaml:"-"`
-	IndexConfig   *IndexConfig           `json:"-" yaml:"-"`
+    // config-only fields (not serialized in registry files)
+    SignerKey     string                 `json:"-" yaml:"-"`
+    CoreContracts *CoreContractAddresses `json:"-" yaml:"-"`
+    IndexConfig   *IndexConfig           `json:"-" yaml:"-"`
 }
 
 type CoreContractAddresses struct {

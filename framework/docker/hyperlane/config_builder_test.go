@@ -8,6 +8,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type mockChainConfigProvider struct {
+    metadata    ChainMetadata
+    relayerConf RelayerChainConfig
+}
+
+func (m *mockChainConfigProvider) GetHyperlaneRegistryMetadata(context.Context) (ChainMetadata, error) {
+    return m.metadata, nil
+}
+
+func (m *mockChainConfigProvider) GetHyperlaneRelayerChainConfig(context.Context) (RelayerChainConfig, error) {
+    return m.relayerConf, nil
+}
+
 func TestBuildRelayerConfig_Empty(t *testing.T) {
 	chains := []ChainConfigProvider{}
 	config, err := BuildRelayerConfig(context.Background(), chains)
@@ -19,32 +32,41 @@ func TestBuildRelayerConfig_Empty(t *testing.T) {
 }
 
 func TestBuildRelayerConfig_SingleEVMChain(t *testing.T) {
-	evmChain := &mockChainConfigProvider{
-		metadata: ChainMetadata{
-			Name:        "rethlocal",
-			ChainID:     1234,
-			DomainID:    1234,
-			DisplayName: "Rethlocal",
-			Protocol:    "ethereum",
-			IsTestnet:   true,
-			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
-			NativeToken: NativeToken{
-				Name:     "Ether",
-				Symbol:   "ETH",
-				Decimals: 18,
-			},
-			Blocks: &BlockConfig{
-				Confirmations:     1,
-				EstimateBlockTime: 3,
-				ReorgPeriod:       0,
-			},
-			SignerKey: "0x123",
-			CoreContracts: &CoreContractAddresses{
-				Mailbox:                  "0xb1c938F5BA4B3593377F399e12175e8db0C787Ff",
-				InterchainSecurityModule: "0xa05915fD6E32A1AA7E67d800164CaCB12487142d",
-			},
-		},
-	}
+    evmChain := &mockChainConfigProvider{
+        metadata: ChainMetadata{
+            Name:        "rethlocal",
+            ChainID:     1234,
+            DomainID:    1234,
+            DisplayName: "Rethlocal",
+            Protocol:    "ethereum",
+            IsTestnet:   true,
+            RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+            NativeToken: NativeToken{
+                Name:     "Ether",
+                Symbol:   "ETH",
+                Decimals: 18,
+            },
+            Blocks: &BlockConfig{
+                Confirmations:     1,
+                EstimateBlockTime: 3,
+                ReorgPeriod:       0,
+            },
+        },
+        relayerConf: RelayerChainConfig{
+            Name:        "rethlocal",
+            ChainID:     1234,
+            DomainID:    1234,
+            DisplayName: "Rethlocal",
+            Protocol:    "ethereum",
+            IsTestnet:   true,
+            NativeToken: &NativeToken{Name: "Ether", Symbol: "ETH", Decimals: 18},
+            Blocks:      &BlockConfig{Confirmations: 1, EstimateBlockTime: 3, ReorgPeriod: 0},
+            Signer:      &SignerConfig{Type: "hexKey", Key: "0x123"},
+            RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+            Mailbox:                  "0xb1c938F5BA4B3593377F399e12175e8db0C787Ff",
+            InterchainSecurityModule: "0xa05915fD6E32A1AA7E67d800164CaCB12487142d",
+        },
+    }
 
 	config, err := BuildRelayerConfig(context.Background(), []ChainConfigProvider{evmChain})
 	require.NoError(t, err)
@@ -52,9 +74,8 @@ func TestBuildRelayerConfig_SingleEVMChain(t *testing.T) {
 	require.Len(t, config.Chains, 1)
 	require.Equal(t, "rethlocal", config.RelayChains)
 
-	chain, ok := config.Chains["rethlocal"]
-	require.True(t, ok)
-	require.Equal(t, "rethlocal", chain.Name)
+    chain, ok := config.Chains["rethlocal"]
+    require.True(t, ok)
 	require.Equal(t, 1234, chain.ChainID)
 	require.Equal(t, uint32(1234), chain.DomainID)
 	require.Equal(t, "ethereum", chain.Protocol)
@@ -81,52 +102,66 @@ func TestBuildRelayerConfig_SingleEVMChain(t *testing.T) {
 }
 
 func TestBuildRelayerConfig_SingleCosmosChain(t *testing.T) {
-	cosmosChain := &mockChainConfigProvider{
-		metadata: ChainMetadata{
-			Name:         "celestia",
-			ChainID:      "celestia-testnet",
-			DomainID:     69420,
-			DisplayName:  "Celestia",
-			Protocol:     "cosmosnative",
-			IsTestnet:    true,
-			RpcURLs:      []Endpoint{{HTTP: "http://celestia-validator:26657"}},
-			RestURLs:     []Endpoint{{HTTP: "http://celestia-validator:1317"}},
-			GrpcURLs:     []Endpoint{{HTTP: "http://celestia-validator:9090"}},
-			Bech32Prefix: "celestia",
-			NativeToken: NativeToken{
-				Name:     "TIA",
-				Symbol:   "TIA",
-				Decimals: 6,
-				Denom:    "utia",
-			},
-			Blocks: &BlockConfig{
-				Confirmations:     1,
-				EstimateBlockTime: 6,
-				ReorgPeriod:       1,
-			},
-			GasPrice: &GasPrice{
-				Denom:  "utia",
-				Amount: "0.002",
-			},
-			IndexConfig: &IndexConfig{
-				From:  1150,
-				Chunk: 10,
-			},
-			CanonicalAsset:       "utia",
-			ContractAddressBytes: 32,
-			Slip44:               118,
-			SignerKey:            "0x456",
-		},
-	}
+    cosmosChain := &mockChainConfigProvider{
+        metadata: ChainMetadata{
+            Name:         "celestia",
+            ChainID:      "celestia-testnet",
+            DomainID:     69420,
+            DisplayName:  "Celestia",
+            Protocol:     "cosmosnative",
+            IsTestnet:    true,
+            RpcURLs:      []Endpoint{{HTTP: "http://celestia-validator:26657"}},
+            RestURLs:     []Endpoint{{HTTP: "http://celestia-validator:1317"}},
+            GrpcURLs:     []Endpoint{{HTTP: "http://celestia-validator:9090"}},
+            Bech32Prefix: "celestia",
+            NativeToken: NativeToken{
+                Name:     "TIA",
+                Symbol:   "TIA",
+                Decimals: 6,
+                Denom:    "utia",
+            },
+            Blocks: &BlockConfig{
+                Confirmations:     1,
+                EstimateBlockTime: 6,
+                ReorgPeriod:       1,
+            },
+            GasPrice: &GasPrice{
+                Denom:  "utia",
+                Amount: "0.002",
+            },
+            CanonicalAsset:       "utia",
+            ContractAddressBytes: 32,
+            Slip44:               118,
+        },
+        relayerConf: RelayerChainConfig{
+            Name:        "celestia",
+            ChainID:     "celestia-testnet",
+            DomainID:    69420,
+            DisplayName: "Celestia",
+            Protocol:    "cosmosnative",
+            IsTestnet:   true,
+            NativeToken: &NativeToken{Name: "TIA", Symbol: "TIA", Decimals: 6, Denom: "utia"},
+            Blocks:      &BlockConfig{Confirmations: 1, EstimateBlockTime: 6, ReorgPeriod: 1},
+            Signer:      &SignerConfig{Type: "cosmosKey", Key: "0x456", Prefix: "celestia"},
+            RpcURLs:     []Endpoint{{HTTP: "http://celestia-validator:26657"}},
+            RestURLs:    []Endpoint{{HTTP: "http://celestia-validator:1317"}},
+            GrpcURLs:    []Endpoint{{HTTP: "http://celestia-validator:9090"}},
+            Bech32Prefix:         "celestia",
+            CanonicalAsset:       "utia",
+            ContractAddressBytes: 32,
+            GasPrice:             &GasPrice{Denom: "utia", Amount: "0.002"},
+            Index:                &IndexConfig{From: 1150, Chunk: 10},
+            Slip44:               118,
+        },
+    }
 
 	config, err := BuildRelayerConfig(context.Background(), []ChainConfigProvider{cosmosChain})
 	require.NoError(t, err)
 	require.NotNil(t, config)
 	require.Len(t, config.Chains, 1)
 
-	chain, ok := config.Chains["celestia"]
-	require.True(t, ok)
-	require.Equal(t, "celestia", chain.Name)
+    chain, ok := config.Chains["celestia"]
+    require.True(t, ok)
 	require.Equal(t, "celestia-testnet", chain.ChainID)
 	require.Equal(t, "cosmosnative", chain.Protocol)
 
@@ -154,43 +189,43 @@ func TestBuildRelayerConfig_SingleCosmosChain(t *testing.T) {
 }
 
 func TestBuildRelayerConfig_MultipleChains(t *testing.T) {
-	evmChain := &mockChainConfigProvider{
-		metadata: ChainMetadata{
-			Name:        "rethlocal",
-			ChainID:     1234,
-			DomainID:    1234,
-			DisplayName: "Rethlocal",
-			Protocol:    "ethereum",
-			IsTestnet:   true,
-			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
-			NativeToken: NativeToken{
-				Name:     "Ether",
-				Symbol:   "ETH",
-				Decimals: 18,
-			},
-			SignerKey: "0x123",
-		},
-	}
+    evmChain := &mockChainConfigProvider{
+        metadata: ChainMetadata{
+            Name:        "rethlocal",
+            ChainID:     1234,
+            DomainID:    1234,
+            DisplayName: "Rethlocal",
+            Protocol:    "ethereum",
+            IsTestnet:   true,
+            RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+            NativeToken: NativeToken{
+                Name:     "Ether",
+                Symbol:   "ETH",
+                Decimals: 18,
+            },
+        },
+        relayerConf: RelayerChainConfig{ Name: "rethlocal", ChainID: 1234, DomainID: 1234, DisplayName: "Rethlocal", Protocol: "ethereum", IsTestnet: true, NativeToken: &NativeToken{Name: "Ether", Symbol: "ETH", Decimals: 18}, Signer: &SignerConfig{Type: "hexKey", Key: "0x123"}, RpcURLs: []Endpoint{{HTTP: "http://reth:8545"}} },
+    }
 
-	cosmosChain := &mockChainConfigProvider{
-		metadata: ChainMetadata{
-			Name:         "celestia",
-			ChainID:      "celestia-testnet",
-			DomainID:     69420,
-			DisplayName:  "Celestia",
-			Protocol:     "cosmosnative",
-			IsTestnet:    true,
-			RpcURLs:      []Endpoint{{HTTP: "http://celestia-validator:26657"}},
-			Bech32Prefix: "celestia",
-			NativeToken: NativeToken{
-				Name:     "TIA",
-				Symbol:   "TIA",
-				Decimals: 6,
-				Denom:    "utia",
-			},
-			SignerKey: "0x456",
-		},
-	}
+    cosmosChain := &mockChainConfigProvider{
+        metadata: ChainMetadata{
+            Name:         "celestia",
+            ChainID:      "celestia-testnet",
+            DomainID:     69420,
+            DisplayName:  "Celestia",
+            Protocol:     "cosmosnative",
+            IsTestnet:    true,
+            RpcURLs:      []Endpoint{{HTTP: "http://celestia-validator:26657"}},
+            Bech32Prefix: "celestia",
+            NativeToken: NativeToken{
+                Name:     "TIA",
+                Symbol:   "TIA",
+                Decimals: 6,
+                Denom:    "utia",
+            },
+        },
+        relayerConf: RelayerChainConfig{ Name: "celestia", ChainID: "celestia-testnet", DomainID: 69420, DisplayName: "Celestia", Protocol: "cosmosnative", IsTestnet: true, NativeToken: &NativeToken{Name: "TIA", Symbol: "TIA", Decimals: 6, Denom: "utia"}, Signer: &SignerConfig{Type: "cosmosKey", Key: "0x456", Prefix: "celestia"}, RpcURLs: []Endpoint{{HTTP: "http://celestia-validator:26657"}} },
+    }
 
 	config, err := BuildRelayerConfig(
 		context.Background(),
@@ -211,23 +246,23 @@ func TestBuildRelayerConfig_MultipleChains(t *testing.T) {
 }
 
 func TestSerializeRelayerConfig(t *testing.T) {
-	evmChain := &mockChainConfigProvider{
-		metadata: ChainMetadata{
-			Name:        "rethlocal",
-			ChainID:     1234,
-			DomainID:    1234,
-			DisplayName: "Rethlocal",
-			Protocol:    "ethereum",
-			IsTestnet:   true,
-			RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
-			NativeToken: NativeToken{
-				Name:     "Ether",
-				Symbol:   "ETH",
-				Decimals: 18,
-			},
-			SignerKey: "0x123",
-		},
-	}
+    evmChain := &mockChainConfigProvider{
+        metadata: ChainMetadata{
+            Name:        "rethlocal",
+            ChainID:     1234,
+            DomainID:    1234,
+            DisplayName: "Rethlocal",
+            Protocol:    "ethereum",
+            IsTestnet:   true,
+            RpcURLs:     []Endpoint{{HTTP: "http://reth:8545"}},
+            NativeToken: NativeToken{
+                Name:     "Ether",
+                Symbol:   "ETH",
+                Decimals: 18,
+            },
+        },
+        relayerConf: RelayerChainConfig{ Name: "rethlocal", ChainID: 1234, DomainID: 1234, DisplayName: "Rethlocal", Protocol: "ethereum", IsTestnet: true, NativeToken: &NativeToken{Name: "Ether", Symbol: "ETH", Decimals: 18}, Signer: &SignerConfig{Type: "hexKey", Key: "0x123"}, RpcURLs: []Endpoint{{HTTP: "http://reth:8545"}} },
+    }
 
 	config, err := BuildRelayerConfig(context.Background(), []ChainConfigProvider{evmChain})
 	require.NoError(t, err)
@@ -279,23 +314,26 @@ func TestBuildRelayerConfig_SignerTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			chain := &mockChainConfigProvider{
-				metadata: ChainMetadata{
-					Name:         "test",
-					ChainID:      "test",
-					DomainID:     1,
-					Protocol:     tt.protocol,
-					Bech32Prefix: tt.bech32Prefix,
-					NativeToken: NativeToken{
-						Name:     "Test",
-						Symbol:   "TST",
-						Decimals: 6,
-					},
-					SignerKey: "0x123",
-				},
-			}
+        chain := &mockChainConfigProvider{
+            metadata: ChainMetadata{
+                Name:         "test",
+                ChainID:      "test",
+                DomainID:     1,
+                Protocol:     tt.protocol,
+                Bech32Prefix: tt.bech32Prefix,
+                NativeToken:  NativeToken{Name: "Test", Symbol: "TST", Decimals: 6},
+            },
+            relayerConf: RelayerChainConfig{
+                Name:        "test",
+                ChainID:     "test",
+                DomainID:    1,
+                Protocol:    tt.protocol,
+                NativeToken: &NativeToken{Name: "Test", Symbol: "TST", Decimals: 6},
+                Signer:      &SignerConfig{Type: tt.expectedType, Prefix: tt.expectedPrefix, Key: "0x123"},
+            },
+        }
 
-			config, err := BuildRelayerConfig(context.Background(), []ChainConfigProvider{chain})
+        config, err := BuildRelayerConfig(context.Background(), []ChainConfigProvider{chain})
 			require.NoError(t, err)
 
 			chainConfig := config.Chains["test"]
