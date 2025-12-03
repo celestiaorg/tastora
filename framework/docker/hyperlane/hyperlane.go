@@ -168,26 +168,24 @@ func (h *Deployer) writeRegistry(ctx context.Context) error {
 }
 
 func (h *Deployer) writeWarpConfig(ctx context.Context) error {
-	warpConfig := make(map[string]interface{})
+	warpConfig := make(map[string]*WarpConfigEntry)
 
-	for chainName, chainCfg := range h.schema.RelayerConfig.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			// TODO: add this to hyperlane interface also.
-			warpConfig[chainName] = map[string]interface{}{
-				"type":                     "synthetic",
-				"owner":                    "0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d",
-				"mailbox":                  chainCfg.Mailbox,
-				"interchainSecurityModule": chainCfg.InterchainSecurityModule,
-				"name":                     "wTIA",
-				"symbol":                   "TIA",
-				"decimals":                 6,
+	for _, chain := range h.chains {
+		entry, err := chain.GetHyperlaneWarpConfigEntry(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get warp config entry: %w", err)
+		}
+		if entry != nil {
+			registryEntry, err := chain.GetHyperlaneRegistryEntry(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get registry entry: %w", err)
 			}
-			break
+			warpConfig[registryEntry.Metadata.Name] = entry
 		}
 	}
 
 	if len(warpConfig) == 0 {
-		return fmt.Errorf("no EVM chain found for warp config generation")
+		return fmt.Errorf("no chains with warp config found")
 	}
 
 	warpConfigBytes, err := yaml.Marshal(warpConfig)

@@ -8,6 +8,9 @@ type ChainConfigProvider interface {
 	GetHyperlaneRegistryEntry(ctx context.Context) (RegistryEntry, error)
 	// GetHyperlaneRelayerChainConfig returns the on-disk relayer chain config model.
 	GetHyperlaneRelayerChainConfig(ctx context.Context) (RelayerChainConfig, error)
+	// GetHyperlaneWarpConfigEntry returns the warp route config entry for this chain.
+	// Returns nil if the chain does not participate in warp routes.
+	GetHyperlaneWarpConfigEntry(ctx context.Context) (*WarpConfigEntry, error)
 }
 
 // ChainMetadata contains all information needed to configure Hyperlane for a chain.

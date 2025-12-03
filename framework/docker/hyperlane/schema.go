@@ -52,6 +52,16 @@ type WarpRouteDeploy struct {
 	Type  string `yaml:"type" json:"type"`
 }
 
+type WarpConfigEntry struct {
+	Type                     string `yaml:"type" json:"type"`
+	Owner                    string `yaml:"owner,omitempty" json:"owner,omitempty"`
+	Mailbox                  string `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
+	InterchainSecurityModule string `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
+	Name                     string `yaml:"name,omitempty" json:"name,omitempty"`
+	Symbol                   string `yaml:"symbol,omitempty" json:"symbol,omitempty"`
+	Decimals                 int    `yaml:"decimals,omitempty" json:"decimals,omitempty"`
+}
+
 type RegistryEntry struct {
 	Metadata  ChainMetadata     `yaml:"metadata" json:"metadata"`
 	Addresses ContractAddresses `yaml:"addresses" json:"addresses"`
