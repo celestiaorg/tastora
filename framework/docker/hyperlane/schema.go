@@ -29,24 +29,8 @@ func BuildSchema(ctx context.Context, chains []ChainConfigProvider) (*Schema, er
 
 // Registry models the contents of a hyperlane registry.
 type Registry struct {
-	Chains      map[string]*ChainEntry `yaml:"chains" json:"chains"`
-	Deployments Deployments            `yaml:"deployments" json:"deployments"`
-	Strategies  map[string]*Strategy   `yaml:"strategies,omitempty" json:"strategies,omitempty"`
-}
-
-type Deployments struct {
-	Core       map[string][]CoreDeployment      `yaml:"core,omitempty" json:"core,omitempty"`
-	WarpRoutes map[string][]WarpRouteDeployment `yaml:"warpRoutes,omitempty" json:"warpRoutes,omitempty"`
-}
-
-type CoreDeployment struct {
-	Version   string            `yaml:"version,omitempty" json:"version,omitempty"`
-	Addresses map[string]string `yaml:"addresses" json:"addresses"`
-}
-
-type WarpRouteDeployment struct {
-	Config *WarpRouteConfig            `yaml:"config,omitempty" json:"config,omitempty"`
-	Deploy map[string]*WarpRouteDeploy `yaml:"deploy,omitempty" json:"deploy,omitempty"`
+	Chains     map[string]*RegistryEntry `yaml:"chains" json:"chains"`
+	Strategies map[string]*Strategy      `yaml:"strategies,omitempty" json:"strategies,omitempty"`
 }
 
 type WarpRouteConfig struct {
@@ -68,12 +52,37 @@ type WarpRouteDeploy struct {
 	Type  string `yaml:"type" json:"type"`
 }
 
-type ChainEntry struct {
-	Metadata  ChainMetadata  `yaml:"metadata" json:"metadata"`
-	Addresses ChainAddresses `yaml:"addresses" json:"addresses"`
+type RegistryEntry struct {
+	Metadata  ChainMetadata     `yaml:"metadata" json:"metadata"`
+	Addresses ContractAddresses `yaml:"addresses" json:"addresses"`
 }
 
-type ChainAddresses map[string]string
+// ContractAddresses models core contract addresses as a structured object
+// rather than a generic map to align with file layouts.
+type ContractAddresses struct {
+	Mailbox                  string `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
+	InterchainSecurityModule string `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
+	InterchainGasPaymaster   string `yaml:"interchainGasPaymaster,omitempty" json:"interchainGasPaymaster,omitempty"`
+	MerkleTreeHook           string `yaml:"merkleTreeHook,omitempty" json:"merkleTreeHook,omitempty"`
+	ProxyAdmin               string `yaml:"proxyAdmin,omitempty" json:"proxyAdmin,omitempty"`
+	ValidatorAnnounce        string `yaml:"validatorAnnounce,omitempty" json:"validatorAnnounce,omitempty"`
+	AggregationHook          string `yaml:"aggregationHook,omitempty" json:"aggregationHook,omitempty"`
+	DomainRoutingIsm         string `yaml:"domainRoutingIsm,omitempty" json:"domainRoutingIsm,omitempty"`
+	FallbackRoutingHook      string `yaml:"fallbackRoutingHook,omitempty" json:"fallbackRoutingHook,omitempty"`
+	ProtocolFee              string `yaml:"protocolFee,omitempty" json:"protocolFee,omitempty"`
+	StorageGasOracle         string `yaml:"storageGasOracle,omitempty" json:"storageGasOracle,omitempty"`
+	TestRecipient            string `yaml:"testRecipient,omitempty" json:"testRecipient,omitempty"`
+	// Additional factory and router addresses used by Hyperlane
+	DomainRoutingIsmFactory                    string `yaml:"domainRoutingIsmFactory,omitempty" json:"domainRoutingIsmFactory,omitempty"`
+	InterchainAccountIsm                       string `yaml:"interchainAccountIsm,omitempty" json:"interchainAccountIsm,omitempty"`
+	InterchainAccountRouter                    string `yaml:"interchainAccountRouter,omitempty" json:"interchainAccountRouter,omitempty"`
+	StaticAggregationHookFactory               string `yaml:"staticAggregationHookFactory,omitempty" json:"staticAggregationHookFactory,omitempty"`
+	StaticAggregationIsmFactory                string `yaml:"staticAggregationIsmFactory,omitempty" json:"staticAggregationIsmFactory,omitempty"`
+	StaticMerkleRootMultisigIsmFactory         string `yaml:"staticMerkleRootMultisigIsmFactory,omitempty" json:"staticMerkleRootMultisigIsmFactory,omitempty"`
+	StaticMerkleRootWeightedMultisigIsmFactory string `yaml:"staticMerkleRootWeightedMultisigIsmFactory,omitempty" json:"staticMerkleRootWeightedMultisigIsmFactory,omitempty"`
+	StaticMessageIdMultisigIsmFactory          string `yaml:"staticMessageIdMultisigIsmFactory,omitempty" json:"staticMessageIdMultisigIsmFactory,omitempty"`
+	StaticMessageIdWeightedMultisigIsmFactory  string `yaml:"staticMessageIdWeightedMultisigIsmFactory,omitempty" json:"staticMessageIdWeightedMultisigIsmFactory,omitempty"`
+}
 
 type Strategy struct {
 	Submitter Submitter `yaml:"submitter" json:"submitter"`

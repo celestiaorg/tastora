@@ -8,19 +8,14 @@ import (
 
 var _ hyperlane.ChainConfigProvider = (*Chain)(nil)
 
-// GetHyperlaneRegistryMetadata returns the metadata required for this chain in a hyperlane registry.
-func (c *Chain) GetHyperlaneRegistryMetadata(ctx context.Context) (hyperlane.ChainMetadata, error) {
+// GetHyperlaneRegistryEntry returns the registry entry (metadata + addresses) for this chain.
+func (c *Chain) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.RegistryEntry, error) {
 	networkInfo, err := c.GetNetworkInfo(ctx)
 	if err != nil {
-		return hyperlane.ChainMetadata{}, err
+		return hyperlane.RegistryEntry{}, err
 	}
 
-	signerKey, err := c.getFaucetPrivateKeyHex()
-	if err != nil {
-		return hyperlane.ChainMetadata{}, fmt.Errorf("failed to get faucet private key: %w", err)
-	}
-
-	return hyperlane.ChainMetadata{
+	meta := hyperlane.ChainMetadata{
 		ChainID:     c.GetChainID(),
 		DomainID:    69420,
 		Name:        c.Config.Name,
@@ -56,57 +51,48 @@ func (c *Chain) GetHyperlaneRegistryMetadata(ctx context.Context) (hyperlane.Cha
 			Denom:  c.Config.Denom,
 			Amount: c.Config.GasPrices,
 		},
-		Slip44:    118,
-		SignerKey: signerKey,
-		CoreContracts: &hyperlane.CoreContractAddresses{
-			Mailbox:                  "0x68797065726c616e650000000000000000000000000000000000000000000000",
-			InterchainSecurityModule: "0x726f757465725f69736d00000000000000000000000000000000000000000000",
-			InterchainGasPaymaster:   "0x726f757465725f706f73745f6469737061746368000000000000000000000000",
-			MerkleTreeHook:           "0x726f757465725f706f73745f6469737061746368000000030000000000000001",
-			ValidatorAnnounce:        "0x68797065726c616e650000000000000000000000000000000000000000000000",
-		},
-		IndexConfig: &hyperlane.IndexConfig{
-			From:  1150,
-			Chunk: 10,
-		},
-	}, nil
+		Slip44: 118,
+	}
+	return hyperlane.RegistryEntry{Metadata: meta, Addresses: hyperlane.ContractAddresses{}}, nil
 }
 
 // GetHyperlaneRelayerChainConfig returns the contents required for this chain in a relayer configuration file.
 func (c *Chain) GetHyperlaneRelayerChainConfig(ctx context.Context) (hyperlane.RelayerChainConfig, error) {
-	meta, err := c.GetHyperlaneRegistryMetadata(ctx)
+	entry, err := c.GetHyperlaneRegistryEntry(ctx)
 	if err != nil {
 		return hyperlane.RelayerChainConfig{}, err
 	}
 
 	cfg := hyperlane.RelayerChainConfig{
-		Name:        meta.Name,
-		ChainID:     meta.ChainID,
-		DomainID:    meta.DomainID,
-		DisplayName: meta.DisplayName,
-		Protocol:    meta.Protocol,
-		IsTestnet:   meta.IsTestnet,
-		NativeToken: &meta.NativeToken,
-		Blocks:      meta.Blocks,
-		RpcURLs:     meta.RpcURLs,
-		RestURLs:    meta.RestURLs,
-		GrpcURLs:    meta.GrpcURLs,
+		Name:        entry.Metadata.Name,
+		ChainID:     entry.Metadata.ChainID,
+		DomainID:    entry.Metadata.DomainID,
+		DisplayName: entry.Metadata.DisplayName,
+		Protocol:    entry.Metadata.Protocol,
+		IsTestnet:   entry.Metadata.IsTestnet,
+		NativeToken: &entry.Metadata.NativeToken,
+		Blocks:      entry.Metadata.Blocks,
+		RpcURLs:     entry.Metadata.RpcURLs,
+		RestURLs:    entry.Metadata.RestURLs,
+		GrpcURLs:    entry.Metadata.GrpcURLs,
 	}
 
-	// signer derives from protocol and metadata
-	cfg.Signer = &hyperlane.SignerConfig{
-		Key:    meta.SignerKey,
-		Type:   "hexKey",
-		Prefix: meta.Bech32Prefix,
+	// signer derives from chain faucet/private key
+	signerKey, err := c.getFaucetPrivateKeyHex()
+	if err != nil {
+		return hyperlane.RelayerChainConfig{}, fmt.Errorf("failed to get faucet private key: %w", err)
 	}
+	cfg.Signer = &hyperlane.SignerConfig{Key: signerKey, Type: "cosmosKey", Prefix: entry.Metadata.Bech32Prefix}
 
 	// cosmos-specific fields
-	cfg.Bech32Prefix = meta.Bech32Prefix
-	cfg.CanonicalAsset = meta.CanonicalAsset
-	cfg.ContractAddressBytes = meta.ContractAddressBytes
-	cfg.GasPrice = meta.GasPrice
-	cfg.Index = meta.IndexConfig
-	cfg.Slip44 = meta.Slip44
+	cfg.Bech32Prefix = entry.Metadata.Bech32Prefix
+	cfg.CanonicalAsset = entry.Metadata.CanonicalAsset
+	cfg.ContractAddressBytes = entry.Metadata.ContractAddressBytes
+	cfg.GasPrice = entry.Metadata.GasPrice
+	cfg.Slip44 = entry.Metadata.Slip44
+
+	// set index configuration in relayer config
+	cfg.Index = &hyperlane.IndexConfig{From: 1150, Chunk: 10}
 
 	return cfg, nil
 }
