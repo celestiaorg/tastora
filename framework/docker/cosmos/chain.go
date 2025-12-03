@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
 	"io"
 	"path"
 	"strconv"
@@ -51,71 +50,6 @@ type Chain struct {
 	started bool
 	// skipInit indicates whether to skip initialization when starting
 	skipInit bool
-}
-
-// GetHyperlaneChainMetadata returns the ChainMetadata configuration required to configure hyperlane for this
-// instance.
-func (c *Chain) GetHyperlaneChainMetadata(ctx context.Context) (hyperlane.ChainMetadata, error) {
-	networkInfo, err := c.GetNetworkInfo(ctx)
-	if err != nil {
-		return hyperlane.ChainMetadata{}, err
-	}
-
-	signerKey, err := c.getFaucetPrivateKeyHex()
-	if err != nil {
-		return hyperlane.ChainMetadata{}, fmt.Errorf("failed to get faucet private key: %w", err)
-	}
-
-	return hyperlane.ChainMetadata{
-		ChainID:     c.GetChainID(),
-		DomainID:    69420,
-		Name:        c.Config.Name,
-		DisplayName: c.Config.Name,
-		Protocol:    "cosmosnative",
-		IsTestnet:   true,
-		NativeToken: hyperlane.NativeToken{
-			Name:     "TIA",
-			Symbol:   "TIA",
-			Decimals: 6,
-			Denom:    c.Config.Denom,
-		},
-		RpcURLs: []hyperlane.Endpoint{
-			{
-				HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.RPCAddress()),
-			},
-		},
-		RestURLs: []hyperlane.Endpoint{
-			{
-				HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.APIAddress()),
-			},
-		},
-		Blocks: &hyperlane.BlockConfig{
-			Confirmations:     1,
-			EstimateBlockTime: 6,
-			ReorgPeriod:       1,
-		},
-		TechnicalStack:       "other",
-		Bech32Prefix:         c.Config.Bech32Prefix,
-		CanonicalAsset:       c.Config.Denom,
-		ContractAddressBytes: 0,
-		GasPrice: &hyperlane.GasPrice{
-			Denom:  c.Config.Denom,
-			Amount: c.Config.GasPrices,
-		},
-		Slip44:    118,
-		SignerKey: signerKey,
-		CoreContracts: &hyperlane.CoreContractAddresses{
-			Mailbox:                  "0x68797065726c616e650000000000000000000000000000000000000000000000",
-			InterchainSecurityModule: "0x726f757465725f69736d00000000000000000000000000000000000000000000",
-			InterchainGasPaymaster:   "0x726f757465725f706f73745f6469737061746368000000000000000000000000",
-			MerkleTreeHook:           "0x726f757465725f706f73745f6469737061746368000000030000000000000001",
-			ValidatorAnnounce:        "0x68797065726c616e650000000000000000000000000000000000000000000000",
-		},
-		IndexConfig: &hyperlane.IndexConfig{
-			From:  1150,
-			Chunk: 10,
-		},
-	}, nil
 }
 
 func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
