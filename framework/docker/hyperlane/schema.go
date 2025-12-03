@@ -1,5 +1,7 @@
 package hyperlane
 
+import "context"
+
 // Schema contains all Hyperlane configuration structures.
 type Schema struct {
 	RelayerConfig *RelayerConfig
@@ -8,13 +10,13 @@ type Schema struct {
 }
 
 // BuildSchema builds a hyperlane scheme from the provided set of chains.
-func BuildSchema(chains []ChainConfigProvider) (*Schema, error) {
-	config, err := BuildRelayerConfig(chains)
+func BuildSchema(ctx context.Context, chains []ChainConfigProvider) (*Schema, error) {
+	config, err := BuildRelayerConfig(ctx, chains)
 	if err != nil {
 		return nil, err
 	}
 
-	registry, err := BuildRegistry(chains)
+	registry, err := BuildRegistry(ctx, chains)
 	if err != nil {
 		return nil, err
 	}

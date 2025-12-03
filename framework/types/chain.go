@@ -2,7 +2,6 @@ package types
 
 import (
 	"context"
-	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
 
 	"github.com/celestiaorg/go-square/v3/share"
 
@@ -22,8 +21,6 @@ type ChainRelayerConfig struct {
 }
 
 type Chain interface {
-	hyperlane.ChainConfigProvider
-
 	NetworkInfoProvider
 	// Height returns the current height of the chain.
 	Height(ctx context.Context) (int64, error)

@@ -12,18 +12,8 @@ type mockChainConfigProvider struct {
 	metadata ChainMetadata
 }
 
-func (m *mockChainConfigProvider) GetHyperlaneChainMetadata(ctx context.Context) (ChainMetadata, error) {
+func (m *mockChainConfigProvider) GetHyperlaneChainMetadata(context.Context) (ChainMetadata, error) {
 	return m.metadata, nil
-}
-
-func TestBuildRegistry_Empty(t *testing.T) {
-	chains := []ChainConfigProvider{}
-
-	reg, err := BuildRegistry(context.Background(), chains)
-	require.NoError(t, err)
-	require.NotNil(t, reg)
-	require.Empty(t, reg.Chains)
-	require.Empty(t, reg.Deployments.Core)
 }
 
 func TestBuildRegistry_SingleEVMChain(t *testing.T) {

@@ -1,6 +1,7 @@
 package hyperlane
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -9,7 +10,7 @@ import (
 
 func TestBuildRelayerConfig_Empty(t *testing.T) {
 	chains := []ChainConfigProvider{}
-	config, err := BuildRelayerConfig(chains)
+	config, err := BuildRelayerConfig(context.Background(), chains)
 	require.NoError(t, err)
 	require.NotNil(t, config)
 	require.Empty(t, config.Chains)
@@ -45,7 +46,7 @@ func TestBuildRelayerConfig_SingleEVMChain(t *testing.T) {
 		},
 	}
 
-	config, err := BuildRelayerConfig([]ChainConfigProvider{evmChain})
+	config, err := BuildRelayerConfig(context.Background(), []ChainConfigProvider{evmChain})
 	require.NoError(t, err)
 	require.NotNil(t, config)
 	require.Len(t, config.Chains, 1)
@@ -118,7 +119,7 @@ func TestBuildRelayerConfig_SingleCosmosChain(t *testing.T) {
 		},
 	}
 
-	config, err := BuildRelayerConfig([]ChainConfigProvider{cosmosChain})
+	config, err := BuildRelayerConfig(context.Background(), []ChainConfigProvider{cosmosChain})
 	require.NoError(t, err)
 	require.NotNil(t, config)
 	require.Len(t, config.Chains, 1)
@@ -192,6 +193,7 @@ func TestBuildRelayerConfig_MultipleChains(t *testing.T) {
 	}
 
 	config, err := BuildRelayerConfig(
+		context.Background(),
 		[]ChainConfigProvider{evmChain, cosmosChain},
 	)
 	require.NoError(t, err)
@@ -227,7 +229,7 @@ func TestSerializeRelayerConfig(t *testing.T) {
 		},
 	}
 
-	config, err := BuildRelayerConfig([]ChainConfigProvider{evmChain})
+	config, err := BuildRelayerConfig(context.Background(), []ChainConfigProvider{evmChain})
 	require.NoError(t, err)
 
 	jsonBytes, err := SerializeRelayerConfig(config)
@@ -293,7 +295,7 @@ func TestBuildRelayerConfig_SignerTypes(t *testing.T) {
 				},
 			}
 
-			config, err := BuildRelayerConfig([]ChainConfigProvider{chain})
+			config, err := BuildRelayerConfig(context.Background(), []ChainConfigProvider{chain})
 			require.NoError(t, err)
 
 			chainConfig := config.Chains["test"]
