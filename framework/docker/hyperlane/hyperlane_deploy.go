@@ -30,18 +30,6 @@ func (h *Deployer) listRegistry(ctx context.Context) error {
 	return nil
 }
 
-// preflightRegistry performs basic diagnostics to verify the container can
-// read and write the mounted registry path and logs directory contents.
-func (h *Deployer) preflightRegistry(ctx context.Context) {
-	// Best-effort diagnostics; failures here should not be fatal but will be logged.
-	// 1) Whoami
-	_, _, _ = h.Exec(ctx, h.Logger, []string{"sh", "-lc", "echo UID=$(id -u) GID=$(id -g)"}, nil)
-	// 2) List registry dirs
-	_, _, _ = h.Exec(ctx, h.Logger, []string{"sh", "-lc", "ls -la /workspace || true; ls -la /workspace/registry || true; ls -la /workspace/registry/chains || true"}, nil)
-	// 3) Write probe file
-	_, _, _ = h.Exec(ctx, h.Logger, []string{"sh", "-lc", "echo rwtest > /workspace/registry/_preflight_rw.txt && ls -la /workspace/registry/_preflight_rw.txt"}, nil)
-}
-
 func (h *Deployer) deployCoreContracts(ctx context.Context) error {
 	var evmChainName string
 	var signerKey string
