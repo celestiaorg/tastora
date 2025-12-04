@@ -38,8 +38,9 @@ func (n *Node) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Registr
 		},
 	}
 
-    // Leave registry addresses empty; the Hyperlane CLI will populate these on disk.
-    return hyperlane.RegistryEntry{Metadata: meta, Addresses: hyperlane.ContractAddresses{}}, nil
+	// Leave registry addresses empty, the Hyperlane CLI will populate these on disk.
+	// TODO: potentially revert interface to not require contract addresses.
+	return hyperlane.RegistryEntry{Metadata: meta, Addresses: hyperlane.ContractAddresses{}}, nil
 
 }
 
@@ -64,19 +65,19 @@ func (n *Node) GetHyperlaneRelayerChainConfig(ctx context.Context) (hyperlane.Re
 	// NOTE: this key is hard coded for testing purposes and corresponds to the 0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d address in the genesis.
 	cfg.Signer = &hyperlane.SignerConfig{Key: "0x82bfcfadbf1712f6550d8d2c00a39f05b33ec78939d0167be2a737d691f33a6a", Type: "hexKey"}
 
-    // Populate core contract addresses directly (keeps relayer config stable)
-    cfg.Mailbox = "0xb1c938F5BA4B3593377F399e12175e8db0C787Ff"
-    cfg.InterchainSecurityModule = "0xa05915fD6E32A1AA7E67d800164CaCB12487142d"
-    cfg.InterchainGasPaymaster = "0x1D957dA7A6988f5a9d2D2454637B4B7fea0Aeea5"
-    cfg.MerkleTreeHook = "0xFCb1d485ef46344029D9E8A7925925e146B3430E"
-    cfg.ProxyAdmin = "0x7e7aD18Adc99b94d4c728fDf13D4dE97B926A0D8"
-    cfg.ValidatorAnnounce = "0x79ec7bF05AF122D3782934d4Fb94eE32f0C01c97"
-    cfg.AggregationHook = "0xe53275A1FcA119e1c5eeB32E7a72e54835A63936"
-    cfg.DomainRoutingIsm = "0xE2c1756b8825C54638f98425c113b51730cc47f6"
-    cfg.FallbackRoutingHook = "0xE2c1756b8825C54638f98425c113b51730cc47f6"
-    cfg.ProtocolFee = "0x8A93d247134d91e0de6f96547cB0204e5BE8e5D8"
-    cfg.StorageGasOracle = "0x457cCf29090fe5A24c19c1bc95F492168C0EaFdb"
-    cfg.TestRecipient = "0xd7958B336f0019081Ad2279B2B7B7c3f744Bce0a"
+	// Populate core contract addresses directly.
+	cfg.Mailbox = "0xb1c938F5BA4B3593377F399e12175e8db0C787Ff"
+	cfg.InterchainSecurityModule = "0xa05915fD6E32A1AA7E67d800164CaCB12487142d"
+	cfg.InterchainGasPaymaster = "0x1D957dA7A6988f5a9d2D2454637B4B7fea0Aeea5"
+	cfg.MerkleTreeHook = "0xFCb1d485ef46344029D9E8A7925925e146B3430E"
+	cfg.ProxyAdmin = "0x7e7aD18Adc99b94d4c728fDf13D4dE97B926A0D8"
+	cfg.ValidatorAnnounce = "0x79ec7bF05AF122D3782934d4Fb94eE32f0C01c97"
+	cfg.AggregationHook = "0xe53275A1FcA119e1c5eeB32E7a72e54835A63936"
+	cfg.DomainRoutingIsm = "0xE2c1756b8825C54638f98425c113b51730cc47f6"
+	cfg.FallbackRoutingHook = "0xE2c1756b8825C54638f98425c113b51730cc47f6"
+	cfg.ProtocolFee = "0x8A93d247134d91e0de6f96547cB0204e5BE8e5D8"
+	cfg.StorageGasOracle = "0x457cCf29090fe5A24c19c1bc95F492168C0EaFdb"
+	cfg.TestRecipient = "0xd7958B336f0019081Ad2279B2B7B7c3f744Bce0a"
 
 	return cfg, nil
 }
