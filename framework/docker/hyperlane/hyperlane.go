@@ -2,8 +2,6 @@ package hyperlane
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -11,14 +9,12 @@ import (
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
-	gethcrypto "github.com/ethereum/go-ethereum/crypto"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
 const (
 	hyperlaneHomeDir       = "/workspace"
-	hyperlaneDefaultUIDGID = "0:0"
+	hyperlaneDefaultUIDGID = "1000:1000"
 )
 
 // Deployer is a deployment coordinator that executes Hyperlane contract deployments
@@ -76,90 +72,81 @@ func NewDeployer(ctx context.Context, cfg Config, testName string, chains []Chai
 }
 
 // Name returns the hostname of the docker container
-func (h *Deployer) Name() string {
-	return fmt.Sprintf("hyperlane-deploy-%d-%s", h.Index, internal.SanitizeDockerResourceName(h.TestName))
+func (d *Deployer) Name() string {
+	return fmt.Sprintf("hyperlane-deploy-%d-%s", d.Index, internal.SanitizeDockerResourceName(d.TestName))
 }
 
 // Init generates configs and prepares the deployment
-func (h *Deployer) init(ctx context.Context) error {
-	h.Logger.Info("initializing hyperlane deployment coordinator")
+func (d *Deployer) init(ctx context.Context) error {
+	d.Logger.Info("initializing hyperlane deployment coordinator")
 
-	schema, err := BuildSchema(ctx, h.chains)
+	schema, err := buildSchema(ctx, d.chains)
 	if err != nil {
 		return fmt.Errorf("failed to build schema: %w", err)
 	}
-	h.schema = schema
 
-	if err := h.writeConfigs(ctx); err != nil {
-		return fmt.Errorf("failed to write configs: %w", err)
+	// NOTE: scheme is not yet fully constructed, it gets fully populated after core and warp deployments.
+	d.schema = schema
+
+	if err := d.writeRelayerConfig(ctx); err != nil {
+		return fmt.Errorf("failed to write relayer config: %w", err)
 	}
 
-	h.Logger.Info("hyperlane initialization complete")
+	if err := d.writeRegistry(ctx); err != nil {
+		return fmt.Errorf("failed to write registry: %w", err)
+	}
+
+	if err := d.writeWarpConfig(ctx); err != nil {
+		return fmt.Errorf("failed to write warp config: %w", err)
+	}
+
+	d.Logger.Info("hyperlane initialization complete")
 	return nil
 }
 
 // Deploy executes all deployment steps from the entrypoint script
-func (h *Deployer) Deploy(ctx context.Context) error {
-	if h.deployed {
-		h.Logger.Info("deployment already completed, skipping")
+func (d *Deployer) Deploy(ctx context.Context) error {
+	if d.deployed {
+		d.Logger.Info("deployment already completed, skipping")
 		return nil
 	}
 
-	h.Logger.Info("starting hyperlane deployment")
+	d.Logger.Info("starting hyperlane deployment")
 
-	steps := []struct {
-		name string
-		fn   func(context.Context) error
-	}{
-		{"list registry", h.listRegistry},
-		{"deploy core contracts", h.deployCoreContracts},
-		{"write core config", h.writeCoreConfig},
-		{"deploy warp routes", h.deployWarpRoutes},
+	if err := d.deployCoreContracts(ctx); err != nil {
+		return fmt.Errorf("failed to deploy core contracts: %w", err)
 	}
 
-	for _, step := range steps {
-		h.Logger.Info("executing step", zap.String("step", step.name))
-		if err := step.fn(ctx); err != nil {
-			return fmt.Errorf("failed at step %s: %w", step.name, err)
-		}
+	if err := d.deployWarpRoutes(ctx); err != nil {
+		return fmt.Errorf("failed to deploy warp routes: %w", err)
 	}
 
-	h.deployed = true
-	h.Logger.Info("hyperlane deployment completed successfully")
+	d.deployed = true
+	d.Logger.Info("hyperlane deployment completed successfully")
 	return nil
 }
 
-func (h *Deployer) writeConfigs(ctx context.Context) error {
-	relayerConfigBytes, err := SerializeRelayerConfig(h.schema.RelayerConfig)
+func (d *Deployer) writeRelayerConfig(ctx context.Context) error {
+	relayerConfigBytes, err := SerializeRelayerConfig(d.schema.RelayerConfig)
 	if err != nil {
 		return fmt.Errorf("failed to serialize relayer config: %w", err)
 	}
 
-	if err := h.WriteFile(ctx, "relayer-config.json", relayerConfigBytes); err != nil {
+	if err := d.WriteFile(ctx, "relayer-config.json", relayerConfigBytes); err != nil {
 		return fmt.Errorf("failed to write relayer config: %w", err)
 	}
-
-	if err := h.writeRegistry(ctx); err != nil {
-		return fmt.Errorf("failed to write registry: %w", err)
-	}
-
-	if err := h.writeWarpConfig(ctx); err != nil {
-		return fmt.Errorf("failed to write warp config: %w", err)
-	}
-
-	h.Logger.Debug("wrote all config files to volume")
 	return nil
 }
 
-func (h *Deployer) writeRegistry(ctx context.Context) error {
-	for chainName, entry := range h.schema.Registry.Chains {
+func (d *Deployer) writeRegistry(ctx context.Context) error {
+	for chainName, entry := range d.schema.Registry.Chains {
 		metadataBytes, err := yaml.Marshal(entry.Metadata)
 		if err != nil {
 			return fmt.Errorf("failed to marshal metadata for %s: %w", chainName, err)
 		}
 
 		metadataPath := path.Join("registry", "chains", chainName, "metadata.yaml")
-		if err := h.WriteFile(ctx, metadataPath, metadataBytes); err != nil {
+		if err := d.WriteFile(ctx, metadataPath, metadataBytes); err != nil {
 			return fmt.Errorf("failed to write metadata for %s: %w", chainName, err)
 		}
 	}
@@ -167,10 +154,10 @@ func (h *Deployer) writeRegistry(ctx context.Context) error {
 	return nil
 }
 
-func (h *Deployer) writeWarpConfig(ctx context.Context) error {
+func (d *Deployer) writeWarpConfig(ctx context.Context) error {
 	warpConfig := make(map[string]*WarpConfigEntry)
 
-	for _, chain := range h.chains {
+	for _, chain := range d.chains {
 		entry, err := chain.GetHyperlaneWarpConfigEntry(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get warp config entry: %w", err)
@@ -188,42 +175,25 @@ func (h *Deployer) writeWarpConfig(ctx context.Context) error {
 		return fmt.Errorf("no chains with warp config found")
 	}
 
+	d.schema.WarpConfig = warpConfig
+
 	warpConfigBytes, err := yaml.Marshal(warpConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal warp config: %w", err)
 	}
 
 	warpConfigPath := path.Join("configs", "warp-config.yaml")
-	if err := h.WriteFile(ctx, warpConfigPath, warpConfigBytes); err != nil {
+	if err := d.WriteFile(ctx, warpConfigPath, warpConfigBytes); err != nil {
 		return fmt.Errorf("failed to write warp config: %w", err)
 	}
 
-	h.hasWarp = true
+	d.hasWarp = true
 	return nil
 }
 
-// deriveEthAddress derives the Ethereum address from a hex private key
-func deriveEthAddress(hexKey string) (string, error) {
-	k := hexKey
-	if len(k) >= 2 && (k[:2] == "0x" || k[:2] == "0X") {
-		k = k[2:]
-	}
-	b, err := hex.DecodeString(k)
-	if err != nil {
-		return "", fmt.Errorf("decode privkey: %w", err)
-	}
-	priv, err := gethcrypto.ToECDSA(b)
-	if err != nil {
-		return "", fmt.Errorf("to ecdsa: %w", err)
-	}
-	pub := priv.Public().(*ecdsa.PublicKey)
-	addr := gethcrypto.PubkeyToAddress(*pub)
-	return addr.Hex(), nil
-}
-
 // GetOnDiskSchema reconstructs a Schema by reading files written to disk
-func (h *Deployer) GetOnDiskSchema(ctx context.Context) (*Schema, error) {
-	relCfgBytes, err := h.ReadFile(ctx, "relayer-config.json")
+func (d *Deployer) GetOnDiskSchema(ctx context.Context) (*Schema, error) {
+	relCfgBytes, err := d.ReadFile(ctx, "relayer-config.json")
 	if err != nil {
 		return nil, fmt.Errorf("read relayer-config.json: %w", err)
 	}
@@ -235,12 +205,12 @@ func (h *Deployer) GetOnDiskSchema(ctx context.Context) (*Schema, error) {
 
 	reg := &Registry{Chains: make(map[string]*RegistryEntry)}
 	for chainName := range relCfg.Chains {
-		meta, err := h.readMetadataFromDisk(ctx, chainName)
+		meta, err := d.readMetadataFromDisk(ctx, chainName)
 		if err != nil {
 			return nil, fmt.Errorf("read %s metadata: %w", chainName, err)
 		}
 
-		addrs, err := h.readAddressFromDisk(ctx, meta)
+		addrs, err := d.readAddressFromDisk(ctx, meta)
 		if err != nil {
 			return nil, fmt.Errorf("read %s addresses: %w", chainName, err)
 		}
@@ -287,4 +257,8 @@ func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) 
 	}
 
 	return addresses, nil
+}
+
+func SerializeRelayerConfig(cfg *RelayerConfig) ([]byte, error) {
+	return json.MarshalIndent(cfg, "", "  ")
 }

@@ -2,7 +2,6 @@ package hyperlane
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 )
 
@@ -33,9 +32,4 @@ func BuildRelayerConfig(ctx context.Context, chains []ChainConfigProvider) (*Rel
 	}
 
 	return config, nil
-}
-
-// SerializeRelayerConfig converts RelayerConfig to JSON bytes.
-func SerializeRelayerConfig(config *RelayerConfig) ([]byte, error) {
-	return json.MarshalIndent(config, "", "    ")
 }

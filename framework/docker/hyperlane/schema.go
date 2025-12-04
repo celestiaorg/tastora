@@ -6,11 +6,12 @@ import "context"
 type Schema struct {
 	RelayerConfig *RelayerConfig
 	Registry      *Registry
-	// TODO: add hyperlane core and warp configs
+	WarpConfig    map[string]*WarpConfigEntry
+	CoreConfig    *CoreConfig
 }
 
-// BuildSchema builds a hyperlane scheme from the provided set of chains.
-func BuildSchema(ctx context.Context, chains []ChainConfigProvider) (*Schema, error) {
+// buildSchema builds a hyperlane scheme from the provided set of chains.
+func buildSchema(ctx context.Context, chains []ChainConfigProvider) (*Schema, error) {
 	config, err := BuildRelayerConfig(ctx, chains)
 	if err != nil {
 		return nil, err
@@ -70,23 +71,23 @@ type RegistryEntry struct {
 // ContractAddresses models core contract addresses as a structured object
 // rather than a generic map to align with file layouts.
 type ContractAddresses struct {
-    Mailbox                  string `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
-    InterchainSecurityModule string `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
-    InterchainGasPaymaster   string `yaml:"interchainGasPaymaster,omitempty" json:"interchainGasPaymaster,omitempty"`
-    MerkleTreeHook           string `yaml:"merkleTreeHook,omitempty" json:"merkleTreeHook,omitempty"`
-    ProxyAdmin               string `yaml:"proxyAdmin,omitempty" json:"proxyAdmin,omitempty"`
-    ValidatorAnnounce        string `yaml:"validatorAnnounce,omitempty" json:"validatorAnnounce,omitempty"`
-    AggregationHook          string `yaml:"aggregationHook,omitempty" json:"aggregationHook,omitempty"`
-    DomainRoutingIsm         string `yaml:"domainRoutingIsm,omitempty" json:"domainRoutingIsm,omitempty"`
-    FallbackRoutingHook      string `yaml:"fallbackRoutingHook,omitempty" json:"fallbackRoutingHook,omitempty"`
-    ProtocolFee              string `yaml:"protocolFee,omitempty" json:"protocolFee,omitempty"`
-    StorageGasOracle         string `yaml:"storageGasOracle,omitempty" json:"storageGasOracle,omitempty"`
-    TestRecipient            string `yaml:"testRecipient,omitempty" json:"testRecipient,omitempty"`
-    TestIsm                  string `yaml:"testIsm,omitempty" json:"testIsm,omitempty"`
-    // Additional factory and router addresses used by Hyperlane
-    DomainRoutingIsmFactory                    string `yaml:"domainRoutingIsmFactory,omitempty" json:"domainRoutingIsmFactory,omitempty"`
-    InterchainAccountIsm                       string `yaml:"interchainAccountIsm,omitempty" json:"interchainAccountIsm,omitempty"`
-    InterchainAccountRouter                    string `yaml:"interchainAccountRouter,omitempty" json:"interchainAccountRouter,omitempty"`
+	Mailbox                  string `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
+	InterchainSecurityModule string `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
+	InterchainGasPaymaster   string `yaml:"interchainGasPaymaster,omitempty" json:"interchainGasPaymaster,omitempty"`
+	MerkleTreeHook           string `yaml:"merkleTreeHook,omitempty" json:"merkleTreeHook,omitempty"`
+	ProxyAdmin               string `yaml:"proxyAdmin,omitempty" json:"proxyAdmin,omitempty"`
+	ValidatorAnnounce        string `yaml:"validatorAnnounce,omitempty" json:"validatorAnnounce,omitempty"`
+	AggregationHook          string `yaml:"aggregationHook,omitempty" json:"aggregationHook,omitempty"`
+	DomainRoutingIsm         string `yaml:"domainRoutingIsm,omitempty" json:"domainRoutingIsm,omitempty"`
+	FallbackRoutingHook      string `yaml:"fallbackRoutingHook,omitempty" json:"fallbackRoutingHook,omitempty"`
+	ProtocolFee              string `yaml:"protocolFee,omitempty" json:"protocolFee,omitempty"`
+	StorageGasOracle         string `yaml:"storageGasOracle,omitempty" json:"storageGasOracle,omitempty"`
+	TestRecipient            string `yaml:"testRecipient,omitempty" json:"testRecipient,omitempty"`
+	TestIsm                  string `yaml:"testIsm,omitempty" json:"testIsm,omitempty"`
+	// Additional factory and router addresses used by Hyperlane
+	DomainRoutingIsmFactory                    string `yaml:"domainRoutingIsmFactory,omitempty" json:"domainRoutingIsmFactory,omitempty"`
+	InterchainAccountIsm                       string `yaml:"interchainAccountIsm,omitempty" json:"interchainAccountIsm,omitempty"`
+	InterchainAccountRouter                    string `yaml:"interchainAccountRouter,omitempty" json:"interchainAccountRouter,omitempty"`
 	StaticAggregationHookFactory               string `yaml:"staticAggregationHookFactory,omitempty" json:"staticAggregationHookFactory,omitempty"`
 	StaticAggregationIsmFactory                string `yaml:"staticAggregationIsmFactory,omitempty" json:"staticAggregationIsmFactory,omitempty"`
 	StaticMerkleRootMultisigIsmFactory         string `yaml:"staticMerkleRootMultisigIsmFactory,omitempty" json:"staticMerkleRootMultisigIsmFactory,omitempty"`

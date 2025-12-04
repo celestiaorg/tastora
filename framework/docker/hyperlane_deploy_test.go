@@ -64,6 +64,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	// 7) Verify core contracts are deployed on reth by reading registry addresses
 	onDiskSchema, err := d.GetOnDiskSchema(ctx)
+	//schema := d.schema
 	require.NoError(t, err)
 	addrs := onDiskSchema.Registry.Chains["rethlocal"].Addresses
 
