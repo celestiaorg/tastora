@@ -132,7 +132,7 @@ func (d *Deployer) Deploy(ctx context.Context) error {
 }
 
 func (d *Deployer) writeRelayerConfig(ctx context.Context) error {
-	relayerConfigBytes, err := SerializeRelayerConfig(d.relayerCfg)
+	relayerConfigBytes, err := serializeRelayerConfig(d.relayerCfg)
 	if err != nil {
 		return fmt.Errorf("failed to serialize relayer config: %w", err)
 	}
@@ -274,8 +274,4 @@ func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) 
 	}
 
 	return addresses, nil
-}
-
-func SerializeRelayerConfig(cfg *RelayerConfig) ([]byte, error) {
-	return json.MarshalIndent(cfg, "", "  ")
 }
