@@ -1,12 +1,17 @@
 package hyperlane
 
 import (
-	"context"
-	"fmt"
-	"path"
+    "context"
+    "crypto/ecdsa"
+    "encoding/hex"
+    "encoding/json"
+    "fmt"
+    "path"
+    "path/filepath"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
+	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
@@ -19,13 +24,13 @@ const (
 // Deployer is a deployment coordinator that executes Hyperlane contract deployments
 // and configuration across multiple chains.
 type Deployer struct {
-    *container.Node
+	*container.Node
 
-    cfg      Config
-    schema   *Schema
-    chains   []ChainConfigProvider
-    deployed bool
-    hasWarp  bool
+	cfg      Config
+	schema   *Schema
+	chains   []ChainConfigProvider
+	deployed bool
+	hasWarp  bool
 }
 
 // NewHyperlane creates a new Hyperlane deployment coordinator
@@ -108,6 +113,7 @@ func (h *Deployer) Deploy(ctx context.Context) error {
 	}{
 		{"list registry", h.listRegistry},
 		{"deploy core contracts", h.deployCoreContracts},
+		{"write core config", h.writeCoreConfig},
 		{"deploy warp routes", h.deployWarpRoutes},
 	}
 
@@ -163,13 +169,23 @@ func (h *Deployer) writeRegistry(ctx context.Context) error {
 		if err := h.WriteFile(ctx, addressesPath, addressesBytes); err != nil {
 			return fmt.Errorf("failed to write addresses for %s: %w", chainName, err)
 		}
+
+		// Also write JSON variants to maximize CLI compatibility
+		metadataJSON, err := json.MarshalIndent(entry.Metadata, "", "  ")
+		if err == nil {
+			_ = h.WriteFile(ctx, path.Join("registry", "chains", chainName, "metadata.json"), metadataJSON)
+		}
+		addressesJSON, err := json.MarshalIndent(entry.Addresses, "", "  ")
+		if err == nil {
+			_ = h.WriteFile(ctx, path.Join("registry", "chains", chainName, "addresses.json"), addressesJSON)
+		}
 	}
 
 	return nil
 }
 
 func (h *Deployer) writeWarpConfig(ctx context.Context) error {
-    warpConfig := make(map[string]*WarpConfigEntry)
+	warpConfig := make(map[string]*WarpConfigEntry)
 
 	for _, chain := range h.chains {
 		entry, err := chain.GetHyperlaneWarpConfigEntry(ctx)
@@ -185,9 +201,9 @@ func (h *Deployer) writeWarpConfig(ctx context.Context) error {
 		}
 	}
 
-    if len(warpConfig) == 0 {
-        return fmt.Errorf("no chains with warp config found")
-    }
+	if len(warpConfig) == 0 {
+		return fmt.Errorf("no chains with warp config found")
+	}
 
 	warpConfigBytes, err := yaml.Marshal(warpConfig)
 	if err != nil {
@@ -195,10 +211,78 @@ func (h *Deployer) writeWarpConfig(ctx context.Context) error {
 	}
 
 	warpConfigPath := path.Join("configs", "warp-config.yaml")
-    if err := h.WriteFile(ctx, warpConfigPath, warpConfigBytes); err != nil {
-        return fmt.Errorf("failed to write warp config: %w", err)
+	if err := h.WriteFile(ctx, warpConfigPath, warpConfigBytes); err != nil {
+		return fmt.Errorf("failed to write warp config: %w", err)
+	}
+
+	h.hasWarp = true
+	return nil
+}
+
+// deriveEthAddress derives the Ethereum address from a hex private key
+func deriveEthAddress(hexKey string) (string, error) {
+	k := hexKey
+	if len(k) >= 2 && (k[:2] == "0x" || k[:2] == "0X") {
+		k = k[2:]
+	}
+	b, err := hex.DecodeString(k)
+	if err != nil {
+		return "", fmt.Errorf("decode privkey: %w", err)
+	}
+	priv, err := gethcrypto.ToECDSA(b)
+	if err != nil {
+		return "", fmt.Errorf("to ecdsa: %w", err)
+	}
+	pub := priv.Public().(*ecdsa.PublicKey)
+	addr := gethcrypto.PubkeyToAddress(*pub)
+	return addr.Hex(), nil
+}
+
+// GetOnDiskSchema reconstructs a Schema by reading files written to disk
+func (h *Deployer) GetOnDiskSchema(ctx context.Context) (*Schema, error) {
+    // Read relayer-config.json
+    relCfgBytes, err := h.ReadFile(ctx, "relayer-config.json")
+    if err != nil {
+        return nil, fmt.Errorf("read relayer-config.json: %w", err)
+    }
+    var relCfg RelayerConfig
+    if err := json.Unmarshal(relCfgBytes, &relCfg); err != nil {
+        return nil, fmt.Errorf("unmarshal relayer-config.json: %w", err)
     }
 
-    h.hasWarp = true
-    return nil
+    reg := &Registry{Chains: make(map[string]*RegistryEntry)}
+    for chainName := range relCfg.Chains {
+        // metadata yaml or json
+        var meta ChainMetadata
+        if err := h.readYAMLOrJSON(ctx,
+            filepath.Join("registry", "chains", chainName, "metadata.yaml"),
+            filepath.Join("registry", "chains", chainName, "metadata.json"), &meta); err != nil {
+            return nil, fmt.Errorf("read %s metadata: %w", chainName, err)
+        }
+        var addrs ContractAddresses
+        if err := h.readYAMLOrJSON(ctx,
+            filepath.Join("registry", "chains", chainName, "addresses.yaml"),
+            filepath.Join("registry", "chains", chainName, "addresses.json"), &addrs); err != nil {
+            return nil, fmt.Errorf("read %s addresses: %w", chainName, err)
+        }
+        reg.Chains[chainName] = &RegistryEntry{Metadata: meta, Addresses: addrs}
+    }
+
+    return &Schema{RelayerConfig: &relCfg, Registry: reg}, nil
+}
+
+func (h *Deployer) readYAMLOrJSON(ctx context.Context, yamlPath, jsonPath string, out any) error {
+    if b, err := h.ReadFile(ctx, yamlPath); err == nil {
+        if err := yaml.Unmarshal(b, out); err != nil {
+            return fmt.Errorf("unmarshal yaml %s: %w", yamlPath, err)
+        }
+        return nil
+    }
+    if b, err := h.ReadFile(ctx, jsonPath); err == nil {
+        if err := json.Unmarshal(b, out); err != nil {
+            return fmt.Errorf("unmarshal json %s: %w", jsonPath, err)
+        }
+        return nil
+    }
+    return fmt.Errorf("neither %s nor %s could be read", yamlPath, jsonPath)
 }
