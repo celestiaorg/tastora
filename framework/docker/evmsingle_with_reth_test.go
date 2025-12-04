@@ -17,8 +17,9 @@ func TestEvmSingle_WithReth(t *testing.T) {
 		t.Skip("skipping due to short mode")
 	}
 
-	// provision the full stack with defaults
-	stack, err := DeployMinimalStack(t)
+	// provision the full stack with defaults.
+	testCfg := setupDockerTest(t)
+	stack, err := DeployMinimalStack(t, testCfg)
 	require.NoError(t, err)
 
 	ctx := context.Background()

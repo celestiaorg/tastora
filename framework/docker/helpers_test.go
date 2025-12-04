@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
 	evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
@@ -15,12 +14,7 @@ import (
 
 	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/types/module/testutil"
-	"github.com/cosmos/cosmos-sdk/x/auth"
-	"github.com/cosmos/cosmos-sdk/x/bank"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	govmodule "github.com/cosmos/cosmos-sdk/x/gov"
-	"github.com/cosmos/ibc-go/v8/modules/apps/transfer"
 )
 
 type Stack struct {
@@ -30,70 +24,39 @@ type Stack struct {
 	evm      *evmsingle.Chain
 }
 
-// DeployMinimalStack is a test helper that spins up a simple, fully-wired stack using defaults:
-// - celestia-app (1 validator)
-// - celestia-node (1 bridge) pointed at celestia-app
-// - reth (1 node)
-// - evm-single (1 node) pointed at reth + DA
-func DeployMinimalStack(t *testing.T) (Stack, error) {
+// DeployCelestiaWithDABridgeNode deploys celestia-app and a celestia-node bridge, returning
+// the chain, DA network.
+func DeployCelestiaWithDABridgeNode(t *testing.T, cfg *TestSetupConfig) (*cosmos.Chain, *da.Network, error) {
 	t.Helper()
 
 	ctx := context.Background()
-	dockerClient, networkID := Setup(t)
 
-	// Bech32 account prefix for celestia
-	sdkConf := sdk.GetConfig()
-	sdkConf.SetBech32PrefixForAccount("celestia", "celestiapub")
-
-	// 1) celestia-app chain
-	enc := testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{}, govmodule.AppModuleBasic{})
-	appImage := container.Image{Repository: "ghcr.io/celestiaorg/celestia-app", Version: "v5.0.10", UIDGID: "10001:10001"}
-	chainBuilder := cosmos.NewChainBuilderWithTestName(t, t.Name()).
-		WithDockerClient(dockerClient).
-		WithDockerNetworkID(networkID).
-		WithImage(appImage).
-		WithEncodingConfig(&enc).
-		WithAdditionalStartArgs(
-			"--force-no-bbr",
-			"--grpc.enable",
-			"--grpc.address", "0.0.0.0:9090",
-			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
-			"--timeout-commit", "1s",
-			"--minimum-gas-prices", "0utia",
-		).
-		WithNode(cosmos.NewChainNodeConfigBuilder().Build())
-
-	chain, err := chainBuilder.Build(ctx)
+	chain, err := cfg.ChainBuilder.Build(ctx)
 	if err != nil {
-		return Stack{}, fmt.Errorf("build celestia-app: %w", err)
+		return nil, nil, fmt.Errorf("build celestia-app: %w", err)
 	}
 	if err := chain.Start(ctx); err != nil {
-		return Stack{}, fmt.Errorf("start celestia-app: %w", err)
+		return nil, nil, fmt.Errorf("start celestia-app: %w", err)
 	}
 
 	chainID := chain.GetChainID()
 	cni, err := chain.GetNodes()[0].GetNetworkInfo(ctx)
 	if err != nil {
-		return Stack{}, fmt.Errorf("chain network info: %w", err)
+		return nil, nil, fmt.Errorf("chain network info: %w", err)
 	}
 	coreHost := cni.Internal.Hostname
 	coreGenesisHash, err := getGenesisHash(ctx, chain)
 	if err != nil {
-		return Stack{}, fmt.Errorf("get genesis hash: %w", err)
+		return nil, nil, fmt.Errorf("get genesis hash: %w", err)
 	}
 
-	// 2) DA bridge
-	daImage := container.Image{Repository: "ghcr.io/celestiaorg/celestia-node", Version: "v0.26.4", UIDGID: "10001:10001"}
 	bridgeCfg := da.NewNodeBuilder().WithNodeType(types.BridgeNode).Build()
-	danet, err := da.NewNetworkBuilderWithTestName(t, t.Name()).
-		WithDockerClient(dockerClient).
-		WithDockerNetworkID(networkID).
-		WithImage(daImage).
+	danet, err := cfg.DANetworkBuilder.
 		WithNodes(bridgeCfg).
 		WithChainID(chainID).
 		Build(ctx)
 	if err != nil {
-		return Stack{}, fmt.Errorf("build da network: %w", err)
+		return nil, nil, fmt.Errorf("build da network: %w", err)
 	}
 	bridge := danet.GetBridgeNodes()[0]
 	if err := bridge.Start(ctx,
@@ -104,59 +67,60 @@ func DeployMinimalStack(t *testing.T) (Stack, error) {
 			"P2P_NETWORK":     chainID,
 		}),
 	); err != nil {
-		return Stack{}, fmt.Errorf("start da bridge: %w", err)
+		return nil, nil, fmt.Errorf("start da bridge: %w", err)
 	}
 
-	// fund DA wallet
+	// fund DA wallet for data submissions
 	daWallet, err := bridge.GetWallet()
 	if err != nil {
-		return Stack{}, fmt.Errorf("get da wallet: %w", err)
+		return nil, nil, fmt.Errorf("get da wallet: %w", err)
 	}
 	from, err := sdkacc.AddressFromWallet(chain.GetFaucetWallet())
 	if err != nil {
-		return Stack{}, fmt.Errorf("faucet address: %w", err)
+		return nil, nil, fmt.Errorf("faucet address: %w", err)
 	}
 	to, err := sdk.AccAddressFromBech32(daWallet.GetFormattedAddress())
 	if err != nil {
-		return Stack{}, fmt.Errorf("da address: %w", err)
+		return nil, nil, fmt.Errorf("da address: %w", err)
 	}
 	send := banktypes.NewMsgSend(from, to, sdk.NewCoins(sdk.NewCoin("utia", sdkmath.NewInt(100_000_000_00))))
 	if _, err := chain.BroadcastMessages(ctx, chain.GetFaucetWallet(), send); err != nil {
-		return Stack{}, fmt.Errorf("fund da wallet: %w", err)
+		return nil, nil, fmt.Errorf("fund da wallet: %w", err)
 	}
 
-	// internal DA RPC for evm-single
-	bni, err := bridge.GetNetworkInfo(ctx)
-	if err != nil {
-		return Stack{}, fmt.Errorf("bridge network info: %w", err)
-	}
-	daAddress := fmt.Sprintf("http://%s:%s", bni.Internal.IP, bni.Internal.Ports.RPC)
+	return chain, danet, nil
+}
 
-	// 3) reth
-	rnode, err := reth.NewNodeBuilderWithTestName(t, t.Name()).
-		WithDockerClient(dockerClient).
-		WithDockerNetworkID(networkID).
-		WithGenesis([]byte(reth.DefaultEvolveGenesisJSON())).
-		Build(ctx)
+// DeployRethWithEVMSingle starts reth and evm-single wired together and to the provided DA address.
+func DeployRethWithEVMSingle(t *testing.T, cfg *TestSetupConfig, danet *da.Network) (*reth.Node, *evmsingle.Chain, error) {
+	t.Helper()
+	ctx := context.Background()
+
+	rnode, err := cfg.RethBuilder.Build(ctx)
 	if err != nil {
-		return Stack{}, fmt.Errorf("build reth: %w", err)
+		return nil, nil, fmt.Errorf("build reth: %w", err)
 	}
 	if err := rnode.Start(ctx); err != nil {
-		return Stack{}, fmt.Errorf("start reth: %w", err)
+		return nil, nil, fmt.Errorf("start reth: %w", err)
 	}
 
 	rni, err := rnode.GetNetworkInfo(ctx)
 	if err != nil {
-		return Stack{}, fmt.Errorf("reth network info: %w", err)
+		return nil, nil, fmt.Errorf("reth network info: %w", err)
 	}
 	evmEthURL := fmt.Sprintf("http://%s:%s", rni.Internal.Hostname, rni.Internal.Ports.RPC)
 	evmEngineURL := fmt.Sprintf("http://%s:%s", rni.Internal.Hostname, rni.Internal.Ports.Engine)
 	rGenesisHash, err := rnode.GenesisHash(ctx)
 	if err != nil {
-		return Stack{}, fmt.Errorf("reth genesis hash: %w", err)
+		return nil, nil, fmt.Errorf("reth genesis hash: %w", err)
 	}
 
-	// 4) evm-single
+	bridgeNodeNetworkInfo, err := danet.GetBridgeNodes()[0].GetNetworkInfo(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("bridge network info: %w", err)
+	}
+	daAddress := fmt.Sprintf("http://%s:%s", bridgeNodeNetworkInfo.Internal.IP, bridgeNodeNetworkInfo.Internal.Ports.RPC)
+
 	evNodeCfg := evmsingle.NewNodeConfigBuilder().
 		WithEVMEngineURL(evmEngineURL).
 		WithEVMETHURL(evmEthURL).
@@ -166,22 +130,35 @@ func DeployMinimalStack(t *testing.T) (Stack, error) {
 		WithEVMGenesisHash(rGenesisHash).
 		WithDAAddress(daAddress).
 		Build()
-	evChain, err := evmsingle.NewChainBuilderWithTestName(t, t.Name()).
-		WithDockerClient(dockerClient).
-		WithDockerNetworkID(networkID).
-		WithNodes(evNodeCfg).
-		Build(ctx)
+
+	evmSingle, err := cfg.EVMSingleChainBuilder.WithNodes(evNodeCfg).Build(ctx)
 	if err != nil {
-		return Stack{}, fmt.Errorf("build evm-single: %w", err)
+		return nil, nil, fmt.Errorf("build evm-single: %w", err)
 	}
-	if err := evChain.Start(ctx); err != nil {
-		return Stack{}, fmt.Errorf("start evm-single: %w", err)
+	if err := evmSingle.Start(ctx); err != nil {
+		return nil, nil, fmt.Errorf("start evm-single: %w", err)
 	}
 
-	return Stack{
-		celestia: chain,
-		da:       danet,
-		reth:     rnode,
-		evm:      evChain,
-	}, nil
+	return rnode, evmSingle, nil
+}
+
+// DeployMinimalStack is a test helper that spins up a simple, fully-wired stack using defaults:
+// - celestia-app (1 validator)
+// - celestia-node (1 bridge) pointed at celestia-app
+// - reth (1 node)
+// - evm-single (1 node) pointed at reth + DA
+func DeployMinimalStack(t *testing.T, cfg *TestSetupConfig) (Stack, error) {
+	t.Helper()
+
+	chain, daNetwork, err := DeployCelestiaWithDABridgeNode(t, cfg)
+	if err != nil {
+		return Stack{}, err
+	}
+
+	rethNode, evChain, err := DeployRethWithEVMSingle(t, cfg, daNetwork)
+	if err != nil {
+		return Stack{}, err
+	}
+
+	return Stack{celestia: chain, da: daNetwork, reth: rethNode, evm: evChain}, nil
 }
