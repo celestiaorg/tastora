@@ -21,7 +21,7 @@ const (
 func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 	var evmChainName string
 	var signerKey string
-	for name, chainCfg := range d.schema.RelayerConfig.Chains {
+	for name, chainCfg := range d.relayerCfg.Chains {
 		if chainCfg.Protocol == "ethereum" {
 			evmChainName = name
 			if chainCfg.Signer != nil {
@@ -53,6 +53,8 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 
 	d.Logger.Info("core contracts deployed", zap.String("chain", evmChainName))
 
+	// NOTE: the `hyperlane core deploy` step writes `addresses.yaml` to disk which is required to write the core
+	// config to disk and so this step happens after execution.
 	if err := d.writeCoreConfig(ctx); err != nil {
 		return fmt.Errorf("failed to write core config: %w", err)
 	}
@@ -82,7 +84,7 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	// find first EVM chain and signer
 	var evmChainName string
-	for name, chainCfg := range d.schema.RelayerConfig.Chains {
+	for name, chainCfg := range d.relayerCfg.Chains {
 		if chainCfg.Protocol == "ethereum" {
 			evmChainName = name
 			break
@@ -144,8 +146,6 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	if err := d.WriteFile(ctx, path.Join("configs", "core-config.yaml"), bz); err != nil {
 		return fmt.Errorf("write core-config: %w", err)
 	}
-
-	d.schema.CoreConfig = &core
 
 	d.Logger.Info("wrote core-config.yaml")
 	return nil

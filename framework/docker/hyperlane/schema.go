@@ -1,31 +1,11 @@
 package hyperlane
 
-import "context"
-
 // Schema contains all Hyperlane configuration structures.
 type Schema struct {
 	RelayerConfig *RelayerConfig
 	Registry      *Registry
 	WarpConfig    map[string]*WarpConfigEntry
 	CoreConfig    *CoreConfig
-}
-
-// buildSchema builds a hyperlane scheme from the provided set of chains.
-func buildSchema(ctx context.Context, chains []ChainConfigProvider) (*Schema, error) {
-	config, err := BuildRelayerConfig(ctx, chains)
-	if err != nil {
-		return nil, err
-	}
-
-	registry, err := BuildRegistry(ctx, chains)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Schema{
-		RelayerConfig: config,
-		Registry:      registry,
-	}, nil
 }
 
 // Registry models the contents of a hyperlane registry.

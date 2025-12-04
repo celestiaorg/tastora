@@ -22,11 +22,12 @@ const (
 type Deployer struct {
 	*container.Node
 
-	cfg      Config
-	schema   *Schema
-	chains   []ChainConfigProvider
-	deployed bool
-	hasWarp  bool
+	cfg        Config
+	relayerCfg *RelayerConfig
+	registry   *Registry
+	chains     []ChainConfigProvider
+	deployed   bool
+	hasWarp    bool
 }
 
 // NewDeployer creates a new Hyperlane deployment coordinator
@@ -80,13 +81,17 @@ func (d *Deployer) Name() string {
 func (d *Deployer) init(ctx context.Context) error {
 	d.Logger.Info("initializing hyperlane deployment coordinator")
 
-	schema, err := buildSchema(ctx, d.chains)
+	relayerCfg, err := BuildRelayerConfig(ctx, d.chains)
 	if err != nil {
-		return fmt.Errorf("failed to build schema: %w", err)
+		return fmt.Errorf("failed to build relayer config: %w", err)
 	}
+	d.relayerCfg = relayerCfg
 
-	// NOTE: scheme is not yet fully constructed, it gets fully populated after core and warp deployments.
-	d.schema = schema
+	registry, err := BuildRegistry(ctx, d.chains)
+	if err != nil {
+		return fmt.Errorf("failed to build registry: %w", err)
+	}
+	d.registry = registry
 
 	if err := d.writeRelayerConfig(ctx); err != nil {
 		return fmt.Errorf("failed to write relayer config: %w", err)
@@ -127,7 +132,7 @@ func (d *Deployer) Deploy(ctx context.Context) error {
 }
 
 func (d *Deployer) writeRelayerConfig(ctx context.Context) error {
-	relayerConfigBytes, err := SerializeRelayerConfig(d.schema.RelayerConfig)
+	relayerConfigBytes, err := SerializeRelayerConfig(d.relayerCfg)
 	if err != nil {
 		return fmt.Errorf("failed to serialize relayer config: %w", err)
 	}
@@ -139,7 +144,7 @@ func (d *Deployer) writeRelayerConfig(ctx context.Context) error {
 }
 
 func (d *Deployer) writeRegistry(ctx context.Context) error {
-	for chainName, entry := range d.schema.Registry.Chains {
+	for chainName, entry := range d.registry.Chains {
 		metadataBytes, err := yaml.Marshal(entry.Metadata)
 		if err != nil {
 			return fmt.Errorf("failed to marshal metadata for %s: %w", chainName, err)
@@ -174,8 +179,6 @@ func (d *Deployer) writeWarpConfig(ctx context.Context) error {
 	if len(warpConfig) == 0 {
 		return fmt.Errorf("no chains with warp config found")
 	}
-
-	d.schema.WarpConfig = warpConfig
 
 	warpConfigBytes, err := yaml.Marshal(warpConfig)
 	if err != nil {
@@ -218,7 +221,21 @@ func (d *Deployer) GetOnDiskSchema(ctx context.Context) (*Schema, error) {
 		reg.Chains[chainName] = &RegistryEntry{Metadata: meta, Addresses: addrs}
 	}
 
-	return &Schema{RelayerConfig: &relCfg, Registry: reg}, nil
+	s := &Schema{RelayerConfig: &relCfg, Registry: reg}
+	if b, err := d.ReadFile(ctx, filepath.Join("configs", "core-config.yaml")); err == nil {
+		var core CoreConfig
+		if err := yaml.Unmarshal(b, &core); err == nil {
+			s.CoreConfig = &core
+		}
+	}
+
+	if b, err := d.ReadFile(ctx, filepath.Join("configs", "warp-config.yaml")); err == nil {
+		var warp map[string]*WarpConfigEntry
+		if err := yaml.Unmarshal(b, &warp); err == nil {
+			s.WarpConfig = warp
+		}
+	}
+	return s, nil
 }
 
 // readMetadataFromDisk reads the chain metadata from the YAML file on disk.
