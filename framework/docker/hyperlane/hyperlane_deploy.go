@@ -6,9 +6,9 @@ import (
 	"path"
 
 	hyputil "github.com/bcp-innovations/hyperlane-cosmos/util"
-	coretypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/types"
 	ismtypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/01_interchain_security/types"
 	hooktypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/02_post_dispatch/types"
+	coretypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/types"
 	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
 	"github.com/celestiaorg/tastora/framework/types"
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -159,60 +159,47 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	return nil
 }
 
-
-// DeployCosmosNativeHyperlane deploys the complete cosmos-native hyperlane stack including ISM, hooks, mailbox, and token.
-func (d *Deployer) DeployCosmosNativeHyperlane(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) (*HyperlaneCosmosConfig, error) {
-	// 1. create noop ISM
+// DeployCosmosNoopISM deploys the complete cosmos-native hyperlane stack including ISM, hooks, mailbox, and token.
+func (d *Deployer) DeployCosmosNoopISM(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) (*CosmosConfig, error) {
 	ismID, err := d.deployNoopISM(ctx, chain, sender)
 	if err != nil {
 		return nil, fmt.Errorf("deploy noop ISM: %w", err)
 	}
 	d.Logger.Info("created noop ISM", zap.String("ism_id", ismID.String()))
 
-	// 2. create noop hook
 	hooksID, err := d.deployNoopHook(ctx, chain, sender)
 	if err != nil {
 		return nil, fmt.Errorf("deploy noop hook: %w", err)
 	}
 	d.Logger.Info("created noop hook", zap.String("hooks_id", hooksID.String()))
 
-	// 3. create mailbox with ISM and hooks
 	mailboxID, err := d.createMailbox(ctx, chain, sender, ismID, hooksID)
 	if err != nil {
 		return nil, fmt.Errorf("create mailbox: %w", err)
 	}
 	d.Logger.Info("created mailbox", zap.String("mailbox_id", mailboxID.String()))
 
-	// 4. create collateral token
 	tokenID, err := d.createCollateralToken(ctx, chain, sender, mailboxID)
 	if err != nil {
 		return nil, fmt.Errorf("create collateral token: %w", err)
 	}
 	d.Logger.Info("created collateral token", zap.String("token_id", tokenID.String()))
 
-	// 5. set ISM on token
 	if err := d.setTokenISM(ctx, chain, sender, tokenID, ismID); err != nil {
 		return nil, fmt.Errorf("set token ISM: %w", err)
 	}
+
 	d.Logger.Info("set ISM on token")
 
-	config := &HyperlaneCosmosConfig{
+	config := &CosmosConfig{
 		IsmID:     ismID,
 		HooksID:   hooksID,
 		MailboxID: mailboxID,
 		TokenID:   tokenID,
 	}
 
-	d.Logger.Info("cosmos-native hyperlane deployment completed")
+	d.Logger.Info("cosmos-native noop-ism deployment completed")
 	return config, nil
-}
-
-// HyperlaneCosmosConfig contains the IDs of all deployed cosmos-native hyperlane components
-type HyperlaneCosmosConfig struct {
-	IsmID     hyputil.HexAddress `json:"ism_id"`
-	HooksID   hyputil.HexAddress `json:"hooks_id"`
-	MailboxID hyputil.HexAddress `json:"mailbox_id"`
-	TokenID   hyputil.HexAddress `json:"token_id"`
 }
 
 func (d *Deployer) deployNoopISM(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) (hyputil.HexAddress, error) {
@@ -234,13 +221,22 @@ func (d *Deployer) deployNoopHook(ctx context.Context, chain types.Broadcaster, 
 }
 
 func (d *Deployer) createMailbox(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, ismID, hooksID hyputil.HexAddress) (hyputil.HexAddress, error) {
+	var domainID uint32
+	for _, chainCfg := range d.relayerCfg.Chains {
+		if chainCfg.Protocol == "cosmosnative" {
+			domainID = chainCfg.DomainID
+			break
+		}
+	}
+
 	msg := &coretypes.MsgCreateMailbox{
 		Owner:        sender.GetFormattedAddress(),
-		LocalDomain:  69420,
+		LocalDomain:  domainID,
 		DefaultIsm:   ismID,
 		DefaultHook:  &hooksID,
 		RequiredHook: &hooksID,
 	}
+
 	resp, err := chain.BroadcastMessages(ctx, sender, msg)
 	if err != nil {
 		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateMailbox: %w", err)
