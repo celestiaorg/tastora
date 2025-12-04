@@ -88,7 +88,11 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		require.Greaterf(t, len(code), 0, "%s should have non-empty code", name)
 	}
 
-	err = d.DeployNoopISMCosmos(ctx, cosmos.NewBroadcaster(chain), chain.GetNode().GetFaucetWallet())
+	config, err := d.DeployCosmosNativeHyperlane(ctx, cosmos.NewBroadcaster(chain), chain.GetNode().GetFaucetWallet())
 	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s",
+		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String())
 
 }

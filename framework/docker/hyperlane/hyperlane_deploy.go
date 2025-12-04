@@ -5,8 +5,14 @@ import (
 	"fmt"
 	"path"
 
+	hyputil "github.com/bcp-innovations/hyperlane-cosmos/util"
+	coretypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/types"
 	ismtypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/01_interchain_security/types"
+	hooktypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/02_post_dispatch/types"
+	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
 	"github.com/celestiaorg/tastora/framework/types"
+	abci "github.com/cometbft/cometbft/abci/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
@@ -153,12 +159,185 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	return nil
 }
 
-// DeployNoopISMCosmos broadcasts MsgCreateNoopIsm using the chain's faucet wallet via the framework broadcaster.
-func (d *Deployer) DeployNoopISMCosmos(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) error {
-	msg := &ismtypes.MsgCreateNoopIsm{Creator: sender.GetFormattedAddress()}
-	if _, err := chain.BroadcastMessages(ctx, sender, msg); err != nil {
-		return fmt.Errorf("broadcast MsgCreateNoopIsm failed: %w", err)
+
+// DeployCosmosNativeHyperlane deploys the complete cosmos-native hyperlane stack including ISM, hooks, mailbox, and token.
+func (d *Deployer) DeployCosmosNativeHyperlane(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) (*HyperlaneCosmosConfig, error) {
+	// 1. create noop ISM
+	ismID, err := d.deployNoopISM(ctx, chain, sender)
+	if err != nil {
+		return nil, fmt.Errorf("deploy noop ISM: %w", err)
 	}
-	d.Logger.Info("noop ISM created via BroadcastMessages", zap.String("from", sender.GetFormattedAddress()))
+	d.Logger.Info("created noop ISM", zap.String("ism_id", ismID.String()))
+
+	// 2. create noop hook
+	hooksID, err := d.deployNoopHook(ctx, chain, sender)
+	if err != nil {
+		return nil, fmt.Errorf("deploy noop hook: %w", err)
+	}
+	d.Logger.Info("created noop hook", zap.String("hooks_id", hooksID.String()))
+
+	// 3. create mailbox with ISM and hooks
+	mailboxID, err := d.createMailbox(ctx, chain, sender, ismID, hooksID)
+	if err != nil {
+		return nil, fmt.Errorf("create mailbox: %w", err)
+	}
+	d.Logger.Info("created mailbox", zap.String("mailbox_id", mailboxID.String()))
+
+	// 4. create collateral token
+	tokenID, err := d.createCollateralToken(ctx, chain, sender, mailboxID)
+	if err != nil {
+		return nil, fmt.Errorf("create collateral token: %w", err)
+	}
+	d.Logger.Info("created collateral token", zap.String("token_id", tokenID.String()))
+
+	// 5. set ISM on token
+	if err := d.setTokenISM(ctx, chain, sender, tokenID, ismID); err != nil {
+		return nil, fmt.Errorf("set token ISM: %w", err)
+	}
+	d.Logger.Info("set ISM on token")
+
+	config := &HyperlaneCosmosConfig{
+		IsmID:     ismID,
+		HooksID:   hooksID,
+		MailboxID: mailboxID,
+		TokenID:   tokenID,
+	}
+
+	d.Logger.Info("cosmos-native hyperlane deployment completed")
+	return config, nil
+}
+
+// HyperlaneCosmosConfig contains the IDs of all deployed cosmos-native hyperlane components
+type HyperlaneCosmosConfig struct {
+	IsmID     hyputil.HexAddress `json:"ism_id"`
+	HooksID   hyputil.HexAddress `json:"hooks_id"`
+	MailboxID hyputil.HexAddress `json:"mailbox_id"`
+	TokenID   hyputil.HexAddress `json:"token_id"`
+}
+
+func (d *Deployer) deployNoopISM(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) (hyputil.HexAddress, error) {
+	msg := &ismtypes.MsgCreateNoopIsm{Creator: sender.GetFormattedAddress()}
+	resp, err := chain.BroadcastMessages(ctx, sender, msg)
+	if err != nil {
+		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateNoopIsm: %w", err)
+	}
+	return parseISMIDFromEvents(resp.Events)
+}
+
+func (d *Deployer) deployNoopHook(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) (hyputil.HexAddress, error) {
+	msg := &hooktypes.MsgCreateNoopHook{Owner: sender.GetFormattedAddress()}
+	resp, err := chain.BroadcastMessages(ctx, sender, msg)
+	if err != nil {
+		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateNoopHook: %w", err)
+	}
+	return parseHooksIDFromEvents(resp.Events)
+}
+
+func (d *Deployer) createMailbox(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, ismID, hooksID hyputil.HexAddress) (hyputil.HexAddress, error) {
+	msg := &coretypes.MsgCreateMailbox{
+		Owner:        sender.GetFormattedAddress(),
+		LocalDomain:  69420,
+		DefaultIsm:   ismID,
+		DefaultHook:  &hooksID,
+		RequiredHook: &hooksID,
+	}
+	resp, err := chain.BroadcastMessages(ctx, sender, msg)
+	if err != nil {
+		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateMailbox: %w", err)
+	}
+	return parseMailboxIDFromEvents(resp.Events)
+}
+
+func (d *Deployer) createCollateralToken(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, mailboxID hyputil.HexAddress) (hyputil.HexAddress, error) {
+	msg := &warptypes.MsgCreateCollateralToken{
+		Owner:         sender.GetFormattedAddress(),
+		OriginMailbox: mailboxID,
+		OriginDenom:   "utia",
+	}
+	resp, err := chain.BroadcastMessages(ctx, sender, msg)
+	if err != nil {
+		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateCollateralToken: %w", err)
+	}
+	return parseTokenIDFromEvents(resp.Events)
+}
+
+func (d *Deployer) setTokenISM(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, tokenID, ismID hyputil.HexAddress) error {
+	msg := &warptypes.MsgSetToken{
+		Owner:   sender.GetFormattedAddress(),
+		TokenId: tokenID,
+		IsmId:   &ismID,
+	}
+	_, err := chain.BroadcastMessages(ctx, sender, msg)
+	if err != nil {
+		return fmt.Errorf("broadcast MsgSetToken: %w", err)
+	}
 	return nil
+}
+
+func parseISMIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
+	for _, evt := range events {
+		typedEvt, err := sdk.ParseTypedEvent(evt)
+		if err != nil {
+			continue
+		}
+		if sdk.MsgTypeURL(typedEvt) == "/hyperlane.core.interchain_security.v1.EventCreateNoopIsm" {
+			createEvent, ok := typedEvt.(*ismtypes.EventCreateNoopIsm)
+			if !ok {
+				continue
+			}
+			return createEvent.IsmId, nil
+		}
+	}
+	return hyputil.HexAddress{}, fmt.Errorf("ISM ID not found in events")
+}
+
+func parseHooksIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
+	for _, evt := range events {
+		typedEvt, err := sdk.ParseTypedEvent(evt)
+		if err != nil {
+			continue
+		}
+		if sdk.MsgTypeURL(typedEvt) == "/hyperlane.core.post_dispatch.v1.EventCreateNoopHook" {
+			createEvent, ok := typedEvt.(*hooktypes.EventCreateNoopHook)
+			if !ok {
+				continue
+			}
+			return createEvent.NoopHookId, nil
+		}
+	}
+	return hyputil.HexAddress{}, fmt.Errorf("hooks ID not found in events")
+}
+
+func parseMailboxIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
+	for _, evt := range events {
+		typedEvt, err := sdk.ParseTypedEvent(evt)
+		if err != nil {
+			continue
+		}
+		if sdk.MsgTypeURL(typedEvt) == "/hyperlane.core.v1.EventCreateMailbox" {
+			createEvent, ok := typedEvt.(*coretypes.EventCreateMailbox)
+			if !ok {
+				continue
+			}
+			return createEvent.MailboxId, nil
+		}
+	}
+	return hyputil.HexAddress{}, fmt.Errorf("mailbox ID not found in events")
+}
+
+func parseTokenIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
+	for _, evt := range events {
+		typedEvt, err := sdk.ParseTypedEvent(evt)
+		if err != nil {
+			continue
+		}
+		if sdk.MsgTypeURL(typedEvt) == "/hyperlane.warp.v1.EventCreateCollateralToken" {
+			createEvent, ok := typedEvt.(*warptypes.EventCreateCollateralToken)
+			if !ok {
+				continue
+			}
+			return createEvent.TokenId, nil
+		}
+	}
+	return hyputil.HexAddress{}, fmt.Errorf("token ID not found in events")
 }
