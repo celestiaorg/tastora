@@ -6,9 +6,9 @@ import (
 	"sync"
 	"testing"
 
-	coretypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/types"
 	ismtypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/01_interchain_security/types"
 	hooktypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/02_post_dispatch/types"
+	coretypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/types"
 	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
@@ -79,8 +79,8 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 	warptypes.RegisterInterfaces(encConfig.InterfaceRegistry)
 
 	defaultImage := container.Image{
-		Repository: "ghcr.io/celestiaorg/celestia-app-standalone",
-		Version:    "feature-zk-execution-ism",
+		Repository: "ghcr.io/celestiaorg/celestia-app",
+		Version:    "v5.0.10",
 		UIDGID:     "10001:10001",
 	}
 
