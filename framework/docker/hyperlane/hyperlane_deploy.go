@@ -56,13 +56,9 @@ func (h *Deployer) deployCoreContracts(ctx context.Context) error {
 	}
 
 	if evmChainName == "" {
-		// No EVM chains present; skip core deployment step.
-		h.Logger.Info("no EVM chain found; skipping core deployment")
+		h.Logger.Info("no EVM chain found, skipping core deployment")
 		return nil
 	}
-
-	// run preflight diagnostics to catch permission/layout issues early
-	h.preflightRegistry(ctx)
 
 	cmd := []string{
 		"hyperlane", "core", "deploy",
@@ -74,15 +70,8 @@ func (h *Deployer) deployCoreContracts(ctx context.Context) error {
 	env := []string{
 		fmt.Sprintf("HYP_KEY=%s", signerKey),
 	}
-
-	stdout, stderr, err := h.Exec(ctx, h.Logger, cmd, env)
+	_, _, err := h.Exec(ctx, h.Logger, cmd, env)
 	if err != nil {
-		// Post-error diagnostics: list registry contents to help pinpoint the fault.
-		_, _, _ = h.Exec(ctx, h.Logger, []string{"sh", "-lc", "echo '--- registry dump ---'; ls -la /workspace/registry/chains || true; for d in /workspace/registry/chains/*; do echo \"--- $d ---\"; ls -la \"$d\" || true; for f in metadata.yaml metadata.json addresses.yaml addresses.json; do [ -f \"$d/$f\" ] && (echo \"--- cat $d/$f ---\"; sed -n '1,120p' \"$d/$f\") || true; done; done"}, nil)
-		h.Logger.Error("core deploy failed",
-			zap.String("stdout", string(stdout)),
-			zap.String("stderr", string(stderr)),
-			zap.Error(err))
 		return fmt.Errorf("core deploy failed: %w", err)
 	}
 
@@ -98,12 +87,8 @@ func (h *Deployer) deployWarpRoutes(ctx context.Context) error {
 		"--yes",
 	}
 
-	stdout, stderr, err := h.Exec(ctx, h.Logger, cmd, nil)
+	_, _, err := h.Exec(ctx, h.Logger, cmd, nil)
 	if err != nil {
-		h.Logger.Error("warp deploy failed",
-			zap.String("stdout", string(stdout)),
-			zap.String("stderr", string(stderr)),
-			zap.Error(err))
 		return fmt.Errorf("warp deploy failed: %w", err)
 	}
 
@@ -139,49 +124,50 @@ func (h *Deployer) writeCoreConfig(ctx context.Context) error {
 		return fmt.Errorf("unmarshal addresses: %w", err)
 	}
 
-	// derive owner address from signerKey (hex privkey)
+	// derive owner address from signerKey hex privkey
 	ownerAddr, err := deriveEthAddress(signerKey)
 	if err != nil {
 		return fmt.Errorf("derive owner address: %w", err)
 	}
 
-    // build core-config structure
-    core := CoreConfig{}
-    core.DefaultHook = HookCfg{Address: addrs.MerkleTreeHook, Type: "merkleTreeHook"}
+	// build core-config structure
+	core := CoreConfig{}
+	core.DefaultHook = HookCfg{Address: addrs.MerkleTreeHook, Type: "merkleTreeHook"}
 	// prefer TestIsm if present, otherwise InterchainSecurityModule
 	if addrs.TestIsm != "" {
-        core.DefaultIsm = HookCfg{Address: addrs.TestIsm, Type: "testIsm"}
-    } else if addrs.InterchainSecurityModule != "" {
-        core.DefaultIsm = HookCfg{Address: addrs.InterchainSecurityModule, Type: "testIsm"}
-    }
-    core.InterchainAccountRouter = InterchainAccountRouterCfg{
-        Address:          addrs.InterchainAccountRouter,
-        Mailbox:          addrs.Mailbox,
-        Owner:            ownerAddr,
-        ProxyAdmin:       ProxyAdminCfg{Address: addrs.ProxyAdmin, Owner: ownerAddr},
-        RemoteIcaRouters: map[string]string{},
-    }
+		core.DefaultIsm = HookCfg{Address: addrs.TestIsm, Type: "testIsm"}
+	} else if addrs.InterchainSecurityModule != "" {
+		core.DefaultIsm = HookCfg{Address: addrs.InterchainSecurityModule, Type: "testIsm"}
+	}
+	core.InterchainAccountRouter = InterchainAccountRouterCfg{
+		Address:          addrs.InterchainAccountRouter,
+		Mailbox:          addrs.Mailbox,
+		Owner:            ownerAddr,
+		ProxyAdmin:       ProxyAdminCfg{Address: addrs.ProxyAdmin, Owner: ownerAddr},
+		RemoteIcaRouters: map[string]string{},
+	}
 
-    core.Owner = ownerAddr
-    core.ProxyAdmin = ProxyAdminCfg{Address: addrs.ProxyAdmin, Owner: ownerAddr}
-    // requiredHook maps to protocolFee settings; address is InterchainGasPaymaster
-    core.RequiredHook = RequiredHookCfg{
-        Address:        addrs.InterchainGasPaymaster,
-        Beneficiary:    ownerAddr,
-        MaxProtocolFee: "10000000000000000000000000000",
-        Owner:          ownerAddr,
-        ProtocolFee:    "0",
-        Type:           "protocolFee",
-    }
+	core.Owner = ownerAddr
+	core.ProxyAdmin = ProxyAdminCfg{Address: addrs.ProxyAdmin, Owner: ownerAddr}
+	// requiredHook maps to protocolFee settings, address is InterchainGasPaymaster
+	core.RequiredHook = RequiredHookCfg{
+		Address:        addrs.InterchainGasPaymaster,
+		Beneficiary:    ownerAddr,
+		MaxProtocolFee: "10000000000000000000000000000",
+		Owner:          ownerAddr,
+		ProtocolFee:    "0",
+		Type:           "protocolFee",
+	}
 
-	// write YAML file
-	b, err := yaml.Marshal(core)
+	bz, err := yaml.Marshal(core)
 	if err != nil {
 		return fmt.Errorf("marshal core-config: %w", err)
 	}
-	if err := h.WriteFile(ctx, path.Join("configs", "core-config.yaml"), b); err != nil {
+
+	if err := h.WriteFile(ctx, path.Join("configs", "core-config.yaml"), bz); err != nil {
 		return fmt.Errorf("write core-config: %w", err)
 	}
+
 	h.Logger.Info("wrote core-config.yaml")
 	return nil
 }

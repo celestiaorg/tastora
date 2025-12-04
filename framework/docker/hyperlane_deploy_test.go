@@ -31,9 +31,9 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	// 4) Initialize the Hyperlane deployer with the reth node as a provider
 	// Select a hyperlane image. Allow override via HYPERLANE_IMAGE (format repo:tag)
-	hlImage := hyperlane.DefaultHyperlaneImage()
+	hlImage := hyperlane.DefaultDeployerImage()
 
-	d, err := hyperlane.NewHyperlane(
+	d, err := hyperlane.NewDeployer(
 		ctx,
 		hyperlane.Config{
 			Logger:          testCfg.Logger,
@@ -56,12 +56,6 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	// also expect the cosmos chain entry by its configured name
 	require.NotEmpty(t, relayerCfg.Chains[chain.Config.Name])
 
-	// Registry metadata for reth should exist
-	_, err = d.ReadFile(ctx, filepath.Join("registry", "chains", "rethlocal", "metadata.yaml"))
-	require.NoError(t, err)
-	// Registry paths for reth and cosmos exist
-	_, err = d.ReadFile(ctx, filepath.Join("registry", "chains", "rethlocal", "addresses.yaml"))
-	require.NoError(t, err)
 	_, err = d.ReadFile(ctx, filepath.Join("registry", "chains", chain.Config.Name, "metadata.yaml"))
 	require.NoError(t, err)
 

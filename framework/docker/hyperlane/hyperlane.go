@@ -1,13 +1,13 @@
 package hyperlane
 
 import (
-    "context"
-    "crypto/ecdsa"
-    "encoding/hex"
-    "encoding/json"
-    "fmt"
-    "path"
-    "path/filepath"
+	"context"
+	"crypto/ecdsa"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"path"
+	"path/filepath"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
@@ -33,8 +33,8 @@ type Deployer struct {
 	hasWarp  bool
 }
 
-// NewHyperlane creates a new Hyperlane deployment coordinator
-func NewHyperlane(ctx context.Context, cfg Config, testName string, chains []ChainConfigProvider) (*Deployer, error) {
+// NewDeployer creates a new Hyperlane deployment coordinator
+func NewDeployer(ctx context.Context, cfg Config, testName string, chains []ChainConfigProvider) (*Deployer, error) {
 	if len(chains) == 0 {
 		return nil, fmt.Errorf("at least one chain required")
 	}
@@ -134,6 +134,7 @@ func (h *Deployer) writeConfigs(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to serialize relayer config: %w", err)
 	}
+
 	if err := h.WriteFile(ctx, "relayer-config.json", relayerConfigBytes); err != nil {
 		return fmt.Errorf("failed to write relayer config: %w", err)
 	}
@@ -156,28 +157,10 @@ func (h *Deployer) writeRegistry(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal metadata for %s: %w", chainName, err)
 		}
+
 		metadataPath := path.Join("registry", "chains", chainName, "metadata.yaml")
 		if err := h.WriteFile(ctx, metadataPath, metadataBytes); err != nil {
 			return fmt.Errorf("failed to write metadata for %s: %w", chainName, err)
-		}
-
-		addressesBytes, err := yaml.Marshal(entry.Addresses)
-		if err != nil {
-			return fmt.Errorf("failed to marshal addresses for %s: %w", chainName, err)
-		}
-		addressesPath := path.Join("registry", "chains", chainName, "addresses.yaml")
-		if err := h.WriteFile(ctx, addressesPath, addressesBytes); err != nil {
-			return fmt.Errorf("failed to write addresses for %s: %w", chainName, err)
-		}
-
-		// Also write JSON variants to maximize CLI compatibility
-		metadataJSON, err := json.MarshalIndent(entry.Metadata, "", "  ")
-		if err == nil {
-			_ = h.WriteFile(ctx, path.Join("registry", "chains", chainName, "metadata.json"), metadataJSON)
-		}
-		addressesJSON, err := json.MarshalIndent(entry.Addresses, "", "  ")
-		if err == nil {
-			_ = h.WriteFile(ctx, path.Join("registry", "chains", chainName, "addresses.json"), addressesJSON)
 		}
 	}
 
@@ -240,49 +223,68 @@ func deriveEthAddress(hexKey string) (string, error) {
 
 // GetOnDiskSchema reconstructs a Schema by reading files written to disk
 func (h *Deployer) GetOnDiskSchema(ctx context.Context) (*Schema, error) {
-    // Read relayer-config.json
-    relCfgBytes, err := h.ReadFile(ctx, "relayer-config.json")
-    if err != nil {
-        return nil, fmt.Errorf("read relayer-config.json: %w", err)
-    }
-    var relCfg RelayerConfig
-    if err := json.Unmarshal(relCfgBytes, &relCfg); err != nil {
-        return nil, fmt.Errorf("unmarshal relayer-config.json: %w", err)
-    }
+	relCfgBytes, err := h.ReadFile(ctx, "relayer-config.json")
+	if err != nil {
+		return nil, fmt.Errorf("read relayer-config.json: %w", err)
+	}
 
-    reg := &Registry{Chains: make(map[string]*RegistryEntry)}
-    for chainName := range relCfg.Chains {
-        // metadata yaml or json
-        var meta ChainMetadata
-        if err := h.readYAMLOrJSON(ctx,
-            filepath.Join("registry", "chains", chainName, "metadata.yaml"),
-            filepath.Join("registry", "chains", chainName, "metadata.json"), &meta); err != nil {
-            return nil, fmt.Errorf("read %s metadata: %w", chainName, err)
-        }
-        var addrs ContractAddresses
-        if err := h.readYAMLOrJSON(ctx,
-            filepath.Join("registry", "chains", chainName, "addresses.yaml"),
-            filepath.Join("registry", "chains", chainName, "addresses.json"), &addrs); err != nil {
-            return nil, fmt.Errorf("read %s addresses: %w", chainName, err)
-        }
-        reg.Chains[chainName] = &RegistryEntry{Metadata: meta, Addresses: addrs}
-    }
+	var relCfg RelayerConfig
+	if err := json.Unmarshal(relCfgBytes, &relCfg); err != nil {
+		return nil, fmt.Errorf("unmarshal relayer-config.json: %w", err)
+	}
 
-    return &Schema{RelayerConfig: &relCfg, Registry: reg}, nil
+	reg := &Registry{Chains: make(map[string]*RegistryEntry)}
+	for chainName := range relCfg.Chains {
+		meta, err := h.readMetadataFromDisk(ctx, chainName)
+		if err != nil {
+			return nil, fmt.Errorf("read %s metadata: %w", chainName, err)
+		}
+
+		addrs, err := h.readAddressFromDisk(ctx, meta)
+		if err != nil {
+			return nil, fmt.Errorf("read %s addresses: %w", chainName, err)
+		}
+
+		reg.Chains[chainName] = &RegistryEntry{Metadata: meta, Addresses: addrs}
+	}
+
+	return &Schema{RelayerConfig: &relCfg, Registry: reg}, nil
 }
 
-func (h *Deployer) readYAMLOrJSON(ctx context.Context, yamlPath, jsonPath string, out any) error {
-    if b, err := h.ReadFile(ctx, yamlPath); err == nil {
-        if err := yaml.Unmarshal(b, out); err != nil {
-            return fmt.Errorf("unmarshal yaml %s: %w", yamlPath, err)
-        }
-        return nil
-    }
-    if b, err := h.ReadFile(ctx, jsonPath); err == nil {
-        if err := json.Unmarshal(b, out); err != nil {
-            return fmt.Errorf("unmarshal json %s: %w", jsonPath, err)
-        }
-        return nil
-    }
-    return fmt.Errorf("neither %s nor %s could be read", yamlPath, jsonPath)
+// readMetadataFromDisk reads the chain metadata from the YAML file on disk.
+func (d *Deployer) readMetadataFromDisk(ctx context.Context, chainName string) (ChainMetadata, error) {
+	metadataPath := filepath.Join("registry", "chains", chainName, "metadata.yaml")
+	bz, err := d.ReadFile(ctx, metadataPath)
+	if err != nil {
+		return ChainMetadata{}, fmt.Errorf("read %s addresses: %w", chainName, err)
+	}
+
+	var meta ChainMetadata
+	if err := yaml.Unmarshal(bz, &meta); err != nil {
+		return ChainMetadata{}, fmt.Errorf("unmarshal yaml %s: %w", metadataPath, err)
+	}
+
+	return meta, nil
+}
+
+// readAddressFromDisk reads the contract addresses from the YAML file on disk.
+func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) (ContractAddresses, error) {
+	// TODO: cosmos side not being handled yet, however ethereum addresses should be written to disk after
+	// deployment.
+	if meta.Protocol != "ethereum" {
+		return ContractAddresses{}, nil
+	}
+
+	addressPath := filepath.Join("registry", "chains", meta.Name, "addresses.yaml")
+	bz, err := d.ReadFile(ctx, addressPath)
+	if err != nil {
+		return ContractAddresses{}, fmt.Errorf("read %s addresses: %w", meta.Name, err)
+	}
+
+	var addresses ContractAddresses
+	if err := yaml.Unmarshal(bz, &addresses); err != nil {
+		return ContractAddresses{}, fmt.Errorf("unmarshal yaml %s: %w", addressPath, err)
+	}
+
+	return addresses, nil
 }
