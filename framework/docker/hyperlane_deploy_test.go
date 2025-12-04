@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	"path/filepath"
 	"testing"
 	"time"
@@ -86,4 +87,8 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		require.NoErrorf(t, err, "failed to fetch code for %s", name)
 		require.Greaterf(t, len(code), 0, "%s should have non-empty code", name)
 	}
+
+	err = d.DeployNoopISMCosmos(ctx, cosmos.NewBroadcaster(chain), chain.GetNode().GetFaucetWallet())
+	require.NoError(t, err)
+
 }

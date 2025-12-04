@@ -3,10 +3,12 @@ package hyperlane
 import (
 	"context"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"path"
 
+	ismtypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/01_interchain_security/types"
+	"github.com/celestiaorg/tastora/framework/types"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -148,5 +150,15 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	}
 
 	d.Logger.Info("wrote core-config.yaml")
+	return nil
+}
+
+// DeployNoopISMCosmos broadcasts MsgCreateNoopIsm using the chain's faucet wallet via the framework broadcaster.
+func (d *Deployer) DeployNoopISMCosmos(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) error {
+	msg := &ismtypes.MsgCreateNoopIsm{Creator: sender.GetFormattedAddress()}
+	if _, err := chain.BroadcastMessages(ctx, sender, msg); err != nil {
+		return fmt.Errorf("broadcast MsgCreateNoopIsm failed: %w", err)
+	}
+	d.Logger.Info("noop ISM created via BroadcastMessages", zap.String("from", sender.GetFormattedAddress()))
 	return nil
 }
