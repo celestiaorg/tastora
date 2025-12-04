@@ -19,12 +19,13 @@ const (
 // Deployer is a deployment coordinator that executes Hyperlane contract deployments
 // and configuration across multiple chains.
 type Deployer struct {
-	*container.Node
+    *container.Node
 
-	cfg      Config
-	schema   *Schema
-	chains   []ChainConfigProvider
-	deployed bool
+    cfg      Config
+    schema   *Schema
+    chains   []ChainConfigProvider
+    deployed bool
+    hasWarp  bool
 }
 
 // NewHyperlane creates a new Hyperlane deployment coordinator
@@ -168,7 +169,7 @@ func (h *Deployer) writeRegistry(ctx context.Context) error {
 }
 
 func (h *Deployer) writeWarpConfig(ctx context.Context) error {
-	warpConfig := make(map[string]*WarpConfigEntry)
+    warpConfig := make(map[string]*WarpConfigEntry)
 
 	for _, chain := range h.chains {
 		entry, err := chain.GetHyperlaneWarpConfigEntry(ctx)
@@ -184,9 +185,9 @@ func (h *Deployer) writeWarpConfig(ctx context.Context) error {
 		}
 	}
 
-	if len(warpConfig) == 0 {
-		return fmt.Errorf("no chains with warp config found")
-	}
+    if len(warpConfig) == 0 {
+        return fmt.Errorf("no chains with warp config found")
+    }
 
 	warpConfigBytes, err := yaml.Marshal(warpConfig)
 	if err != nil {
@@ -194,9 +195,10 @@ func (h *Deployer) writeWarpConfig(ctx context.Context) error {
 	}
 
 	warpConfigPath := path.Join("configs", "warp-config.yaml")
-	if err := h.WriteFile(ctx, warpConfigPath, warpConfigBytes); err != nil {
-		return fmt.Errorf("failed to write warp config: %w", err)
-	}
+    if err := h.WriteFile(ctx, warpConfigPath, warpConfigBytes); err != nil {
+        return fmt.Errorf("failed to write warp config: %w", err)
+    }
 
-	return nil
+    h.hasWarp = true
+    return nil
 }

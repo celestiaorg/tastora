@@ -10,10 +10,10 @@ var _ hyperlane.ChainConfigProvider = (*Chain)(nil)
 
 // GetHyperlaneRegistryEntry returns the registry entry (metadata + addresses) for this chain.
 func (c *Chain) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.RegistryEntry, error) {
-	networkInfo, err := c.GetNetworkInfo(ctx)
-	if err != nil {
-		return hyperlane.RegistryEntry{}, err
-	}
+    networkInfo, err := c.GetNetworkInfo(ctx)
+    if err != nil {
+        return hyperlane.RegistryEntry{}, err
+    }
 
 	meta := hyperlane.ChainMetadata{
 		ChainID:     c.GetChainID(),
@@ -33,11 +33,8 @@ func (c *Chain) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Regist
 				HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.RPCAddress()),
 			},
 		},
-		RestURLs: []hyperlane.Endpoint{
-			{
-				HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.APIAddress()),
-			},
-		},
+        RestURLs: []hyperlane.Endpoint{{HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.APIAddress())}},
+        GrpcURLs: []hyperlane.Endpoint{{HTTP: fmt.Sprintf("http://%s:%s", networkInfo.Internal.Hostname, networkInfo.Internal.Ports.GRPC)}},
 		Blocks: &hyperlane.BlockConfig{
 			Confirmations:     1,
 			EstimateBlockTime: 6,

@@ -30,21 +30,23 @@ func (h *Deployer) listRegistry(ctx context.Context) error {
 }
 
 func (h *Deployer) deployCoreContracts(ctx context.Context) error {
-	var evmChainName string
-	var signerKey string
-	for name, chainCfg := range h.schema.RelayerConfig.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			evmChainName = name
-			if chainCfg.Signer != nil {
-				signerKey = chainCfg.Signer.Key
-			}
-			break
-		}
-	}
+    var evmChainName string
+    var signerKey string
+    for name, chainCfg := range h.schema.RelayerConfig.Chains {
+        if chainCfg.Protocol == "ethereum" {
+            evmChainName = name
+            if chainCfg.Signer != nil {
+                signerKey = chainCfg.Signer.Key
+            }
+            break
+        }
+    }
 
-	if evmChainName == "" {
-		return fmt.Errorf("no EVM chain found for core deployment")
-	}
+    if evmChainName == "" {
+        // No EVM chains present; skip core deployment step.
+        h.Logger.Info("no EVM chain found; skipping core deployment")
+        return nil
+    }
 
 	cmd := []string{
 		"hyperlane", "core", "deploy",

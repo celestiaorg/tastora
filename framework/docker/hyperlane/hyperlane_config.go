@@ -18,5 +18,6 @@ type Config struct {
 
 // DefaultHyperlaneImage returns the default hyperlane CLI image
 func DefaultHyperlaneImage() container.Image {
-	return container.Image{Repository: "gcr.io/abacus-labs-dev/hyperlane-agent", Version: "latest"}
+    // Multi-arch image that includes the hyperlane CLI and works on arm64
+    return container.Image{Repository: "ghcr.io/celestiaorg/hyperlane-init", Version: "latest"}
 }
