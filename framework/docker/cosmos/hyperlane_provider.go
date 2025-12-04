@@ -28,16 +28,9 @@ func (c *Chain) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Regist
 			Decimals: 6,
 			Denom:    c.Config.Denom,
 		},
-		RpcURLs: []hyperlane.Endpoint{
-			{
-				HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.RPCAddress()),
-			},
-		},
-		RestURLs: []hyperlane.Endpoint{
-			{
-				HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.APIAddress()),
-			},
-		},
+		RpcURLs:  []hyperlane.Endpoint{{HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.RPCAddress())}},
+		RestURLs: []hyperlane.Endpoint{{HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.APIAddress())}},
+		GrpcURLs: []hyperlane.Endpoint{{HTTP: fmt.Sprintf("http://%s", networkInfo.Internal.GRPCAddress())}},
 		Blocks: &hyperlane.BlockConfig{
 			Confirmations:     1,
 			EstimateBlockTime: 6,
