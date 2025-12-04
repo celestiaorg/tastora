@@ -26,7 +26,7 @@ func TestEvstack(t *testing.T) {
 
 	evstackImage := container.Image{
 		Repository: "ghcr.io/evstack/ev-node",
-		Version:    "main",
+		Version:    "v1.0.0-beta.8",
 		UIDGID:     "10001:10001",
 	}
 
