@@ -2,6 +2,8 @@ package hyperlane
 
 import (
 	"context"
+	sdkmath "cosmossdk.io/math"
+	"encoding/hex"
 	"fmt"
 	"path"
 
@@ -90,6 +92,33 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 	return nil
 }
 
+// QueryEVMRouter performs an eth_call to InterchainAccountRouter.routers(uint32)(bytes32)
+// and returns the 0x-prefixed 32-byte router identifier.
+func (d *Deployer) QueryEVMRouter(ctx context.Context, rpcURL, contractAddress string, domain uint32) (string, error) {
+	// Minimal ABI for routers(uint32)(bytes32)
+	abiJSON := []byte(`[{"inputs":[{"internalType":"uint32","name":"domain","type":"uint32"}],"name":"routers","outputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"stateMutability":"view","type":"function"}]`)
+
+	outs, err := evmutil.CallFunction(ctx, rpcURL, contractAddress, abiJSON, "routers", domain)
+	if err != nil {
+		return "", fmt.Errorf("eth_call routers(%d) failed: %w", domain, err)
+	}
+	if len(outs) == 0 {
+		return "", fmt.Errorf("no outputs from routers call")
+	}
+	switch v := outs[0].(type) {
+	case []byte:
+		if len(v) != 32 {
+			return "", fmt.Errorf("unexpected routers bytes length %d", len(v))
+		}
+		return "0x" + hex.EncodeToString(v), nil
+	case [32]byte:
+		b := v[:]
+		return "0x" + hex.EncodeToString(b), nil
+	default:
+		return "", fmt.Errorf("unexpected routers return type %T", v)
+	}
+}
+
 // writeCoreConfig generates configs/core-config.yaml from the registry and signer
 func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	// find first EVM chain and signer
@@ -158,6 +187,27 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	}
 
 	d.Logger.Info("wrote core-config.yaml")
+	return nil
+}
+
+// EnrollRemoteRouterOnCosmos enrolls a remote router for a given token on the Cosmos chain
+// by broadcasting a MsgEnrollRemoteRouter via the provided broadcaster and wallet.
+// tokenID is the Cosmos bytes32 identifier for the router/token (hyputil.HexAddress),
+// remoteDomain is the EVM domain ID, and receiverContract is the EVM router contract (0x-prefixed hex).
+func (d *Deployer) EnrollRemoteRouterOnCosmos(ctx context.Context, b types.Broadcaster, wallet *types.Wallet, tokenID hyputil.HexAddress, remoteDomain uint32, receiverContract string) error {
+	msg := &warptypes.MsgEnrollRemoteRouter{
+		Owner:   wallet.GetFormattedAddress(),
+		TokenId: tokenID,
+		RemoteRouter: &warptypes.RemoteRouter{
+			ReceiverDomain:   remoteDomain,
+			ReceiverContract: receiverContract,
+			Gas:              sdkmath.NewInt(0),
+		},
+	}
+	if _, err := b.BroadcastMessages(ctx, wallet, msg); err != nil {
+		return fmt.Errorf("broadcast MsgEnrollRemoteRouter failed: %w", err)
+	}
+	d.Logger.Info("enrolled remote router on cosmos", zap.Uint32("remote_domain", remoteDomain), zap.String("receiver_contract", receiverContract))
 	return nil
 }
 
