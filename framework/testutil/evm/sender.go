@@ -1,7 +1,6 @@
 package evm
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
@@ -43,8 +42,8 @@ func (s *Sender) Close() {
 
 // SendFunctionTx packs the given ABI method and args and sends a transaction to the
 // provided contract address using the supplied private key (hex, with or without 0x).
-func (s *Sender) SendFunctionTx(ctx context.Context, privKeyHex, contractAddress string, abiJSON []byte, method string, args ...interface{}) (common.Hash, error) {
-	data, err := packFunctionCall(abiJSON, method, args...)
+func (s *Sender) SendFunctionTx(ctx context.Context, privKeyHex, contractAddress string, abi abi.ABI, method string, args ...interface{}) (common.Hash, error) {
+	data, err := packFunctionCall(abi, method, args...)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -92,11 +91,7 @@ func (s *Sender) SendCalldataTx(ctx context.Context, privKeyHex, contractAddress
 }
 
 // packFunctionCall encodes an ABI method call with the given args.
-func packFunctionCall(abiJSON []byte, method string, args ...interface{}) ([]byte, error) {
-	a, err := abi.JSON(bytes.NewReader(abiJSON))
-	if err != nil {
-		return nil, fmt.Errorf("parse abi: %w", err)
-	}
+func packFunctionCall(a abi.ABI, method string, args ...interface{}) ([]byte, error) {
 	data, err := a.Pack(method, args...)
 	if err != nil {
 		return nil, fmt.Errorf("pack %s: %w", method, err)
