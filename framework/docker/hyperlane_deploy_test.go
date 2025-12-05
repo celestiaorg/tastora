@@ -142,14 +142,11 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	require.NoError(t, err)
 	defer cconn.Close()
 
-	senderAddr := faucetWallet.GetFormattedAddress()
-	beforeBal, err := query.Balance(ctx, cconn, senderAddr, "utia")
-	require.NoError(t, err)
 	// warp module escrow balance before
 	warpModuleAddr := authtypes.NewModuleAddress(warptypes.ModuleName).String()
-	beforeEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, "utia")
+	beforeEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.celestia.Config.Denom)
 	require.NoError(t, err)
-	t.Logf("Before transfer: sender utia=%s, warp escrow utia=%s", beforeBal.String(), beforeEscrow.String())
+	require.Equal(t, sdkmath.NewInt(0), beforeEscrow, "escrow should be empty on start")
 
 	sendAmount := sdkmath.NewInt(1000)
 
@@ -160,27 +157,15 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		Recipient:         paddedReceiver,
 		Amount:            sendAmount,
 	}
+
 	resp, err := broadcaster.BroadcastMessages(ctx, faucetWallet, txMsg)
 	require.NoError(t, err)
-	t.Logf("RemoteTransfer tx: height=%d code=%d gasUsed=%d rawLog=%s", resp.Height, resp.Code, resp.GasUsed, resp.RawLog)
-
+	require.Equal(t, resp.Code, uint32(0), "remote transfer tx should succeed: code=%d, log=%s", resp.Code, resp.RawLog)
 	require.NoError(t, wait.ForBlocks(ctx, 3, stack.celestia))
 
-	// verify balances regardless; assert only on success to avoid fee noise on failures
-	afterBal, err := query.Balance(ctx, cconn, senderAddr, "utia")
+	afterEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.celestia.Config.Denom)
 	require.NoError(t, err)
-	senderDelta := beforeBal.Sub(afterBal)
-	t.Logf("After transfer: sender utia=%s (delta=%s)", afterBal.String(), senderDelta.String())
-	afterEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, "utia")
-	require.NoError(t, err)
-	escrowDelta := afterEscrow.Sub(beforeEscrow)
-	t.Logf("After transfer: warp escrow utia=%s (delta=%s)", afterEscrow.String(), escrowDelta.String())
-	if resp.Code == 0 {
-		// On success: escrow should increase by sendAmount and sender decrease by sendAmount (+ fees may be in different denom)
-		require.True(t, escrowDelta.Equal(sendAmount), "escrow should increase by sendAmount utia on success")
-		require.True(t, senderDelta.GTE(sendAmount), "sender delta should be >= sendAmount utia on success")
-	}
-
+	require.Truef(t, afterEscrow.Equal(sendAmount), "escrow should increase by sendAmount %s on success", stack.celestia.Config.Denom)
 }
 
 func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCelestiaRPCUrl, externalEVMRPCUrl string) (gethcommon.Hash, error) {
