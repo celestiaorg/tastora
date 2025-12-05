@@ -89,7 +89,9 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		require.Greaterf(t, len(code), 0, "%s should have non-empty code", name)
 	}
 
-	config, err := d.DeployCosmosNoopISM(ctx, cosmos.NewBroadcaster(chain), chain.GetNode().GetFaucetWallet())
+	broadcaster := cosmos.NewBroadcaster(chain)
+	faucetWallet := chain.GetNode().GetFaucetWallet()
+	config, err := d.DeployCosmosNoopISM(ctx, broadcaster, faucetWallet)
 	require.NoError(t, err)
 	require.NotNil(t, config)
 
@@ -106,6 +108,23 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	hash, err := enrollRemoteRouter(ctx, d, networkInfo.External.GRPCAddress(), rpcURL)
 	require.NoError(t, err)
 	t.Logf("Enrolled remote router: %s", hash.Hex())
+
+	// Enroll the remote EVM router on the Cosmos chain for the created token
+	// find EVM chain name and domain
+	var evmName string
+	for name, cfg := range onDiskSchema.RelayerConfig.Chains {
+		if cfg.Protocol == "ethereum" {
+			evmName = name
+			break
+		}
+	}
+	require.NotEmpty(t, evmName)
+	evmDomain := onDiskSchema.Registry.Chains[evmName].Metadata.DomainID
+	evmRouter := onDiskSchema.Registry.Chains[evmName].Addresses.InterchainAccountRouter
+	require.NotEmpty(t, evmRouter)
+
+	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, evmRouter)
+	require.NoError(t, err)
 
 }
 
