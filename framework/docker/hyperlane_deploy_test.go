@@ -3,6 +3,8 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,8 +22,11 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	}
 
 	testCfg := setupDockerTest(t)
-	ctx, cancel := context.WithTimeout(testCfg.Ctx, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(testCfg.Ctx, 10*time.Minute)
 	defer cancel()
+
+	// for this test only, use the celestia-app image built from the feature-zk-execution-ism branch.
+	testCfg.ChainBuilder = testCfg.ChainBuilder.WithImage(container.NewImage("ghcr.io/celestiaorg/celestia-app-standalone", "feature-zk-execution-ism", "10001:10001"))
 
 	// Bring up full stack with defaults (celestia-app, DA bridge, reth, evm-single)
 	stack, err := DeployMinimalStack(t, testCfg)
@@ -46,8 +51,6 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// 5) Validate that init wrote basic config files
-	// Read relayer-config.json and ensure it contains the reth chain
 	relayerBytes, err := d.ReadFile(ctx, "relayer-config.json")
 	require.NoError(t, err)
 	var relayerCfg hyperlane.RelayerConfig
@@ -59,13 +62,11 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	_, err = d.ReadFile(ctx, filepath.Join("registry", "chains", chain.Config.Name, "metadata.yaml"))
 	require.NoError(t, err)
 
-	// 6) Execute the Hyperlane deploy steps (must succeed)
 	require.NoError(t, d.Deploy(ctx))
 
-	// 7) Verify core contracts are deployed on reth by reading registry addresses
 	onDiskSchema, err := d.GetOnDiskSchema(ctx)
-	//schema := d.schema
 	require.NoError(t, err)
+
 	addrs := onDiskSchema.Registry.Chains["rethlocal"].Addresses
 
 	// pick a few critical contracts to verify
@@ -74,6 +75,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		"ProxyAdmin":     addrs.ProxyAdmin,
 		"MerkleTreeHook": addrs.MerkleTreeHook,
 	}
+
 	for name, hex := range critical {
 		require.NotEmpty(t, hex, "%s address should be present", name)
 	}
@@ -86,4 +88,12 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		require.NoErrorf(t, err, "failed to fetch code for %s", name)
 		require.Greaterf(t, len(code), 0, "%s should have non-empty code", name)
 	}
+
+	config, err := d.DeployCosmosNoopISM(ctx, cosmos.NewBroadcaster(chain), chain.GetNode().GetFaucetWallet())
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s",
+		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String())
+
 }
