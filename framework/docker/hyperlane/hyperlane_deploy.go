@@ -10,9 +10,11 @@ import (
 	hooktypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/02_post_dispatch/types"
 	coretypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/types"
 	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
+	evmutil "github.com/celestiaorg/tastora/framework/testutil/evm"
 	"github.com/celestiaorg/tastora/framework/types"
 	abci "github.com/cometbft/cometbft/abci/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	gethcommon "github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
@@ -200,6 +202,45 @@ func (d *Deployer) DeployCosmosNoopISM(ctx context.Context, chain types.Broadcas
 
 	d.Logger.Info("cosmos-native noop-ism deployment completed")
 	return config, nil
+}
+
+// EnrollRemoteRouter invokes enrollRemoteRouter(uint32,bytes32) on the given contract
+// using EVM settings (RPC URL + signer) from the relayer config for the first EVM chain.
+// routerHex must be a 0x-prefixed 32-byte hex string.
+func (d *Deployer) EnrollRemoteRouter(ctx context.Context, contractAddress string, domain uint32, routerHex string, chainName string, rpcURL string) (gethcommon.Hash, error) {
+	var signerKey string
+	for _, chainCfg := range d.relayerCfg.Chains {
+		if chainCfg.Name == chainName {
+			if chainCfg.Protocol != "ethereum" {
+				return gethcommon.Hash{}, fmt.Errorf("chain %s is not an evm chain", chainName)
+			}
+			if len(chainCfg.RpcURLs) == 0 || chainCfg.Signer == nil {
+				return gethcommon.Hash{}, fmt.Errorf("evm chain missing rpcUrls or signer in relayer config")
+			}
+			signerKey = chainCfg.Signer.Key
+			break
+		}
+	}
+
+	if rpcURL == "" || signerKey == "" {
+		return gethcommon.Hash{}, fmt.Errorf("no evm chain configured in relayer config")
+	}
+
+	abiJSON := []byte(`[{"inputs":[{"internalType":"uint32","name":"domain","type":"uint32"},{"internalType":"bytes32","name":"router","type":"bytes32"}],"name":"enrollRemoteRouter","outputs":[],"stateMutability":"nonpayable","type":"function"}]`)
+	router := gethcommon.HexToHash(routerHex)
+
+	sender, err := evmutil.NewSender(ctx, rpcURL)
+	if err != nil {
+		return gethcommon.Hash{}, fmt.Errorf("connect evm rpc: %w", err)
+	}
+	defer sender.Close()
+
+	txHash, err := sender.SendFunctionTx(ctx, signerKey, contractAddress, abiJSON, "enrollRemoteRouter", domain, router)
+	if err != nil {
+		return gethcommon.Hash{}, fmt.Errorf("enrollRemoteRouter tx failed: %w", err)
+	}
+	d.Logger.Info("enrolled remote router", zap.Uint32("domain", domain), zap.String("contract", contractAddress), zap.String("tx", txHash.Hex()))
+	return txHash, nil
 }
 
 func (d *Deployer) deployNoopISM(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) (hyputil.HexAddress, error) {
