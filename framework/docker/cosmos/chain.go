@@ -3,6 +3,7 @@ package cosmos
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"path"
@@ -21,6 +22,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/cosmos/cosmos-sdk/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	dockerimagetypes "github.com/docker/docker/api/types/image"
 	"go.uber.org/zap"
@@ -72,6 +74,36 @@ func (c *Chain) GetFaucetWallet() *types.Wallet {
 		}
 	}
 	return c.faucetWallet
+}
+
+// getFaucetPrivateKeyHex retrieves the faucet wallet's private key in hex format.
+func (c *Chain) getFaucetPrivateKeyHex() (string, error) {
+	if c.GetFaucetWallet() == nil {
+		return "", fmt.Errorf("faucet wallet not initialized")
+	}
+
+	if len(c.Validators) == 0 {
+		return "", fmt.Errorf("no validators available")
+	}
+
+	node := c.GetNode()
+	kr, err := node.GetKeyring()
+	if err != nil {
+		return "", fmt.Errorf("failed to get keyring: %w", err)
+	}
+
+	armoredKey, err := kr.ExportPrivKeyArmor(consts.FaucetAccountKeyName, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to export faucet key: %w", err)
+	}
+
+	privKey, _, err := crypto.UnarmorDecryptPrivKey(armoredKey, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt armored key: %w", err)
+	}
+
+	privKeyBytes := privKey.Bytes()
+	return "0x" + hex.EncodeToString(privKeyBytes), nil
 }
 
 // GetChainID returns the chain ID.

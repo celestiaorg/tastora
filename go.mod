@@ -33,6 +33,7 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.org/x/sync v0.18.0
 	google.golang.org/grpc v1.75.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -235,7 +236,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250728155136-f173205681a0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 	nhooyr.io/websocket v1.8.6 // indirect
 	pgregory.net/rapid v1.1.0 // indirect
