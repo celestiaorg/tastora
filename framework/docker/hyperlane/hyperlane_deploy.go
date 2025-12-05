@@ -168,6 +168,11 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 // tokenID is the Cosmos bytes32 identifier for the router/token (hyputil.HexAddress),
 // remoteDomain is the EVM domain ID, and receiverContract is the EVM router contract (0x-prefixed hex).
 func (d *Deployer) EnrollRemoteRouterOnCosmos(ctx context.Context, b types.Broadcaster, wallet *types.Wallet, tokenID hyputil.HexAddress, remoteDomain uint32, receiverContract string) error {
+	// Validate the receiver contract is already a proper 32-byte Hyperlane HexAddress.
+	if _, err := hyputil.DecodeHexAddress(receiverContract); err != nil {
+		return fmt.Errorf("invalid receiver contract HexAddress: %w", err)
+	}
+
 	msg := &warptypes.MsgEnrollRemoteRouter{
 		Owner:   wallet.GetFormattedAddress(),
 		TokenId: tokenID,

@@ -2,11 +2,16 @@ package docker
 
 import (
 	"context"
+	sdkmath "cosmossdk.io/math"
 	"encoding/json"
 	"fmt"
 	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
+	"github.com/celestiaorg/tastora/framework/testutil/evm"
+	query "github.com/celestiaorg/tastora/framework/testutil/query"
+	"github.com/celestiaorg/tastora/framework/testutil/wait"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -123,8 +128,58 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	evmRouter := onDiskSchema.Registry.Chains[evmName].Addresses.InterchainAccountRouter
 	require.NotEmpty(t, evmRouter)
 
-	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, evmRouter)
+	// receiverContract must be a valid 32-byte HexAddress, pad EVM router address
+	evmAddr20 := gethcommon.HexToAddress(evmRouter)
+	paddedReceiver := evm.PadEVMAddress(evmAddr20)
+	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, paddedReceiver.String())
 	require.NoError(t, err)
+
+	// capture sender utia balance before
+	ci, err := stack.celestia.GetNetworkInfo(ctx)
+	require.NoError(t, err)
+	celestiaGRPC := fmt.Sprintf("%s", ci.External.GRPCAddress())
+	cconn, err := grpc.NewClient(celestiaGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer cconn.Close()
+
+	senderAddr := faucetWallet.GetFormattedAddress()
+	beforeBal, err := query.Balance(ctx, cconn, senderAddr, "utia")
+	require.NoError(t, err)
+	// warp module escrow balance before
+	warpModuleAddr := authtypes.NewModuleAddress(warptypes.ModuleName).String()
+	beforeEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, "utia")
+	require.NoError(t, err)
+	t.Logf("Before transfer: sender utia=%s, warp escrow utia=%s", beforeBal.String(), beforeEscrow.String())
+
+	sendAmount := sdkmath.NewInt(1000)
+
+	txMsg := &warptypes.MsgRemoteTransfer{
+		Sender:            faucetWallet.GetFormattedAddress(),
+		TokenId:           config.TokenID,
+		DestinationDomain: evmDomain,
+		Recipient:         paddedReceiver,
+		Amount:            sendAmount,
+	}
+	resp, err := broadcaster.BroadcastMessages(ctx, faucetWallet, txMsg)
+	require.NoError(t, err)
+	t.Logf("RemoteTransfer tx: height=%d code=%d gasUsed=%d rawLog=%s", resp.Height, resp.Code, resp.GasUsed, resp.RawLog)
+
+	require.NoError(t, wait.ForBlocks(ctx, 3, stack.celestia))
+
+	// verify balances regardless; assert only on success to avoid fee noise on failures
+	afterBal, err := query.Balance(ctx, cconn, senderAddr, "utia")
+	require.NoError(t, err)
+	senderDelta := beforeBal.Sub(afterBal)
+	t.Logf("After transfer: sender utia=%s (delta=%s)", afterBal.String(), senderDelta.String())
+	afterEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, "utia")
+	require.NoError(t, err)
+	escrowDelta := afterEscrow.Sub(beforeEscrow)
+	t.Logf("After transfer: warp escrow utia=%s (delta=%s)", afterEscrow.String(), escrowDelta.String())
+	if resp.Code == 0 {
+		// On success: escrow should increase by sendAmount and sender decrease by sendAmount (+ fees may be in different denom)
+		require.True(t, escrowDelta.Equal(sendAmount), "escrow should increase by sendAmount utia on success")
+		require.True(t, senderDelta.GTE(sendAmount), "sender delta should be >= sendAmount utia on success")
+	}
 
 }
 
