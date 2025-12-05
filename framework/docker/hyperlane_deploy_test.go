@@ -29,8 +29,6 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	chain := stack.celestia
 	rnode := stack.reth
 
-	// 4) Initialize the Hyperlane deployer with the reth node as a provider
-	// Select a hyperlane image. Allow override via HYPERLANE_IMAGE (format repo:tag)
 	hlImage := hyperlane.DefaultDeployerImage()
 
 	d, err := hyperlane.NewDeployer(
@@ -46,7 +44,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// 5) Validate that init wrote basic config files
+	// Validate that init wrote basic config files
 	// Read relayer-config.json and ensure it contains the reth chain
 	relayerBytes, err := d.ReadFile(ctx, "relayer-config.json")
 	require.NoError(t, err)
@@ -59,12 +57,11 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	_, err = d.ReadFile(ctx, filepath.Join("registry", "chains", chain.Config.Name, "metadata.yaml"))
 	require.NoError(t, err)
 
-	// 6) Execute the Hyperlane deploy steps (must succeed)
 	require.NoError(t, d.Deploy(ctx))
 
-	// 7) Verify core contracts are deployed on reth by reading registry addresses
+	// verify core contracts are deployed on reth by reading registry addresses
 	onDiskSchema, err := d.GetOnDiskSchema(ctx)
-	//schema := d.schema
+
 	require.NoError(t, err)
 	addrs := onDiskSchema.Registry.Chains["rethlocal"].Addresses
 
@@ -78,7 +75,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		require.NotEmpty(t, hex, "%s address should be present", name)
 	}
 
-	// Query code at those addresses via reth RPC to ensure contracts exist
+	// query code at those addresses via reth RPC to ensure contracts exist
 	ec, err := rnode.GetEthClient(ctx)
 	require.NoError(t, err)
 	for name, hex := range critical {
