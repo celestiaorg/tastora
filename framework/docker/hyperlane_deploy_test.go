@@ -4,14 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	gethcommon "github.com/ethereum/go-ethereum/common"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"testing"
 	"time"
 
 	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
-	commonpkg "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,7 +84,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	ec, err := rnode.GetEthClient(ctx)
 	require.NoError(t, err)
 	for name, hex := range critical {
-		code, err := ec.CodeAt(ctx, commonpkg.HexToAddress(hex), nil)
+		code, err := ec.CodeAt(ctx, gethcommon.HexToAddress(hex), nil)
 		require.NoErrorf(t, err, "failed to fetch code for %s", name)
 		require.Greaterf(t, len(code), 0, "%s should have non-empty code", name)
 	}
@@ -96,16 +98,18 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	networkInfo, err := stack.reth.GetNetworkInfo(ctx)
 	require.NoError(t, err)
-	require.NotEmpty(t, networkInfo.External.Ports.RPC)
 	rpcURL := fmt.Sprintf("http://%s", networkInfo.External.RPCAddress())
 
-	hash, err := enrollRemoteRouter(ctx, d, rpcURL)
+	networkInfo, err = stack.celestia.GetNetworkInfo(ctx)
+	require.NoError(t, err)
+
+	hash, err := enrollRemoteRouter(ctx, d, networkInfo.External.GRPCAddress(), rpcURL)
 	require.NoError(t, err)
 	t.Logf("Enrolled remote router: %s", hash.Hex())
 
 }
 
-func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, rpcURL string) (gethcommon.Hash, error) {
+func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCelestiaRPCUrl, externalEVMRPCUrl string) (gethcommon.Hash, error) {
 	schema, err := d.GetOnDiskSchema(ctx)
 	if err != nil {
 		return gethcommon.Hash{}, fmt.Errorf("failed to get on-disk schema: %w", err)
@@ -142,9 +146,30 @@ func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, rpcURL strin
 
 	domain := schema.Registry.Chains[cosmosName].Metadata.DomainID
 
-	// TODO: query with celestia-appd q warp tokens instead of hard coding
-	routerHex := "0x726f757465725f61707000000000000000000000000000010000000000000000"
+	warpTokens, err := queryWarpTokens(ctx, externalCelestiaRPCUrl)
+	if err != nil {
+		return gethcommon.Hash{}, fmt.Errorf("failed to query warp tokens: %w", err)
+	}
 
-	return d.EnrollRemoteRouter(ctx, contractAddr, domain, routerHex, evmName, rpcURL)
+	routerHex := warpTokens[0].IsmId.String()
 
+	return d.EnrollRemoteRouter(ctx, contractAddr, domain, routerHex, evmName, externalEVMRPCUrl)
+}
+
+// queryWarpTokens retrieves a list of wrapped hyperlane tokens from the specified gRPC address.
+func queryWarpTokens(ctx context.Context, grpcAddr string) ([]warptypes.WrappedHypToken, error) {
+	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("dial grpc %s: %w", grpcAddr, err)
+	}
+	defer func() {
+		_ = conn.Close()
+	}()
+
+	q := warptypes.NewQueryClient(conn)
+	resp, err := q.Tokens(ctx, &warptypes.QueryTokensRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("warp tokens query failed: %w", err)
+	}
+	return resp.Tokens, nil
 }

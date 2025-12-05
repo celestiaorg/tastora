@@ -19,7 +19,6 @@ import (
 // Sender is a minimal EVM contract call helper that can pack ABI calls and send
 // transactions to an RPC endpoint using a provided private key.
 type Sender struct {
-	url     string
 	client  *ethclient.Client
 	chainID *big.Int
 }
@@ -34,7 +33,7 @@ func NewSender(ctx context.Context, rpcURL string) (*Sender, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get chain id: %w", err)
 	}
-	return &Sender{url: rpcURL, client: c, chainID: chainID}, nil
+	return &Sender{client: c, chainID: chainID}, nil
 }
 
 // Close closes the underlying client.
@@ -60,33 +59,35 @@ func (s *Sender) SendCalldataTx(ctx context.Context, privKeyHex, contractAddress
 	}
 	fromAddr := crypto.PubkeyToAddress(pk.PublicKey)
 
-	// Resolve nonce and gas price
 	nonce, err := s.client.PendingNonceAt(ctx, fromAddr)
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("pending nonce: %w", err)
 	}
-    to := common.HexToAddress(contractAddress)
-    // Estimate gas
-    gasPrice, err := s.client.SuggestGasPrice(ctx)
-    if err != nil {
-        return common.Hash{}, fmt.Errorf("suggest gas price: %w", err)
-    }
-    msg := ethereum.CallMsg{From: fromAddr, To: &to, Data: data, GasPrice: gasPrice}
-    gasLimit, err := s.client.EstimateGas(ctx, msg)
-    if err != nil {
-        // fallback to a sane default if estimation fails
-        gasLimit = 300_000
-    }
-    // Build legacy tx suitable for local/test networks
-    tx := types.NewTransaction(nonce, to, big.NewInt(0), gasLimit, gasPrice, data)
-    signer := types.LatestSignerForChainID(s.chainID)
-    signed, err := types.SignTx(tx, signer, pk)
-    if err != nil {
-        return common.Hash{}, fmt.Errorf("sign tx: %w", err)
-    }
-    if err := s.client.SendTransaction(ctx, signed); err != nil {
-        return common.Hash{}, fmt.Errorf("send tx: %w", err)
+
+	to := common.HexToAddress(contractAddress)
+	gasPrice, err := s.client.SuggestGasPrice(ctx)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("suggest gas price: %w", err)
 	}
+
+	msg := ethereum.CallMsg{From: fromAddr, To: &to, Data: data, GasPrice: gasPrice}
+	gasLimit, err := s.client.EstimateGas(ctx, msg)
+	if err != nil {
+		// fallback to a sane default if estimation fails
+		gasLimit = 300_000
+	}
+
+	// build legacy tx suitable for local/test networks
+	tx := types.NewTransaction(nonce, to, big.NewInt(0), gasLimit, gasPrice, data)
+	signer := types.LatestSignerForChainID(s.chainID)
+	signed, err := types.SignTx(tx, signer, pk)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("sign tx: %w", err)
+	}
+	if err := s.client.SendTransaction(ctx, signed); err != nil {
+		return common.Hash{}, fmt.Errorf("send tx: %w", err)
+	}
+
 	return signed.Hash(), nil
 }
 
