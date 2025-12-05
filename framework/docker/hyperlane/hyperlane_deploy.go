@@ -4,6 +4,7 @@ import (
 	"context"
 	sdkmath "cosmossdk.io/math"
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/docker/hyperlane/internal"
 	"path"
 
 	hyputil "github.com/bcp-innovations/hyperlane-cosmos/util"
@@ -248,7 +249,6 @@ func (d *Deployer) EnrollRemoteRouter(ctx context.Context, contractAddress strin
 		return gethcommon.Hash{}, fmt.Errorf("no evm chain configured in relayer config")
 	}
 
-	abiJSON := []byte(`[{"inputs":[{"internalType":"uint32","name":"domain","type":"uint32"},{"internalType":"bytes32","name":"router","type":"bytes32"}],"name":"enrollRemoteRouter","outputs":[],"stateMutability":"nonpayable","type":"function"}]`)
 	router := gethcommon.HexToHash(routerHex)
 
 	sender, err := evmutil.NewSender(ctx, rpcURL)
@@ -257,7 +257,7 @@ func (d *Deployer) EnrollRemoteRouter(ctx context.Context, contractAddress strin
 	}
 	defer sender.Close()
 
-	txHash, err := sender.SendFunctionTx(ctx, signerKey, contractAddress, abiJSON, "enrollRemoteRouter", domain, router)
+	txHash, err := sender.SendFunctionTx(ctx, signerKey, contractAddress, internal.HyperlaneRouterABI, "enrollRemoteRouter", domain, router)
 	if err != nil {
 		return gethcommon.Hash{}, fmt.Errorf("enrollRemoteRouter tx failed: %w", err)
 	}
