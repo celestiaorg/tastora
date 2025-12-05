@@ -130,7 +130,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	// receiverContract must be a valid 32-byte HexAddress, pad EVM router address
 	evmAddr20 := gethcommon.HexToAddress(evmRouter)
-	paddedReceiver := evm.PadEVMAddress(evmAddr20)
+	paddedReceiver := evm.PadAddress(evmAddr20)
 	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, paddedReceiver.String())
 	require.NoError(t, err)
 
