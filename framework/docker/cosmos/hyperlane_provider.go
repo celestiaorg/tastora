@@ -89,3 +89,7 @@ func (c *Chain) GetHyperlaneRelayerChainConfig(ctx context.Context) (hyperlane.R
 
 	return cfg, nil
 }
+
+func (c *Chain) GetHyperlaneWarpConfigEntry(ctx context.Context) (*hyperlane.WarpConfigEntry, error) {
+	return nil, nil
+}
