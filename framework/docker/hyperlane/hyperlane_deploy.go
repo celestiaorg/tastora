@@ -227,6 +227,12 @@ func (d *Deployer) DeployCosmosNoopISM(ctx context.Context, chain types.Broadcas
 	}
 	d.Logger.Info("created mailbox", zap.String("mailbox_id", mailboxID.String()))
 
+	merkleTreeHookID, err := d.deployMerkleTreeHook(ctx, chain, sender, mailboxID)
+	if err != nil {
+		return nil, fmt.Errorf("deploy merkle tree hook: %w", err)
+	}
+	d.Logger.Info("created merkle tree hook", zap.String("merkle_tree_hook_id", merkleTreeHookID.String()))
+
 	tokenID, err := d.createCollateralToken(ctx, chain, sender, mailboxID)
 	if err != nil {
 		return nil, fmt.Errorf("create collateral token: %w", err)
@@ -240,10 +246,11 @@ func (d *Deployer) DeployCosmosNoopISM(ctx context.Context, chain types.Broadcas
 	d.Logger.Info("set ISM on token")
 
 	config := &CosmosConfig{
-		IsmID:     ismID,
-		HooksID:   hooksID,
-		MailboxID: mailboxID,
-		TokenID:   tokenID,
+		IsmID:            ismID,
+		HooksID:          hooksID,
+		MailboxID:        mailboxID,
+		TokenID:          tokenID,
+		MerkleTreeHookID: merkleTreeHookID,
 	}
 
 	d.Logger.Info("cosmos-native noop-ism deployment completed")
@@ -304,6 +311,18 @@ func (d *Deployer) deployNoopHook(ctx context.Context, chain types.Broadcaster, 
 		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateNoopHook: %w", err)
 	}
 	return parseHooksIDFromEvents(resp.Events)
+}
+
+func (d *Deployer) deployMerkleTreeHook(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, mailboxID hyputil.HexAddress) (hyputil.HexAddress, error) {
+	msg := &hooktypes.MsgCreateMerkleTreeHook{
+		Owner:     sender.GetFormattedAddress(),
+		MailboxId: mailboxID,
+	}
+	resp, err := chain.BroadcastMessages(ctx, sender, msg)
+	if err != nil {
+		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateMerkleTreeHook: %w", err)
+	}
+	return parseMerkleTreeHookIDFromEvents(resp.Events)
 }
 
 func (d *Deployer) createMailbox(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, ismID, hooksID hyputil.HexAddress) (hyputil.HexAddress, error) {
@@ -388,6 +407,23 @@ func parseHooksIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
 		}
 	}
 	return hyputil.HexAddress{}, fmt.Errorf("hooks ID not found in events")
+}
+
+func parseMerkleTreeHookIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
+	for _, evt := range events {
+		typedEvt, err := sdk.ParseTypedEvent(evt)
+		if err != nil {
+			continue
+		}
+		if sdk.MsgTypeURL(typedEvt) == "/hyperlane.core.post_dispatch.v1.EventCreateMerkleTreeHook" {
+			createEvent, ok := typedEvt.(*hooktypes.EventCreateMerkleTreeHook)
+			if !ok {
+				continue
+			}
+			return createEvent.MerkleTreeHookId, nil
+		}
+	}
+	return hyputil.HexAddress{}, fmt.Errorf("merkle tree hook ID not found in events")
 }
 
 func parseMailboxIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {

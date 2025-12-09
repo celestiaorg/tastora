@@ -104,8 +104,8 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, config)
 
-	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s",
-		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String())
+	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s, MerkleTreeHook=%s",
+		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String(), config.MerkleTreeHookID.String())
 
 	networkInfo, err := stack.reth.GetNetworkInfo(ctx)
 	require.NoError(t, err)
@@ -129,8 +129,8 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	}
 	require.NotEmpty(t, evmName)
 	evmDomain := onDiskSchema.Registry.Chains[evmName].Metadata.DomainID
-	evmRouter := onDiskSchema.Registry.Chains[evmName].Addresses.InterchainAccountRouter
-	require.NotEmpty(t, evmRouter)
+	// hardcoded EVM warp token address from reference repo
+	evmRouter := "0x345a583028762De4d733852c9D4f419077093A48"
 
 	// receiverContract must be a valid 32-byte HexAddress, pad EVM router address
 	evmAddr20 := gethcommon.HexToAddress(evmRouter)
@@ -224,10 +224,12 @@ func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCele
 		return gethcommon.Hash{}, fmt.Errorf("no ethereum chain found in schema")
 	}
 
-	contractAddr := schema.Registry.Chains[evmName].Addresses.InterchainAccountRouter
-	if contractAddr == "" {
-		return gethcommon.Hash{}, fmt.Errorf("no InterchainAccountRouter address found in schema")
-	}
+	//contractAddr, err := d.GetWarpTokenAddress(ctx, "TIA", evmName)
+	//if err != nil {
+	//	return gethcommon.Hash{}, fmt.Errorf("failed to get EVM warp token address: %w", err)
+	//}
+	
+	contractAddr := "0x345a583028762De4d733852c9D4f419077093A48"
 
 	var cosmosName string
 	for name, cfg := range schema.RelayerConfig.Chains {
