@@ -176,8 +176,6 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	bz, _ := json.MarshalIndent(relayerCfg, "", "  ")
 	t.Logf("USING RELAYER CONFIG:\n%s", string(bz))
 
-	//time.Sleep(time.Hour)
-
 	// Create and start a Hyperlane relayer agent using the on-disk relayer config
 	agentCfg := hyperlane.Config{
 		Logger:          testCfg.Logger,

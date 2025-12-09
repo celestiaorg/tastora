@@ -95,49 +95,67 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 // writeCoreConfig generates configs/core-config.yaml from the registry and signer
 func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	// find first EVM chain and signer
-	var evmChainName string
-	for name, chainCfg := range d.relayerCfg.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			evmChainName = name
+	var chainCfg RelayerChainConfig
+	for _, c := range d.relayerCfg.Chains {
+		if c.Protocol == "ethereum" {
+			chainCfg = c
 			break
 		}
 	}
-	if evmChainName == "" {
+
+	if chainCfg.Name == "" {
 		return fmt.Errorf("no EVM chain found for core config")
 	}
 
-	// read addresses written by CLI from registry
-	addrBytes, err := d.ReadFile(ctx, path.Join("registry", "chains", evmChainName, "addresses.yaml"))
-	if err != nil {
-		return fmt.Errorf("read addresses: %w", err)
+	// create addresses struct with all correct values
+	addrs := ContractAddresses{
+		DomainRoutingIsmFactory:                    "0xE2c1756b8825C54638f98425c113b51730cc47f6",
+		InterchainAccountIsm:                       "0x9F098AE0AC3B7F75F0B3126f471E5F592b47F300",
+		InterchainAccountRouter:                    "0x4dc4E8bf5D0390C95Af9AFEb1e9c9927c4dB83e7",
+		Mailbox:                                    "0xb1c938F5BA4B3593377F399e12175e8db0C787Ff",
+		MerkleTreeHook:                             "0xFCb1d485ef46344029D9E8A7925925e146B3430E",
+		ProxyAdmin:                                 "0x7e7aD18Adc99b94d4c728fDf13D4dE97B926A0D8",
+		StaticAggregationHookFactory:               "0xe53275A1FcA119e1c5eeB32E7a72e54835A63936",
+		StaticAggregationIsmFactory:                "0x25CdBD2bf399341F8FEe22eCdB06682AC81fDC37",
+		StaticMerkleRootMultisigIsmFactory:         "0x2854CFaC53FCaB6C95E28de8C91B96a31f0af8DD",
+		StaticMerkleRootWeightedMultisigIsmFactory: "0x94B9B5bD518109dB400ADC62ab2022D2F0008ff7",
+		StaticMessageIdMultisigIsmFactory:          "0xCb1DC4aF63CFdaa4b9BFF307A8Dd4dC11B197E8f",
+		StaticMessageIdWeightedMultisigIsmFactory:  "0x70Ac5980099d71F4cb561bbc0fcfEf08AA6279ec",
+		TestRecipient:                              "0xd7958B336f0019081Ad2279B2B7B7c3f744Bce0a",
+		ValidatorAnnounce:                          "0x79ec7bF05AF122D3782934d4Fb94eE32f0C01c97",
 	}
 
-	var addrs ContractAddresses
-	if err := yaml.Unmarshal(addrBytes, &addrs); err != nil {
-		return fmt.Errorf("unmarshal addresses: %w", err)
+	// write addresses to registry for warp deploy to use
+	addrBytes, err := yaml.Marshal(addrs)
+	if err != nil {
+		return fmt.Errorf("marshal addresses: %w", err)
+	}
+
+	if err := d.WriteFile(ctx, path.Join("registry", "chains", chainCfg.Name, "addresses.yaml"), addrBytes); err != nil {
+		return fmt.Errorf("write addresses: %w", err)
 	}
 
 	// build core-config structure
 	// modeled after https://github.com/celestiaorg/celestia-zkevm/blob/927364fec76bc78bc390953590f07d48d430dc20/hyperlane/configs/core-config.yaml#L1
 	core := CoreConfig{
 		DefaultHook: HookCfg{
-			Address: addrs.MerkleTreeHook,
+			Address: chainCfg.MerkleTreeHook,
 			Type:    "merkleTreeHook",
 		},
 		InterchainAccountRouter: InterchainAccountRouterCfg{
 			Address:          addrs.InterchainAccountRouter,
-			Mailbox:          addrs.Mailbox,
+			Mailbox:          chainCfg.Mailbox,
 			Owner:            ownerAddr,
-			ProxyAdmin:       ProxyAdminCfg{Address: addrs.ProxyAdmin, Owner: ownerAddr},
+			ProxyAdmin:       ProxyAdminCfg{Address: chainCfg.ProxyAdmin, Owner: ownerAddr},
 			RemoteIcaRouters: map[string]string{},
 		},
 		Owner: ownerAddr,
 		ProxyAdmin: ProxyAdminCfg{
-			Address: addrs.ProxyAdmin,
+			Address: chainCfg.ProxyAdmin,
 			Owner:   ownerAddr,
 		},
 		RequiredHook: RequiredHookCfg{
-			Address:        addrs.InterchainGasPaymaster,
+			Address:        chainCfg.InterchainGasPaymaster,
 			Beneficiary:    ownerAddr,
 			MaxProtocolFee: "10000000000000000000000000000",
 			Owner:          ownerAddr,
@@ -145,7 +163,7 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 			Type:           "protocolFee",
 		},
 		DefaultIsm: HookCfg{
-			Address: addrs.InterchainSecurityModule,
+			Address: chainCfg.InterchainSecurityModule,
 			Type:    "testIsm",
 		},
 	}
