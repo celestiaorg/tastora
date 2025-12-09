@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
 	"path"
 	"path/filepath"
 
@@ -154,6 +155,8 @@ func (d *Deployer) writeRegistry(ctx context.Context) error {
 		if err := d.WriteFile(ctx, metadataPath, metadataBytes); err != nil {
 			return fmt.Errorf("failed to write metadata for %s: %w", chainName, err)
 		}
+
+		// TOOD: write addresses?
 	}
 
 	return nil
@@ -256,16 +259,12 @@ func (d *Deployer) readMetadataFromDisk(ctx context.Context, chainName string) (
 
 // readAddressFromDisk reads the contract addresses from the YAML file on disk.
 func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) (ContractAddresses, error) {
-	// TODO: cosmos side not being handled yet, however ethereum addresses should be written to disk after
-	// deployment.
-	if meta.Protocol != "ethereum" {
-		return ContractAddresses{}, nil
-	}
-
 	addressPath := filepath.Join("registry", "chains", meta.Name, "addresses.yaml")
 	bz, err := d.ReadFile(ctx, addressPath)
-	if err != nil {
-		return ContractAddresses{}, fmt.Errorf("read %s addresses: %w", meta.Name, err)
+	if err != nil && meta.Name != "ethereum" {
+		// NOTE: the cosmosnative side gets populated later manually, not by the deploy step.
+		d.Logger.Warn("failed to read file", zap.String("path", addressPath))
+		return ContractAddresses{}, nil
 	}
 
 	var addresses ContractAddresses

@@ -34,10 +34,7 @@ func (a *Agent) Name() string {
 
 // NewAgent creates a new Hyperlane agent that will run with the provided config.
 // The config should be a relayer config JSON (as produced by BuildRelayerConfig).
-func NewAgent(ctx context.Context, cfg Config, testName string, agentType AgentType, relayerCfg *RelayerConfig) (*Agent, error) {
-	if relayerCfg == nil {
-		return nil, fmt.Errorf("relayer config is required")
-	}
+func NewAgent(ctx context.Context, cfg Config, testName string, agentType AgentType, d *Deployer) (*Agent, error) {
 
 	image := cfg.HyperlaneImage
 	if image.UIDGID == "" {
@@ -64,22 +61,9 @@ func NewAgent(ctx context.Context, cfg Config, testName string, agentType AgentT
 	lifecycle := container.NewLifecycle(cfg.Logger, cfg.DockerClient, a.Name())
 	a.SetContainerLifecycle(lifecycle)
 
-	if err := a.CreateAndSetupVolume(ctx, a.Name()); err != nil {
+	if err := a.CreateAndSetupVolume(ctx, d.Name()); err != nil {
 		return nil, err
 	}
-
-	// write relayer-config.json to the agent volume
-	b, err := serializeRelayerConfig(relayerCfg)
-	if err != nil {
-		return nil, fmt.Errorf("serialize relayer config: %w", err)
-	}
-	if err := a.WriteFile(ctx, "relayer-config.json", b); err != nil {
-		return nil, fmt.Errorf("write relayer-config.json: %w", err)
-	}
-
-	// also copy registry and configs if they exist on disk relative to this home
-	// not strictly required for the agent to start if only relayer-config is needed.
-	// callers can populate additional files before Start if desired.
 
 	return a, nil
 }

@@ -50,6 +50,7 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 
 	cmd := []string{
 		"hyperlane", "core", "deploy",
+		"--config", path.Join(configsPath, "core-config.yaml"),
 		"--chain", evmChainName,
 		"--registry", registryPath,
 		"--yes",
@@ -58,18 +59,16 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 	env := []string{
 		fmt.Sprintf("HYP_KEY=%s", signerKey),
 	}
+	if err := d.writeCoreConfig(ctx); err != nil {
+		return fmt.Errorf("failed to write core config: %w", err)
+	}
+
 	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
 	if err != nil {
 		return fmt.Errorf("core deploy failed: %w", err)
 	}
 
 	d.Logger.Info("core contracts deployed", zap.String("chain", evmChainName))
-
-	// NOTE: the `hyperlane core deploy` step writes `addresses.yaml` to disk which is required to write the core
-	// config to disk and so this step happens after execution.
-	if err := d.writeCoreConfig(ctx); err != nil {
-		return fmt.Errorf("failed to write core config: %w", err)
-	}
 
 	return nil
 }
@@ -130,40 +129,41 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("marshal addresses: %w", err)
 	}
+	_ = addrBytes
 
-	if err := d.WriteFile(ctx, path.Join("registry", "chains", chainCfg.Name, "addresses.yaml"), addrBytes); err != nil {
-		return fmt.Errorf("write addresses: %w", err)
-	}
+	//if err := d.WriteFile(ctx, path.Join("registry", "chains", chainCfg.Name, "addresses.yaml"), addrBytes); err != nil {
+	//	return fmt.Errorf("write addresses: %w", err)
+	//}
 
 	// build core-config structure
 	// modeled after https://github.com/celestiaorg/celestia-zkevm/blob/927364fec76bc78bc390953590f07d48d430dc20/hyperlane/configs/core-config.yaml#L1
 	core := CoreConfig{
 		DefaultHook: HookCfg{
-			Address: chainCfg.MerkleTreeHook,
+			Address: QuotedString(chainCfg.MerkleTreeHook),
 			Type:    "merkleTreeHook",
 		},
 		InterchainAccountRouter: InterchainAccountRouterCfg{
-			Address:          addrs.InterchainAccountRouter,
-			Mailbox:          chainCfg.Mailbox,
-			Owner:            ownerAddr,
-			ProxyAdmin:       ProxyAdminCfg{Address: chainCfg.ProxyAdmin, Owner: ownerAddr},
+			Address:          QuotedString(addrs.InterchainAccountRouter),
+			Mailbox:          QuotedString(chainCfg.Mailbox),
+			Owner:            QuotedString(ownerAddr),
+			ProxyAdmin:       ProxyAdminCfg{Address: QuotedString(chainCfg.ProxyAdmin), Owner: QuotedString(ownerAddr)},
 			RemoteIcaRouters: map[string]string{},
 		},
-		Owner: ownerAddr,
+		Owner: QuotedString(ownerAddr),
 		ProxyAdmin: ProxyAdminCfg{
-			Address: chainCfg.ProxyAdmin,
-			Owner:   ownerAddr,
+			Address: QuotedString(chainCfg.ProxyAdmin),
+			Owner:   QuotedString(ownerAddr),
 		},
 		RequiredHook: RequiredHookCfg{
-			Address:        chainCfg.InterchainGasPaymaster,
-			Beneficiary:    ownerAddr,
+			Address:        QuotedString(chainCfg.InterchainGasPaymaster),
+			Beneficiary:    QuotedString(ownerAddr),
 			MaxProtocolFee: "10000000000000000000000000000",
-			Owner:          ownerAddr,
+			Owner:          QuotedString(ownerAddr),
 			ProtocolFee:    "0",
 			Type:           "protocolFee",
 		},
 		DefaultIsm: HookCfg{
-			Address: chainCfg.InterchainSecurityModule,
+			Address: QuotedString(chainCfg.InterchainSecurityModule),
 			Type:    "testIsm",
 		},
 	}

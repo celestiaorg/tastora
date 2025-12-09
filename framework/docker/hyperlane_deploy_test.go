@@ -85,6 +85,9 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		require.NotEmpty(t, hex, "%s address should be present", name)
 	}
 
+	addrsBz, _ := json.Marshal(addrs)
+	t.Logf("Deployed ADDRS: %s", string(addrsBz))
+
 	// Query code at those addresses via reth RPC to ensure contracts exist
 	ec, err := rnode.GetEthClient(ctx)
 	require.NoError(t, err)
@@ -96,6 +99,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	broadcaster := cosmos.NewBroadcaster(chain)
 	faucetWallet := chain.GetNode().GetFaucetWallet()
+	// TODO: marshal this into addresses.yaml?
 	config, err := d.DeployCosmosNoopISM(ctx, broadcaster, faucetWallet)
 	require.NoError(t, err)
 	require.NotNil(t, config)
@@ -184,9 +188,11 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		HyperlaneImage:  container.NewImage("damiannolan/hyperlane-agent", "test", "1000:1000"),
 	}
 
-	agent, err := hyperlane.NewAgent(ctx, agentCfg, testCfg.TestName, hyperlane.AgentTypeRelayer, onDiskSchema.RelayerConfig)
+	agent, err := hyperlane.NewAgent(ctx, agentCfg, testCfg.TestName, hyperlane.AgentTypeRelayer, d)
 	require.NoError(t, err)
 	require.NoError(t, agent.Start(ctx))
+
+	time.Sleep(time.Hour)
 
 	// wait for the relayer to process the message and drain the escrow
 	require.Eventually(t, func() bool {
