@@ -95,8 +95,7 @@ type RelayerConfig struct {
 
 // RelayerChainConfig represents a single chain's relayer config (relayer/chains/<name>.json).
 type RelayerChainConfig struct {
-	// Name is not serialized; used only as the map key.
-	Name        string        `json:"-" yaml:"-"`
+	Name        string        `json:"name" yaml:"name"`
 	Blocks      *BlockConfig  `json:"blocks,omitempty" yaml:"blocks,omitempty"`
 	ChainID     interface{}   `json:"chainId" yaml:"chainId"`
 	DisplayName string        `json:"displayName" yaml:"displayName"`

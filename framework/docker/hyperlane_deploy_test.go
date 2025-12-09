@@ -166,6 +166,40 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	afterEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.celestia.Config.Denom)
 	require.NoError(t, err)
 	require.Truef(t, afterEscrow.Equal(sendAmount), "escrow should increase by sendAmount %s on success", stack.celestia.Config.Denom)
+
+	// Fetch the updated schema after cosmos deployment (which automatically updates the relayer config)
+	onDiskSchema, err = d.GetOnDiskSchema(ctx)
+	require.NoError(t, err)
+
+	relayerCfg = *onDiskSchema.RelayerConfig
+
+	bz, _ := json.MarshalIndent(relayerCfg, "", "  ")
+	t.Logf("USING RELAYER CONFIG:\n%s", string(bz))
+
+	//time.Sleep(time.Hour)
+
+	// Create and start a Hyperlane relayer agent using the on-disk relayer config
+	agentCfg := hyperlane.Config{
+		Logger:          testCfg.Logger,
+		DockerClient:    testCfg.DockerClient,
+		DockerNetworkID: testCfg.NetworkID,
+		HyperlaneImage:  container.NewImage("damiannolan/hyperlane-agent", "test", "1000:1000"),
+	}
+
+	agent, err := hyperlane.NewAgent(ctx, agentCfg, testCfg.TestName, hyperlane.AgentTypeRelayer, onDiskSchema.RelayerConfig)
+	require.NoError(t, err)
+	require.NoError(t, agent.Start(ctx))
+
+	// wait for the relayer to process the message and drain the escrow
+	require.Eventually(t, func() bool {
+		drainedEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.celestia.Config.Denom)
+		if err != nil {
+			t.Logf("error querying balance: %v", err)
+			return false
+		}
+		t.Logf("current escrow balance: %s", drainedEscrow.String())
+		return drainedEscrow.IsZero()
+	}, 2*time.Minute, 5*time.Second, "escrow should be zero after relayer processes the message")
 }
 
 func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCelestiaRPCUrl, externalEVMRPCUrl string) (gethcommon.Hash, error) {
@@ -210,7 +244,7 @@ func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCele
 		return gethcommon.Hash{}, fmt.Errorf("failed to query warp tokens: %w", err)
 	}
 
-	routerHex := warpTokens[0].IsmId.String()
+	routerHex := warpTokens[0].Id
 
 	return d.EnrollRemoteRouter(ctx, contractAddr, domain, routerHex, evmName, externalEVMRPCUrl)
 }
