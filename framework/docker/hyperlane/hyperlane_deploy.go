@@ -74,6 +74,17 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 }
 
 func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
+	// Get the signer key from the EVM chain config
+	var signerKey string
+	for _, chainCfg := range d.relayerCfg.Chains {
+		if chainCfg.Protocol == "ethereum" {
+			if chainCfg.Signer != nil {
+				signerKey = chainCfg.Signer.Key
+			}
+			break
+		}
+	}
+
 	cmd := []string{
 		"hyperlane", "warp", "deploy",
 		"--config", path.Join(configsPath, "warp-config.yaml"),
@@ -81,12 +92,18 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 		"--yes",
 	}
 
-	_, _, err := d.Exec(ctx, d.Logger, cmd, nil)
+	env := []string{
+		fmt.Sprintf("HYP_KEY=%s", signerKey),
+	}
+
+	stdout, stderr, err := d.Exec(ctx, d.Logger, cmd, env)
 	if err != nil {
 		return fmt.Errorf("warp deploy failed: %w", err)
 	}
 
-	d.Logger.Info("warp routes deployed")
+	d.Logger.Info("warp routes deployed",
+		zap.String("stdout", string(stdout)),
+		zap.String("stderr", string(stderr)))
 
 	return nil
 }

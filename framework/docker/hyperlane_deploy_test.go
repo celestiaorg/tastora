@@ -106,6 +106,15 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s, MerkleTreeHook=%s",
 		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String(), config.MerkleTreeHookID.String())
+	//
+	//evmAddr20, err := d.GetERC20Address(ctx, config.TokenID)
+	//require.NoError(t, err)
+
+	//evmAddr20 := gethcommon.HexToAddress("0x726f757465725f69736d00000000000000000000000000000000000000000000")
+
+	//t.Logf("Deployed EVM warp token: %s", evmAddr20.String())
+
+	//require.NotEmpty(t, evmAddr20)
 
 	networkInfo, err := stack.reth.GetNetworkInfo(ctx)
 	require.NoError(t, err)
@@ -129,11 +138,18 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	}
 	require.NotEmpty(t, evmName)
 	evmDomain := onDiskSchema.Registry.Chains[evmName].Metadata.DomainID
-	// hardcoded EVM warp token address from reference repo
-	evmRouter := "0x345a583028762De4d733852c9D4f419077093A48"
 
-	// receiverContract must be a valid 32-byte HexAddress, pad EVM router address
-	evmAddr20 := gethcommon.HexToAddress(evmRouter)
+	// get the EVM warp token address from the registry (deployed by hyperlane warp deploy)
+	evmAddr20, err := d.GetEVMWarpTokenAddress(ctx)
+	require.NoError(t, err)
+	t.Logf("EVM warp token address: %s", evmAddr20.String())
+
+	// verify the warp token contract actually exists
+	warpTokenCode, err := ec.CodeAt(ctx, evmAddr20, nil)
+	require.NoError(t, err, "failed to fetch code for warp token")
+	require.Greater(t, len(warpTokenCode), 0, "warp token should have non-empty code at %s", evmAddr20.Hex())
+	t.Logf("Warp token contract has %d bytes of code", len(warpTokenCode))
+
 	paddedReceiver := evm.PadAddress(evmAddr20)
 	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, paddedReceiver.String())
 	require.NoError(t, err)
@@ -154,11 +170,13 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	sendAmount := sdkmath.NewInt(1000)
 
+	receiver := gethcommon.HexToAddress("0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d")
+
 	txMsg := &warptypes.MsgRemoteTransfer{
 		Sender:            faucetWallet.GetFormattedAddress(),
 		TokenId:           config.TokenID,
 		DestinationDomain: evmDomain,
-		Recipient:         paddedReceiver,
+		Recipient:         evm.PadAddress(receiver),
 		Amount:            sendAmount,
 	}
 
@@ -177,9 +195,6 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	relayerCfg = *onDiskSchema.RelayerConfig
 
-	bz, _ := json.MarshalIndent(relayerCfg, "", "  ")
-	t.Logf("USING RELAYER CONFIG:\n%s", string(bz))
-
 	// Create and start a Hyperlane relayer agent using the on-disk relayer config
 	agentCfg := hyperlane.Config{
 		Logger:          testCfg.Logger,
@@ -192,18 +207,24 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, agent.Start(ctx))
 
-	time.Sleep(time.Hour)
-
-	// wait for the relayer to process the message and drain the escrow
+	// wait for the relayer to process the message and mint tokens on EVM side
+	// NOTE: Escrow should NOT drain for Cosmos→EVM transfers. Escrow only drains when tokens are sent back (EVM→Cosmos).
+	//evmWarpTokenAddr := gethcommon.HexToAddress(evmRouter)
 	require.Eventually(t, func() bool {
-		drainedEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.celestia.Config.Denom)
+		// query ERC20 balanceOf for the recipient
+		balance, err := evm.GetERC20Balance(ctx, ec, evmAddr20, receiver)
 		if err != nil {
-			t.Logf("error querying balance: %v", err)
+			t.Logf("error querying EVM warp token balance: %v", err)
 			return false
 		}
-		t.Logf("current escrow balance: %s", drainedEscrow.String())
-		return drainedEscrow.IsZero()
-	}, 2*time.Minute, 5*time.Second, "escrow should be zero after relayer processes the message")
+		t.Logf("EVM recipient warp token balance: %s", balance.String())
+		return balance.Cmp(sendAmount.BigInt()) >= 0
+	}, 2*time.Minute, 5*time.Second, "EVM recipient should receive minted warp tokens")
+
+	// verify escrow remains full (tokens are locked, not drained)
+	finalEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.celestia.Config.Denom)
+	require.NoError(t, err)
+	require.Equal(t, sendAmount, finalEscrow, "escrow should remain at sendAmount for Cosmos→EVM transfer")
 }
 
 func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCelestiaRPCUrl, externalEVMRPCUrl string) (gethcommon.Hash, error) {
@@ -224,11 +245,6 @@ func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCele
 		return gethcommon.Hash{}, fmt.Errorf("no ethereum chain found in schema")
 	}
 
-	//contractAddr, err := d.GetWarpTokenAddress(ctx, "TIA", evmName)
-	//if err != nil {
-	//	return gethcommon.Hash{}, fmt.Errorf("failed to get EVM warp token address: %w", err)
-	//}
-	
 	contractAddr := "0x345a583028762De4d733852c9D4f419077093A48"
 
 	var cosmosName string
