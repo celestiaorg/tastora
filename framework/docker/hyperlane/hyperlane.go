@@ -173,8 +173,6 @@ func (d *Deployer) writeRegistry(ctx context.Context) error {
 		if err := d.WriteFile(ctx, metadataPath, metadataBytes); err != nil {
 			return fmt.Errorf("failed to write metadata for %s: %w", chainName, err)
 		}
-
-		// TOOD: write addresses?
 	}
 
 	return nil

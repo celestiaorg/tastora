@@ -90,9 +90,9 @@ func (n *Node) GetHyperlaneWarpConfigEntry(ctx context.Context) (*hyperlane.Warp
 
 	return &hyperlane.WarpConfigEntry{
 		Type:                     "synthetic",
-		Owner:                    hyperlane.QuotedString("0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d"),
-		Mailbox:                  hyperlane.QuotedString(cfg.Mailbox),
-		InterchainSecurityModule: hyperlane.QuotedString(cfg.InterchainSecurityModule),
+		Owner:                    hyperlane.QuotedHexAddress("0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d"),
+		Mailbox:                  hyperlane.QuotedHexAddress(cfg.Mailbox),
+		InterchainSecurityModule: hyperlane.QuotedHexAddress(cfg.InterchainSecurityModule),
 		Name:                     "wTIA",
 		Symbol:                   "TIA",
 		Decimals:                 6,

@@ -34,13 +34,13 @@ type WarpRouteDeploy struct {
 }
 
 type WarpConfigEntry struct {
-	Type                     string       `yaml:"type" json:"type"`
-	Owner                    QuotedString `yaml:"owner,omitempty" json:"owner,omitempty"`
-	Mailbox                  QuotedString `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
-	InterchainSecurityModule QuotedString `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
-	Name                     string       `yaml:"name,omitempty" json:"name,omitempty"`
-	Symbol                   string       `yaml:"symbol,omitempty" json:"symbol,omitempty"`
-	Decimals                 int          `yaml:"decimals,omitempty" json:"decimals,omitempty"`
+	Type                     string           `yaml:"type" json:"type"`
+	Owner                    QuotedHexAddress `yaml:"owner,omitempty" json:"owner,omitempty"`
+	Mailbox                  QuotedHexAddress `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
+	InterchainSecurityModule QuotedHexAddress `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
+	Name                     string           `yaml:"name,omitempty" json:"name,omitempty"`
+	Symbol                   string           `yaml:"symbol,omitempty" json:"symbol,omitempty"`
+	Decimals                 int              `yaml:"decimals,omitempty" json:"decimals,omitempty"`
 }
 
 type RegistryEntry struct {

@@ -69,14 +69,10 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
 	}
 
-	stdout, stderr, err := d.Exec(ctx, d.Logger, cmd, env)
+	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
 	if err != nil {
 		return fmt.Errorf("warp deploy failed: %w", err)
 	}
-
-	d.Logger.Info("warp routes deployed",
-		zap.String("stdout", string(stdout)),
-		zap.String("stderr", string(stderr)))
 
 	return nil
 }
@@ -100,31 +96,31 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	// modeled after https://github.com/celestiaorg/celestia-zkevm/blob/927364fec76bc78bc390953590f07d48d430dc20/hyperlane/configs/core-config.yaml#L1
 	core := CoreConfig{
 		DefaultHook: HookCfg{
-			Address: QuotedString(chainCfg.MerkleTreeHook),
+			Address: QuotedHexAddress(chainCfg.MerkleTreeHook),
 			Type:    "merkleTreeHook",
 		},
 		InterchainAccountRouter: InterchainAccountRouterCfg{
-			Address:          QuotedString("0x4dc4E8bf5D0390C95Af9AFEb1e9c9927c4dB83e7"), // TODO: don't hard code this
-			Mailbox:          QuotedString(chainCfg.Mailbox),
-			Owner:            QuotedString(ownerAddr),
-			ProxyAdmin:       ProxyAdminCfg{Address: QuotedString(chainCfg.ProxyAdmin), Owner: QuotedString(ownerAddr)},
+			Address:          QuotedHexAddress("0x4dc4E8bf5D0390C95Af9AFEb1e9c9927c4dB83e7"), // TODO: don't hard code this
+			Mailbox:          QuotedHexAddress(chainCfg.Mailbox),
+			Owner:            QuotedHexAddress(ownerAddr),
+			ProxyAdmin:       ProxyAdminCfg{Address: QuotedHexAddress(chainCfg.ProxyAdmin), Owner: QuotedHexAddress(ownerAddr)},
 			RemoteIcaRouters: map[string]string{},
 		},
-		Owner: QuotedString(ownerAddr),
+		Owner: QuotedHexAddress(ownerAddr),
 		ProxyAdmin: ProxyAdminCfg{
-			Address: QuotedString(chainCfg.ProxyAdmin),
-			Owner:   QuotedString(ownerAddr),
+			Address: QuotedHexAddress(chainCfg.ProxyAdmin),
+			Owner:   QuotedHexAddress(ownerAddr),
 		},
 		RequiredHook: RequiredHookCfg{
-			Address:        QuotedString(chainCfg.InterchainGasPaymaster),
-			Beneficiary:    QuotedString(ownerAddr),
+			Address:        QuotedHexAddress(chainCfg.InterchainGasPaymaster),
+			Beneficiary:    QuotedHexAddress(ownerAddr),
 			MaxProtocolFee: "10000000000000000000000000000",
-			Owner:          QuotedString(ownerAddr),
+			Owner:          QuotedHexAddress(ownerAddr),
 			ProtocolFee:    "0",
 			Type:           "protocolFee",
 		},
 		DefaultIsm: HookCfg{
-			Address: QuotedString(chainCfg.InterchainSecurityModule),
+			Address: QuotedHexAddress(chainCfg.InterchainSecurityModule),
 			Type:    "testIsm",
 		},
 	}
