@@ -42,8 +42,6 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	chain := stack.celestia
 	rnode := stack.reth
 
-	// 4) Initialize the Hyperlane deployer with the reth node as a provider
-	// Select a hyperlane image. Allow override via HYPERLANE_IMAGE (format repo:tag)
 	hlImage := hyperlane.DefaultDeployerImage()
 
 	d, err := hyperlane.NewDeployer(
@@ -99,22 +97,13 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	broadcaster := cosmos.NewBroadcaster(chain)
 	faucetWallet := chain.GetNode().GetFaucetWallet()
-	// TODO: marshal this into addresses.yaml?
+
 	config, err := d.DeployCosmosNoopISM(ctx, broadcaster, faucetWallet)
 	require.NoError(t, err)
 	require.NotNil(t, config)
 
 	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s, MerkleTreeHook=%s",
 		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String(), config.MerkleTreeHookID.String())
-	//
-	//evmAddr20, err := d.GetERC20Address(ctx, config.TokenID)
-	//require.NoError(t, err)
-
-	//evmAddr20 := gethcommon.HexToAddress("0x726f757465725f69736d00000000000000000000000000000000000000000000")
-
-	//t.Logf("Deployed EVM warp token: %s", evmAddr20.String())
-
-	//require.NotEmpty(t, evmAddr20)
 
 	networkInfo, err := stack.reth.GetNetworkInfo(ctx)
 	require.NoError(t, err)
@@ -140,7 +129,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	evmDomain := onDiskSchema.Registry.Chains[evmName].Metadata.DomainID
 
 	// get the EVM warp token address from the registry (deployed by hyperlane warp deploy)
-	evmAddr20, err := d.GetEVMWarpTokenAddress(ctx)
+	evmAddr20, err := d.GetEVMWarpTokenAddress()
 	require.NoError(t, err)
 	t.Logf("EVM warp token address: %s", evmAddr20.String())
 
@@ -209,7 +198,6 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	// wait for the relayer to process the message and mint tokens on EVM side
 	// NOTE: Escrow should NOT drain for Cosmos→EVM transfers. Escrow only drains when tokens are sent back (EVM→Cosmos).
-	//evmWarpTokenAddr := gethcommon.HexToAddress(evmRouter)
 	require.Eventually(t, func() bool {
 		// query ERC20 balanceOf for the recipient
 		balance, err := evm.GetERC20Balance(ctx, ec, evmAddr20, receiver)

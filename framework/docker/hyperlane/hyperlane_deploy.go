@@ -31,34 +31,18 @@ const (
 )
 
 func (d *Deployer) deployCoreContracts(ctx context.Context) error {
-	var evmChainName string
-	var signerKey string
-	for name, chainCfg := range d.relayerCfg.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			evmChainName = name
-			if chainCfg.Signer != nil {
-				signerKey = chainCfg.Signer.Key
-			}
-			break
-		}
-	}
-
-	if evmChainName == "" {
-		d.Logger.Info("no EVM chain found, skipping core deployment")
-		return nil
-	}
-
 	cmd := []string{
 		"hyperlane", "core", "deploy",
 		"--config", path.Join(configsPath, "core-config.yaml"),
-		"--chain", evmChainName,
+		"--chain", d.evmChainName,
 		"--registry", registryPath,
 		"--yes",
 	}
 
 	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", signerKey),
+		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
 	}
+
 	if err := d.writeCoreConfig(ctx); err != nil {
 		return fmt.Errorf("failed to write core config: %w", err)
 	}
@@ -68,23 +52,12 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 		return fmt.Errorf("core deploy failed: %w", err)
 	}
 
-	d.Logger.Info("core contracts deployed", zap.String("chain", evmChainName))
+	d.Logger.Info("core contracts deployed", zap.String("chain", d.evmChainName))
 
 	return nil
 }
 
 func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
-	// Get the signer key from the EVM chain config
-	var signerKey string
-	for _, chainCfg := range d.relayerCfg.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			if chainCfg.Signer != nil {
-				signerKey = chainCfg.Signer.Key
-			}
-			break
-		}
-	}
-
 	cmd := []string{
 		"hyperlane", "warp", "deploy",
 		"--config", path.Join(configsPath, "warp-config.yaml"),
@@ -93,7 +66,7 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 	}
 
 	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", signerKey),
+		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
 	}
 
 	stdout, stderr, err := d.Exec(ctx, d.Logger, cmd, env)
@@ -123,35 +96,6 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 		return fmt.Errorf("no EVM chain found for core config")
 	}
 
-	// create addresses struct with all correct values
-	addrs := ContractAddresses{
-		DomainRoutingIsmFactory:                    "0xE2c1756b8825C54638f98425c113b51730cc47f6",
-		InterchainAccountIsm:                       "0x9F098AE0AC3B7F75F0B3126f471E5F592b47F300",
-		InterchainAccountRouter:                    "0x4dc4E8bf5D0390C95Af9AFEb1e9c9927c4dB83e7",
-		Mailbox:                                    "0xb1c938F5BA4B3593377F399e12175e8db0C787Ff",
-		MerkleTreeHook:                             "0xFCb1d485ef46344029D9E8A7925925e146B3430E",
-		ProxyAdmin:                                 "0x7e7aD18Adc99b94d4c728fDf13D4dE97B926A0D8",
-		StaticAggregationHookFactory:               "0xe53275A1FcA119e1c5eeB32E7a72e54835A63936",
-		StaticAggregationIsmFactory:                "0x25CdBD2bf399341F8FEe22eCdB06682AC81fDC37",
-		StaticMerkleRootMultisigIsmFactory:         "0x2854CFaC53FCaB6C95E28de8C91B96a31f0af8DD",
-		StaticMerkleRootWeightedMultisigIsmFactory: "0x94B9B5bD518109dB400ADC62ab2022D2F0008ff7",
-		StaticMessageIdMultisigIsmFactory:          "0xCb1DC4aF63CFdaa4b9BFF307A8Dd4dC11B197E8f",
-		StaticMessageIdWeightedMultisigIsmFactory:  "0x70Ac5980099d71F4cb561bbc0fcfEf08AA6279ec",
-		TestRecipient:                              "0xd7958B336f0019081Ad2279B2B7B7c3f744Bce0a",
-		ValidatorAnnounce:                          "0x79ec7bF05AF122D3782934d4Fb94eE32f0C01c97",
-	}
-
-	// write addresses to registry for warp deploy to use
-	addrBytes, err := yaml.Marshal(addrs)
-	if err != nil {
-		return fmt.Errorf("marshal addresses: %w", err)
-	}
-	_ = addrBytes
-
-	//if err := d.WriteFile(ctx, path.Join("registry", "chains", chainCfg.Name, "addresses.yaml"), addrBytes); err != nil {
-	//	return fmt.Errorf("write addresses: %w", err)
-	//}
-
 	// build core-config structure
 	// modeled after https://github.com/celestiaorg/celestia-zkevm/blob/927364fec76bc78bc390953590f07d48d430dc20/hyperlane/configs/core-config.yaml#L1
 	core := CoreConfig{
@@ -160,7 +104,7 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 			Type:    "merkleTreeHook",
 		},
 		InterchainAccountRouter: InterchainAccountRouterCfg{
-			Address:          QuotedString(addrs.InterchainAccountRouter),
+			Address:          QuotedString("0x4dc4E8bf5D0390C95Af9AFEb1e9c9927c4dB83e7"), // TODO: don't hard code this
 			Mailbox:          QuotedString(chainCfg.Mailbox),
 			Owner:            QuotedString(ownerAddr),
 			ProxyAdmin:       ProxyAdminCfg{Address: QuotedString(chainCfg.ProxyAdmin), Owner: QuotedString(ownerAddr)},
