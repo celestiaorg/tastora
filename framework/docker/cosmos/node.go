@@ -327,6 +327,8 @@ func (cn *ChainNode) setTestConfig(ctx context.Context) error {
 
 		cfg.RPC.ListenAddress = cn.getRPCLaddr()
 		cfg.RPC.CORSAllowedOrigins = []string{"*"}
+
+		cfg.Storage.DiscardABCIResponses = false
 	})
 
 	if err != nil {

@@ -31,45 +31,28 @@ const (
 )
 
 func (d *Deployer) deployCoreContracts(ctx context.Context) error {
-	var evmChainName string
-	var signerKey string
-	for name, chainCfg := range d.relayerCfg.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			evmChainName = name
-			if chainCfg.Signer != nil {
-				signerKey = chainCfg.Signer.Key
-			}
-			break
-		}
-	}
-
-	if evmChainName == "" {
-		d.Logger.Info("no EVM chain found, skipping core deployment")
-		return nil
-	}
-
 	cmd := []string{
 		"hyperlane", "core", "deploy",
-		"--chain", evmChainName,
+		"--config", path.Join(configsPath, "core-config.yaml"),
+		"--chain", d.evmChainName,
 		"--registry", registryPath,
 		"--yes",
 	}
 
 	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", signerKey),
+		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
 	}
+
+	if err := d.writeCoreConfig(ctx); err != nil {
+		return fmt.Errorf("failed to write core config: %w", err)
+	}
+
 	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
 	if err != nil {
 		return fmt.Errorf("core deploy failed: %w", err)
 	}
 
-	d.Logger.Info("core contracts deployed", zap.String("chain", evmChainName))
-
-	// NOTE: the `hyperlane core deploy` step writes `addresses.yaml` to disk which is required to write the core
-	// config to disk and so this step happens after execution.
-	if err := d.writeCoreConfig(ctx); err != nil {
-		return fmt.Errorf("failed to write core config: %w", err)
-	}
+	d.Logger.Info("core contracts deployed", zap.String("chain", d.evmChainName))
 
 	return nil
 }
@@ -82,12 +65,14 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 		"--yes",
 	}
 
-	_, _, err := d.Exec(ctx, d.Logger, cmd, nil)
+	env := []string{
+		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
+	}
+
+	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
 	if err != nil {
 		return fmt.Errorf("warp deploy failed: %w", err)
 	}
-
-	d.Logger.Info("warp routes deployed")
 
 	return nil
 }
@@ -95,57 +80,47 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 // writeCoreConfig generates configs/core-config.yaml from the registry and signer
 func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	// find first EVM chain and signer
-	var evmChainName string
-	for name, chainCfg := range d.relayerCfg.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			evmChainName = name
+	var chainCfg RelayerChainConfig
+	for _, c := range d.relayerCfg.Chains {
+		if c.Protocol == "ethereum" {
+			chainCfg = c
 			break
 		}
 	}
-	if evmChainName == "" {
+
+	if chainCfg.Name == "" {
 		return fmt.Errorf("no EVM chain found for core config")
-	}
-
-	// read addresses written by CLI from registry
-	addrBytes, err := d.ReadFile(ctx, path.Join("registry", "chains", evmChainName, "addresses.yaml"))
-	if err != nil {
-		return fmt.Errorf("read addresses: %w", err)
-	}
-
-	var addrs ContractAddresses
-	if err := yaml.Unmarshal(addrBytes, &addrs); err != nil {
-		return fmt.Errorf("unmarshal addresses: %w", err)
 	}
 
 	// build core-config structure
 	// modeled after https://github.com/celestiaorg/celestia-zkevm/blob/927364fec76bc78bc390953590f07d48d430dc20/hyperlane/configs/core-config.yaml#L1
 	core := CoreConfig{
 		DefaultHook: HookCfg{
-			Address: addrs.MerkleTreeHook,
+			Address: QuotedHexAddress(chainCfg.MerkleTreeHook),
 			Type:    "merkleTreeHook",
 		},
 		InterchainAccountRouter: InterchainAccountRouterCfg{
-			Address:          addrs.InterchainAccountRouter,
-			Mailbox:          addrs.Mailbox,
-			Owner:            ownerAddr,
-			ProxyAdmin:       ProxyAdminCfg{Address: addrs.ProxyAdmin, Owner: ownerAddr},
+			Address:          QuotedHexAddress("0x4dc4E8bf5D0390C95Af9AFEb1e9c9927c4dB83e7"), // TODO: don't hard code this
+			Mailbox:          QuotedHexAddress(chainCfg.Mailbox),
+			Owner:            QuotedHexAddress(ownerAddr),
+			ProxyAdmin:       ProxyAdminCfg{Address: QuotedHexAddress(chainCfg.ProxyAdmin), Owner: QuotedHexAddress(ownerAddr)},
 			RemoteIcaRouters: map[string]string{},
 		},
-		Owner: ownerAddr,
+		Owner: QuotedHexAddress(ownerAddr),
 		ProxyAdmin: ProxyAdminCfg{
-			Address: addrs.ProxyAdmin,
-			Owner:   ownerAddr,
+			Address: QuotedHexAddress(chainCfg.ProxyAdmin),
+			Owner:   QuotedHexAddress(ownerAddr),
 		},
 		RequiredHook: RequiredHookCfg{
-			Address:        addrs.InterchainGasPaymaster,
-			Beneficiary:    ownerAddr,
+			Address:        QuotedHexAddress(chainCfg.InterchainGasPaymaster),
+			Beneficiary:    QuotedHexAddress(ownerAddr),
 			MaxProtocolFee: "10000000000000000000000000000",
-			Owner:          ownerAddr,
+			Owner:          QuotedHexAddress(ownerAddr),
 			ProtocolFee:    "0",
 			Type:           "protocolFee",
 		},
 		DefaultIsm: HookCfg{
-			Address: addrs.InterchainSecurityModule,
+			Address: QuotedHexAddress(chainCfg.InterchainSecurityModule),
 			Type:    "testIsm",
 		},
 	}
@@ -209,6 +184,12 @@ func (d *Deployer) DeployCosmosNoopISM(ctx context.Context, chain types.Broadcas
 	}
 	d.Logger.Info("created mailbox", zap.String("mailbox_id", mailboxID.String()))
 
+	merkleTreeHookID, err := d.deployMerkleTreeHook(ctx, chain, sender, mailboxID)
+	if err != nil {
+		return nil, fmt.Errorf("deploy merkle tree hook: %w", err)
+	}
+	d.Logger.Info("created merkle tree hook", zap.String("merkle_tree_hook_id", merkleTreeHookID.String()))
+
 	tokenID, err := d.createCollateralToken(ctx, chain, sender, mailboxID)
 	if err != nil {
 		return nil, fmt.Errorf("create collateral token: %w", err)
@@ -222,10 +203,11 @@ func (d *Deployer) DeployCosmosNoopISM(ctx context.Context, chain types.Broadcas
 	d.Logger.Info("set ISM on token")
 
 	config := &CosmosConfig{
-		IsmID:     ismID,
-		HooksID:   hooksID,
-		MailboxID: mailboxID,
-		TokenID:   tokenID,
+		IsmID:            ismID,
+		HooksID:          hooksID,
+		MailboxID:        mailboxID,
+		TokenID:          tokenID,
+		MerkleTreeHookID: merkleTreeHookID,
 	}
 
 	d.Logger.Info("cosmos-native noop-ism deployment completed")
@@ -276,7 +258,9 @@ func (d *Deployer) deployNoopISM(ctx context.Context, chain types.Broadcaster, s
 	if err != nil {
 		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateNoopIsm: %w", err)
 	}
-	return parseISMIDFromEvents(resp.Events)
+	return parseEventValue(resp.Events, "/hyperlane.core.interchain_security.v1.EventCreateNoopIsm", func(e *ismtypes.EventCreateNoopIsm) (hyputil.HexAddress, bool) {
+		return e.IsmId, true
+	})
 }
 
 func (d *Deployer) deployNoopHook(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) (hyputil.HexAddress, error) {
@@ -285,7 +269,23 @@ func (d *Deployer) deployNoopHook(ctx context.Context, chain types.Broadcaster, 
 	if err != nil {
 		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateNoopHook: %w", err)
 	}
-	return parseHooksIDFromEvents(resp.Events)
+	return parseEventValue(resp.Events, "/hyperlane.core.post_dispatch.v1.EventCreateNoopHook", func(e *hooktypes.EventCreateNoopHook) (hyputil.HexAddress, bool) {
+		return e.NoopHookId, true
+	})
+}
+
+func (d *Deployer) deployMerkleTreeHook(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, mailboxID hyputil.HexAddress) (hyputil.HexAddress, error) {
+	msg := &hooktypes.MsgCreateMerkleTreeHook{
+		Owner:     sender.GetFormattedAddress(),
+		MailboxId: mailboxID,
+	}
+	resp, err := chain.BroadcastMessages(ctx, sender, msg)
+	if err != nil {
+		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateMerkleTreeHook: %w", err)
+	}
+	return parseEventValue(resp.Events, "/hyperlane.core.post_dispatch.v1.EventCreateMerkleTreeHook", func(e *hooktypes.EventCreateMerkleTreeHook) (hyputil.HexAddress, bool) {
+		return e.MerkleTreeHookId, true
+	})
 }
 
 func (d *Deployer) createMailbox(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, ismID, hooksID hyputil.HexAddress) (hyputil.HexAddress, error) {
@@ -309,7 +309,9 @@ func (d *Deployer) createMailbox(ctx context.Context, chain types.Broadcaster, s
 	if err != nil {
 		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateMailbox: %w", err)
 	}
-	return parseMailboxIDFromEvents(resp.Events)
+	return parseEventValue(resp.Events, "/hyperlane.core.v1.EventCreateMailbox", func(e *coretypes.EventCreateMailbox) (hyputil.HexAddress, bool) {
+		return e.MailboxId, true
+	})
 }
 
 func (d *Deployer) createCollateralToken(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, mailboxID hyputil.HexAddress) (hyputil.HexAddress, error) {
@@ -322,7 +324,10 @@ func (d *Deployer) createCollateralToken(ctx context.Context, chain types.Broadc
 	if err != nil {
 		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateCollateralToken: %w", err)
 	}
-	return parseTokenIDFromEvents(resp.Events)
+
+	return parseEventValue(resp.Events, "/hyperlane.warp.v1.EventCreateCollateralToken", func(e *warptypes.EventCreateCollateralToken) (hyputil.HexAddress, bool) {
+		return e.TokenId, true
+	})
 }
 
 func (d *Deployer) setTokenISM(ctx context.Context, chain types.Broadcaster, sender *types.Wallet, tokenID, ismID hyputil.HexAddress) error {
@@ -338,70 +343,32 @@ func (d *Deployer) setTokenISM(ctx context.Context, chain types.Broadcaster, sen
 	return nil
 }
 
-func parseISMIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
-	for _, evt := range events {
-		typedEvt, err := sdk.ParseTypedEvent(evt)
-		if err != nil {
-			continue
-		}
-		if sdk.MsgTypeURL(typedEvt) == "/hyperlane.core.interchain_security.v1.EventCreateNoopIsm" {
-			createEvent, ok := typedEvt.(*ismtypes.EventCreateNoopIsm)
-			if !ok {
-				continue
-			}
-			return createEvent.IsmId, nil
-		}
-	}
-	return hyputil.HexAddress{}, fmt.Errorf("ISM ID not found in events")
-}
+// parseEventValue extracts a HexAddress from a specified event type given the type url and type T.
+func parseEventValue[T any](
+	events []abci.Event,
+	typeURL string,
+	extract func(T) (hyputil.HexAddress, bool),
+) (hyputil.HexAddress, error) {
 
-func parseHooksIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
 	for _, evt := range events {
 		typedEvt, err := sdk.ParseTypedEvent(evt)
 		if err != nil {
 			continue
 		}
-		if sdk.MsgTypeURL(typedEvt) == "/hyperlane.core.post_dispatch.v1.EventCreateNoopHook" {
-			createEvent, ok := typedEvt.(*hooktypes.EventCreateNoopHook)
-			if !ok {
-				continue
-			}
-			return createEvent.NoopHookId, nil
-		}
-	}
-	return hyputil.HexAddress{}, fmt.Errorf("hooks ID not found in events")
-}
 
-func parseMailboxIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
-	for _, evt := range events {
-		typedEvt, err := sdk.ParseTypedEvent(evt)
-		if err != nil {
+		if sdk.MsgTypeURL(typedEvt) != typeURL {
 			continue
 		}
-		if sdk.MsgTypeURL(typedEvt) == "/hyperlane.core.v1.EventCreateMailbox" {
-			createEvent, ok := typedEvt.(*coretypes.EventCreateMailbox)
-			if !ok {
-				continue
-			}
-			return createEvent.MailboxId, nil
-		}
-	}
-	return hyputil.HexAddress{}, fmt.Errorf("mailbox ID not found in events")
-}
 
-func parseTokenIDFromEvents(events []abci.Event) (hyputil.HexAddress, error) {
-	for _, evt := range events {
-		typedEvt, err := sdk.ParseTypedEvent(evt)
-		if err != nil {
+		e, ok := typedEvt.(T)
+		if !ok {
 			continue
 		}
-		if sdk.MsgTypeURL(typedEvt) == "/hyperlane.warp.v1.EventCreateCollateralToken" {
-			createEvent, ok := typedEvt.(*warptypes.EventCreateCollateralToken)
-			if !ok {
-				continue
-			}
-			return createEvent.TokenId, nil
+
+		if val, ok := extract(e); ok {
+			return val, nil
 		}
 	}
-	return hyputil.HexAddress{}, fmt.Errorf("token ID not found in events")
+
+	return hyputil.HexAddress{}, fmt.Errorf("event %s not found", typeURL)
 }

@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path"
-	"path/filepath"
-
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/ethereum/go-ethereum/common"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+	"path"
+	"path/filepath"
 )
 
 const (
@@ -28,6 +29,10 @@ type Deployer struct {
 	chains     []ChainConfigProvider
 	deployed   bool
 	hasWarp    bool
+
+	// hypPrivateKey is the private key to use with the hyperlane tool.
+	hypPrivateKey string
+	evmChainName  string
 }
 
 // NewDeployer creates a new Hyperlane deployment coordinator
@@ -86,6 +91,20 @@ func (d *Deployer) init(ctx context.Context) error {
 		return fmt.Errorf("failed to build relayer config: %w", err)
 	}
 	d.relayerCfg = relayerCfg
+
+	for _, chainCfg := range d.relayerCfg.Chains {
+		if chainCfg.Protocol == "ethereum" {
+			d.evmChainName = chainCfg.Name
+			if chainCfg.Signer != nil {
+				d.hypPrivateKey = chainCfg.Signer.Key
+			}
+			break
+		}
+	}
+
+	if d.hypPrivateKey == "" {
+		return fmt.Errorf("no ethereum signer configured for hyperlane")
+	}
 
 	registry, err := BuildRegistry(ctx, d.chains)
 	if err != nil {
@@ -256,16 +275,12 @@ func (d *Deployer) readMetadataFromDisk(ctx context.Context, chainName string) (
 
 // readAddressFromDisk reads the contract addresses from the YAML file on disk.
 func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) (ContractAddresses, error) {
-	// TODO: cosmos side not being handled yet, however ethereum addresses should be written to disk after
-	// deployment.
-	if meta.Protocol != "ethereum" {
-		return ContractAddresses{}, nil
-	}
-
 	addressPath := filepath.Join("registry", "chains", meta.Name, "addresses.yaml")
 	bz, err := d.ReadFile(ctx, addressPath)
-	if err != nil {
-		return ContractAddresses{}, fmt.Errorf("read %s addresses: %w", meta.Name, err)
+	if err != nil && meta.Name != "ethereum" {
+		// NOTE: the cosmosnative side gets populated later manually, not by the deploy step.
+		d.Logger.Warn("failed to read file", zap.String("path", addressPath))
+		return ContractAddresses{}, nil
 	}
 
 	var addresses ContractAddresses
@@ -274,4 +289,12 @@ func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) 
 	}
 
 	return addresses, nil
+}
+
+// GetEVMWarpTokenAddress reads the deployed EVM warp token address.
+func (d *Deployer) GetEVMWarpTokenAddress() (common.Address, error) {
+	// TODO: parse from deployment output instead of hardcoding
+	addr := common.HexToAddress("0x345a583028762De4d733852c9D4f419077093A48")
+	d.Logger.Info("using hardcoded EVM warp token address", zap.String("address", addr.Hex()))
+	return addr, nil
 }

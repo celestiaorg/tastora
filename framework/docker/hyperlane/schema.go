@@ -34,13 +34,13 @@ type WarpRouteDeploy struct {
 }
 
 type WarpConfigEntry struct {
-	Type                     string `yaml:"type" json:"type"`
-	Owner                    string `yaml:"owner,omitempty" json:"owner,omitempty"`
-	Mailbox                  string `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
-	InterchainSecurityModule string `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
-	Name                     string `yaml:"name,omitempty" json:"name,omitempty"`
-	Symbol                   string `yaml:"symbol,omitempty" json:"symbol,omitempty"`
-	Decimals                 int    `yaml:"decimals,omitempty" json:"decimals,omitempty"`
+	Type                     string           `yaml:"type" json:"type"`
+	Owner                    QuotedHexAddress `yaml:"owner,omitempty" json:"owner,omitempty"`
+	Mailbox                  QuotedHexAddress `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
+	InterchainSecurityModule QuotedHexAddress `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
+	Name                     string           `yaml:"name,omitempty" json:"name,omitempty"`
+	Symbol                   string           `yaml:"symbol,omitempty" json:"symbol,omitempty"`
+	Decimals                 int              `yaml:"decimals,omitempty" json:"decimals,omitempty"`
 }
 
 type RegistryEntry struct {
@@ -95,8 +95,7 @@ type RelayerConfig struct {
 
 // RelayerChainConfig represents a single chain's relayer config (relayer/chains/<name>.json).
 type RelayerChainConfig struct {
-	// Name is not serialized; used only as the map key.
-	Name        string        `json:"-" yaml:"-"`
+	Name        string        `json:"name" yaml:"name"`
 	Blocks      *BlockConfig  `json:"blocks,omitempty" yaml:"blocks,omitempty"`
 	ChainID     interface{}   `json:"chainId" yaml:"chainId"`
 	DisplayName string        `json:"displayName" yaml:"displayName"`

@@ -25,8 +25,9 @@ func DefaultDeployerImage() container.Image {
 
 // CosmosConfig contains the IDs of all deployed cosmos-native hyperlane components
 type CosmosConfig struct {
-	IsmID     hyputil.HexAddress `json:"ism_id"`
-	HooksID   hyputil.HexAddress `json:"hooks_id"`
-	MailboxID hyputil.HexAddress `json:"mailbox_id"`
-	TokenID   hyputil.HexAddress `json:"token_id"`
+	IsmID            hyputil.HexAddress `json:"ism_id"`
+	HooksID          hyputil.HexAddress `json:"hooks_id"`
+	MailboxID        hyputil.HexAddress `json:"mailbox_id"`
+	TokenID          hyputil.HexAddress `json:"token_id"`
+	MerkleTreeHookID hyputil.HexAddress `json:"merkle_tree_hook_id"`
 }

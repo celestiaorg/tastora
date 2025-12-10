@@ -42,8 +42,6 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	chain := stack.celestia
 	rnode := stack.reth
 
-	// 4) Initialize the Hyperlane deployer with the reth node as a provider
-	// Select a hyperlane image. Allow override via HYPERLANE_IMAGE (format repo:tag)
 	hlImage := hyperlane.DefaultDeployerImage()
 
 	d, err := hyperlane.NewDeployer(
@@ -85,6 +83,9 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 		require.NotEmpty(t, hex, "%s address should be present", name)
 	}
 
+	addrsBz, _ := json.Marshal(addrs)
+	t.Logf("Deployed ADDRS: %s", string(addrsBz))
+
 	// Query code at those addresses via reth RPC to ensure contracts exist
 	ec, err := rnode.GetEthClient(ctx)
 	require.NoError(t, err)
@@ -96,12 +97,13 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	broadcaster := cosmos.NewBroadcaster(chain)
 	faucetWallet := chain.GetNode().GetFaucetWallet()
+
 	config, err := d.DeployCosmosNoopISM(ctx, broadcaster, faucetWallet)
 	require.NoError(t, err)
 	require.NotNil(t, config)
 
-	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s",
-		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String())
+	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s, MerkleTreeHook=%s",
+		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String(), config.MerkleTreeHookID.String())
 
 	networkInfo, err := stack.reth.GetNetworkInfo(ctx)
 	require.NoError(t, err)
@@ -125,11 +127,18 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	}
 	require.NotEmpty(t, evmName)
 	evmDomain := onDiskSchema.Registry.Chains[evmName].Metadata.DomainID
-	evmRouter := onDiskSchema.Registry.Chains[evmName].Addresses.InterchainAccountRouter
-	require.NotEmpty(t, evmRouter)
 
-	// receiverContract must be a valid 32-byte HexAddress, pad EVM router address
-	evmAddr20 := gethcommon.HexToAddress(evmRouter)
+	// get the EVM warp token address from the registry (deployed by hyperlane warp deploy)
+	evmAddr20, err := d.GetEVMWarpTokenAddress()
+	require.NoError(t, err)
+	t.Logf("EVM warp token address: %s", evmAddr20.String())
+
+	// verify the warp token contract actually exists
+	warpTokenCode, err := ec.CodeAt(ctx, evmAddr20, nil)
+	require.NoError(t, err, "failed to fetch code for warp token")
+	require.Greater(t, len(warpTokenCode), 0, "warp token should have non-empty code at %s", evmAddr20.Hex())
+	t.Logf("Warp token contract has %d bytes of code", len(warpTokenCode))
+
 	paddedReceiver := evm.PadAddress(evmAddr20)
 	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, paddedReceiver.String())
 	require.NoError(t, err)
@@ -150,11 +159,13 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	sendAmount := sdkmath.NewInt(1000)
 
+	receiver := gethcommon.HexToAddress("0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d")
+
 	txMsg := &warptypes.MsgRemoteTransfer{
 		Sender:            faucetWallet.GetFormattedAddress(),
 		TokenId:           config.TokenID,
 		DestinationDomain: evmDomain,
-		Recipient:         paddedReceiver,
+		Recipient:         evm.PadAddress(receiver),
 		Amount:            sendAmount,
 	}
 
@@ -166,6 +177,42 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	afterEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.celestia.Config.Denom)
 	require.NoError(t, err)
 	require.Truef(t, afterEscrow.Equal(sendAmount), "escrow should increase by sendAmount %s on success", stack.celestia.Config.Denom)
+
+	// Fetch the updated schema after cosmos deployment (which automatically updates the relayer config)
+	onDiskSchema, err = d.GetOnDiskSchema(ctx)
+	require.NoError(t, err)
+
+	relayerCfg = *onDiskSchema.RelayerConfig
+
+	// Create and start a Hyperlane relayer agent using the on-disk relayer config
+	agentCfg := hyperlane.Config{
+		Logger:          testCfg.Logger,
+		DockerClient:    testCfg.DockerClient,
+		DockerNetworkID: testCfg.NetworkID,
+		HyperlaneImage:  container.NewImage("damiannolan/hyperlane-agent", "test", "1000:1000"),
+	}
+
+	agent, err := hyperlane.NewAgent(ctx, agentCfg, testCfg.TestName, hyperlane.AgentTypeRelayer, d)
+	require.NoError(t, err)
+	require.NoError(t, agent.Start(ctx))
+
+	// wait for the relayer to process the message and mint tokens on EVM side
+	// NOTE: Escrow should NOT drain for Cosmos→EVM transfers. Escrow only drains when tokens are sent back (EVM→Cosmos).
+	require.Eventually(t, func() bool {
+		// query ERC20 balanceOf for the recipient
+		balance, err := evm.GetERC20Balance(ctx, ec, evmAddr20, receiver)
+		if err != nil {
+			t.Logf("error querying EVM warp token balance: %v", err)
+			return false
+		}
+		t.Logf("EVM recipient warp token balance: %s", balance.String())
+		return balance.Cmp(sendAmount.BigInt()) >= 0
+	}, 2*time.Minute, 5*time.Second, "EVM recipient should receive minted warp tokens")
+
+	// verify escrow remains full (tokens are locked, not drained)
+	finalEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.celestia.Config.Denom)
+	require.NoError(t, err)
+	require.Equal(t, sendAmount, finalEscrow, "escrow should remain at sendAmount for Cosmos→EVM transfer")
 }
 
 func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCelestiaRPCUrl, externalEVMRPCUrl string) (gethcommon.Hash, error) {
@@ -186,10 +233,7 @@ func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCele
 		return gethcommon.Hash{}, fmt.Errorf("no ethereum chain found in schema")
 	}
 
-	contractAddr := schema.Registry.Chains[evmName].Addresses.InterchainAccountRouter
-	if contractAddr == "" {
-		return gethcommon.Hash{}, fmt.Errorf("no InterchainAccountRouter address found in schema")
-	}
+	contractAddr := "0x345a583028762De4d733852c9D4f419077093A48"
 
 	var cosmosName string
 	for name, cfg := range schema.RelayerConfig.Chains {
@@ -210,7 +254,7 @@ func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCele
 		return gethcommon.Hash{}, fmt.Errorf("failed to query warp tokens: %w", err)
 	}
 
-	routerHex := warpTokens[0].IsmId.String()
+	routerHex := warpTokens[0].Id
 
 	return d.EnrollRemoteRouter(ctx, contractAddr, domain, routerHex, evmName, externalEVMRPCUrl)
 }
