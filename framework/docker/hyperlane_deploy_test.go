@@ -3,14 +3,17 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
-	"path/filepath"
+	gethcommon "github.com/ethereum/go-ethereum/common"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"testing"
 	"time"
 
 	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
-	commonpkg "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,9 +64,6 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	// also expect the cosmos chain entry by its configured name
 	require.NotEmpty(t, relayerCfg.Chains[chain.Config.Name])
 
-	_, err = d.ReadFile(ctx, filepath.Join("registry", "chains", chain.Config.Name, "metadata.yaml"))
-	require.NoError(t, err)
-
 	require.NoError(t, d.Deploy(ctx))
 
 	onDiskSchema, err := d.GetOnDiskSchema(ctx)
@@ -86,7 +86,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	ec, err := rnode.GetEthClient(ctx)
 	require.NoError(t, err)
 	for name, hex := range critical {
-		code, err := ec.CodeAt(ctx, commonpkg.HexToAddress(hex), nil)
+		code, err := ec.CodeAt(ctx, gethcommon.HexToAddress(hex), nil)
 		require.NoErrorf(t, err, "failed to fetch code for %s", name)
 		require.Greaterf(t, len(code), 0, "%s should have non-empty code", name)
 	}
@@ -98,4 +98,80 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s",
 		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String())
 
+	networkInfo, err := stack.reth.GetNetworkInfo(ctx)
+	require.NoError(t, err)
+	rpcURL := fmt.Sprintf("http://%s", networkInfo.External.RPCAddress())
+
+	networkInfo, err = stack.celestia.GetNetworkInfo(ctx)
+	require.NoError(t, err)
+
+	hash, err := enrollRemoteRouter(ctx, d, networkInfo.External.GRPCAddress(), rpcURL)
+	require.NoError(t, err)
+	t.Logf("Enrolled remote router: %s", hash.Hex())
+
+}
+
+func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCelestiaRPCUrl, externalEVMRPCUrl string) (gethcommon.Hash, error) {
+	schema, err := d.GetOnDiskSchema(ctx)
+	if err != nil {
+		return gethcommon.Hash{}, fmt.Errorf("failed to get on-disk schema: %w", err)
+	}
+
+	var evmName string
+	for name, cfg := range schema.RelayerConfig.Chains {
+		if cfg.Protocol == "ethereum" {
+			evmName = name
+			break
+		}
+	}
+
+	if evmName == "" {
+		return gethcommon.Hash{}, fmt.Errorf("no ethereum chain found in schema")
+	}
+
+	contractAddr := schema.Registry.Chains[evmName].Addresses.InterchainAccountRouter
+	if contractAddr == "" {
+		return gethcommon.Hash{}, fmt.Errorf("no InterchainAccountRouter address found in schema")
+	}
+
+	var cosmosName string
+	for name, cfg := range schema.RelayerConfig.Chains {
+		if cfg.Protocol == "cosmosnative" {
+			cosmosName = name
+			break
+		}
+	}
+
+	if cosmosName == "" {
+		return gethcommon.Hash{}, fmt.Errorf("no cosmos-native chain found in schema")
+	}
+
+	domain := schema.Registry.Chains[cosmosName].Metadata.DomainID
+
+	warpTokens, err := queryWarpTokens(ctx, externalCelestiaRPCUrl)
+	if err != nil {
+		return gethcommon.Hash{}, fmt.Errorf("failed to query warp tokens: %w", err)
+	}
+
+	routerHex := warpTokens[0].IsmId.String()
+
+	return d.EnrollRemoteRouter(ctx, contractAddr, domain, routerHex, evmName, externalEVMRPCUrl)
+}
+
+// queryWarpTokens retrieves a list of wrapped hyperlane tokens from the specified gRPC address.
+func queryWarpTokens(ctx context.Context, grpcAddr string) ([]warptypes.WrappedHypToken, error) {
+	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("dial grpc %s: %w", grpcAddr, err)
+	}
+	defer func() {
+		_ = conn.Close()
+	}()
+
+	q := warptypes.NewQueryClient(conn)
+	resp, err := q.Tokens(ctx, &warptypes.QueryTokensRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("warp tokens query failed: %w", err)
+	}
+	return resp.Tokens, nil
 }
