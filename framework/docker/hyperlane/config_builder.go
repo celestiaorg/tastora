@@ -35,7 +35,7 @@ func BuildRelayerConfig(ctx context.Context, chains []ChainConfigProvider) (*Rel
 	return config, nil
 }
 
-// SerializeRelayerConfig converts RelayerConfig to JSON bytes.
-func SerializeRelayerConfig(config *RelayerConfig) ([]byte, error) {
+// serializeRelayerConfig converts RelayerConfig to JSON bytes.
+func serializeRelayerConfig(config *RelayerConfig) ([]byte, error) {
 	return json.MarshalIndent(config, "", "    ")
 }

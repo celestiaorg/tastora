@@ -1,30 +1,11 @@
 package hyperlane
 
-import "context"
-
 // Schema contains all Hyperlane configuration structures.
 type Schema struct {
 	RelayerConfig *RelayerConfig
 	Registry      *Registry
-	// TODO: add hyperlane core and warp configs
-}
-
-// BuildSchema builds a hyperlane scheme from the provided set of chains.
-func BuildSchema(ctx context.Context, chains []ChainConfigProvider) (*Schema, error) {
-	config, err := BuildRelayerConfig(ctx, chains)
-	if err != nil {
-		return nil, err
-	}
-
-	registry, err := BuildRegistry(ctx, chains)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Schema{
-		RelayerConfig: config,
-		Registry:      registry,
-	}, nil
+	WarpConfig    map[string]*WarpConfigEntry
+	CoreConfig    *CoreConfig
 }
 
 // Registry models the contents of a hyperlane registry.
@@ -52,6 +33,16 @@ type WarpRouteDeploy struct {
 	Type  string `yaml:"type" json:"type"`
 }
 
+type WarpConfigEntry struct {
+	Type                     string `yaml:"type" json:"type"`
+	Owner                    string `yaml:"owner,omitempty" json:"owner,omitempty"`
+	Mailbox                  string `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
+	InterchainSecurityModule string `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
+	Name                     string `yaml:"name,omitempty" json:"name,omitempty"`
+	Symbol                   string `yaml:"symbol,omitempty" json:"symbol,omitempty"`
+	Decimals                 int    `yaml:"decimals,omitempty" json:"decimals,omitempty"`
+}
+
 type RegistryEntry struct {
 	Metadata  ChainMetadata     `yaml:"metadata" json:"metadata"`
 	Addresses ContractAddresses `yaml:"addresses" json:"addresses"`
@@ -72,6 +63,8 @@ type ContractAddresses struct {
 	ProtocolFee              string `yaml:"protocolFee,omitempty" json:"protocolFee,omitempty"`
 	StorageGasOracle         string `yaml:"storageGasOracle,omitempty" json:"storageGasOracle,omitempty"`
 	TestRecipient            string `yaml:"testRecipient,omitempty" json:"testRecipient,omitempty"`
+	TestIsm                  string `yaml:"testIsm,omitempty" json:"testIsm,omitempty"`
+
 	// Additional factory and router addresses used by Hyperlane
 	DomainRoutingIsmFactory                    string `yaml:"domainRoutingIsmFactory,omitempty" json:"domainRoutingIsmFactory,omitempty"`
 	InterchainAccountIsm                       string `yaml:"interchainAccountIsm,omitempty" json:"interchainAccountIsm,omitempty"`
