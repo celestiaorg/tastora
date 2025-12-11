@@ -51,6 +51,8 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	// Validate that init wrote basic config files
+	// Read relayer-config.json and ensure it contains the reth chain
 	relayerBytes, err := d.ReadFile(ctx, "relayer-config.json")
 	require.NoError(t, err)
 	var relayerCfg hyperlane.RelayerConfig
