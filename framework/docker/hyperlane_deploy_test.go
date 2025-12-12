@@ -31,8 +31,8 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	// Bring up full stack with defaults (celestia-app, DA bridge, reth, evm-single)
 	stack, err := DeployMinimalStack(t, testCfg)
 	require.NoError(t, err)
-	chain := stack.celestia
-	rnode := stack.reth
+	chain := stack.Celestia
+	rnode := stack.Reth
 
 	// 4) Initialize the Hyperlane deployer with the reth node as a provider
 	// Select a hyperlane image. Allow override via HYPERLANE_IMAGE (format repo:tag)
