@@ -123,7 +123,7 @@ func (d *Deployer) Deploy(ctx context.Context) error {
 	}
 
 	if err := d.deployWarpRoutes(ctx); err != nil {
-		return fmt.Errorf("failed to evstack warp routes: %w", err)
+		return fmt.Errorf("failed to deploy warp routes: %w", err)
 	}
 
 	d.deployed = true

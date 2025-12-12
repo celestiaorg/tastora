@@ -64,7 +64,7 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 
 func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 	cmd := []string{
-		"hyperlane", "warp", "evstack",
+		"hyperlane", "warp", "deploy",
 		"--config", path.Join(configsPath, "warp-config.yaml"),
 		"--registry", registryPath,
 		"--yes",
