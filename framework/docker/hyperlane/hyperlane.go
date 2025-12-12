@@ -74,7 +74,7 @@ func NewDeployer(ctx context.Context, cfg Config, testName string, chains []Chai
 
 // Name returns the hostname of the docker container
 func (d *Deployer) Name() string {
-	return fmt.Sprintf("hyperlane-deploy-%d-%s", d.Index, internal.SanitizeDockerResourceName(d.TestName))
+	return fmt.Sprintf("hyperlane-evstack-%d-%s", d.Index, internal.SanitizeDockerResourceName(d.TestName))
 }
 
 // Init generates configs and prepares the deployment
@@ -119,11 +119,11 @@ func (d *Deployer) Deploy(ctx context.Context) error {
 	d.Logger.Info("starting hyperlane deployment")
 
 	if err := d.deployCoreContracts(ctx); err != nil {
-		return fmt.Errorf("failed to deploy core contracts: %w", err)
+		return fmt.Errorf("failed to evstack core contracts: %w", err)
 	}
 
 	if err := d.deployWarpRoutes(ctx); err != nil {
-		return fmt.Errorf("failed to deploy warp routes: %w", err)
+		return fmt.Errorf("failed to evstack warp routes: %w", err)
 	}
 
 	d.deployed = true

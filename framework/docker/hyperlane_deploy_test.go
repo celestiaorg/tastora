@@ -26,8 +26,8 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	// Bring up full stack with defaults (celestia-app, DA bridge, reth, evm-single)
 	stack, err := DeployMinimalStack(t, testCfg)
 	require.NoError(t, err)
-	chain := stack.celestia
-	rnode := stack.reth
+	chain := stack.Celestia
+	rnode := stack.Reth
 
 	hlImage := hyperlane.DefaultDeployerImage()
 

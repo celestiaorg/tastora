@@ -2,6 +2,7 @@ package docker
 
 import (
 	"fmt"
+	"github.com/celestiaorg/tastora/framework/testutil/deploy"
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
@@ -19,7 +20,7 @@ func TestEvstack(t *testing.T) {
 	// Setup isolated docker environment for this test
 	testCfg := setupDockerTest(t)
 
-	_, daNetwork, err := DeployCelestiaWithDABridgeNode(t, testCfg)
+	_, daNetwork, err := deploy.CelestiaWithDA(testCfg.Ctx, testCfg.ChainBuilder, testCfg.DANetworkBuilder)
 	require.NoError(t, err)
 
 	bridgeNode := daNetwork.GetBridgeNodes()[0]
