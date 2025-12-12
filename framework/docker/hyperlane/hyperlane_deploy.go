@@ -37,7 +37,7 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 	}
 
 	cmd := []string{
-		"hyperlane", "core", "evstack",
+		"hyperlane", "core", "deploy",
 		"--chain", evmChainName,
 		"--registry", registryPath,
 		"--yes",
@@ -48,12 +48,12 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 	}
 	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
 	if err != nil {
-		return fmt.Errorf("core evstack failed: %w", err)
+		return fmt.Errorf("core deploy failed: %w", err)
 	}
 
 	d.Logger.Info("core contracts deployed", zap.String("chain", evmChainName))
 
-	// NOTE: the `hyperlane core evstack` step writes `addresses.yaml` to disk which is required to write the core
+	// NOTE: the `hyperlane core deploy` step writes `addresses.yaml` to disk which is required to write the core
 	// config to disk and so this step happens after execution.
 	if err := d.writeCoreConfig(ctx); err != nil {
 		return fmt.Errorf("failed to write core config: %w", err)
@@ -72,7 +72,7 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 
 	_, _, err := d.Exec(ctx, d.Logger, cmd, nil)
 	if err != nil {
-		return fmt.Errorf("warp evstack failed: %w", err)
+		return fmt.Errorf("warp deploy failed: %w", err)
 	}
 
 	d.Logger.Info("warp routes deployed")
