@@ -65,6 +65,7 @@ func (n *Node) GetHyperlaneRelayerChainConfig(ctx context.Context) (hyperlane.Re
 	// NOTE: this key is hard coded for testing purposes and corresponds to the 0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d address in the genesis.
 	cfg.Signer = &hyperlane.SignerConfig{Key: "0x82bfcfadbf1712f6550d8d2c00a39f05b33ec78939d0167be2a737d691f33a6a", Type: "hexKey"}
 
+	// Populate core contract addresses directly.
 	// ref: https://github.com/celestiaorg/celestia-zkevm/blob/bcead83f455dbdc2f1b3671d1c10e03480b49407/hyperlane/relayer-config.json#L29
 	cfg.Mailbox = "0xb1c938F5BA4B3593377F399e12175e8db0C787Ff"
 	cfg.InterchainSecurityModule = "0xa05915fD6E32A1AA7E67d800164CaCB12487142d"
