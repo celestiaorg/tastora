@@ -119,7 +119,7 @@ func (d *Deployer) Deploy(ctx context.Context) error {
 	d.Logger.Info("starting hyperlane deployment")
 
 	if err := d.deployCoreContracts(ctx); err != nil {
-		return fmt.Errorf("failed to evstack core contracts: %w", err)
+		return fmt.Errorf("failed to deploy core contracts: %w", err)
 	}
 
 	if err := d.deployWarpRoutes(ctx); err != nil {
