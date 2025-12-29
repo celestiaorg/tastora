@@ -1,4 +1,5 @@
 .idea
+.DS_Store
 vendor
 CLAUDE.local.md
 memory-bank/

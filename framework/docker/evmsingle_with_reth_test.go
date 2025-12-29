@@ -23,7 +23,7 @@ func TestEvmSingle_WithReth(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	enodes := stack.evm.Nodes()
+	enodes := stack.EVM.Nodes()
 	require.Len(t, enodes, 1)
 
 	networkInfo, err := enodes[0].GetNetworkInfo(ctx)
