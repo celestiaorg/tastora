@@ -3,6 +3,13 @@ package docker
 import (
 	"context"
 	"fmt"
+	"sync"
+	"testing"
+
+	ismtypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/01_interchain_security/types"
+	hooktypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/02_post_dispatch/types"
+	coretypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/types"
+	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
@@ -10,14 +17,11 @@ import (
 	reth "github.com/celestiaorg/tastora/framework/docker/evstack/reth"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/celestiaorg/tastora/framework/types"
-	govmodule "github.com/cosmos/cosmos-sdk/x/gov"
-	"sync"
-	"testing"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/bank"
+	govmodule "github.com/cosmos/cosmos-sdk/x/gov"
 	"github.com/cosmos/ibc-go/v8/modules/apps/transfer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -67,6 +71,12 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 
 	logger := zaptest.NewLogger(t)
 	encConfig := testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{}, transfer.AppModuleBasic{}, govmodule.AppModuleBasic{})
+
+	// register hyperlane-cosmos types for message encoding/decoding
+	ismtypes.RegisterInterfaces(encConfig.InterfaceRegistry)
+	hooktypes.RegisterInterfaces(encConfig.InterfaceRegistry)
+	coretypes.RegisterInterfaces(encConfig.InterfaceRegistry)
+	warptypes.RegisterInterfaces(encConfig.InterfaceRegistry)
 
 	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
