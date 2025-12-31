@@ -322,6 +322,7 @@ func (d *Deployer) createCollateralToken(ctx context.Context, chain types.Broadc
 	if err != nil {
 		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateCollateralToken: %w", err)
 	}
+
 	return parseEventValue(resp.Events, "/hyperlane.warp.v1.EventCreateCollateralToken", func(e *warptypes.EventCreateCollateralToken) (hyputil.HexAddress, bool) {
 		return e.TokenId, true
 	})
