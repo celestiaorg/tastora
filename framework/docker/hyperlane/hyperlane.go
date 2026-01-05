@@ -74,7 +74,7 @@ func NewDeployer(ctx context.Context, cfg Config, testName string, chains []Chai
 
 // Name returns the hostname of the docker container
 func (d *Deployer) Name() string {
-	return fmt.Sprintf("hyperlane-evstack-%d-%s", d.Index, internal.SanitizeDockerResourceName(d.TestName))
+	return fmt.Sprintf("hyperlane-deploy-%d-%s", d.Index, internal.SanitizeDockerResourceName(d.TestName))
 }
 
 // Init generates configs and prepares the deployment
