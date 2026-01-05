@@ -10,6 +10,7 @@ import (
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -34,8 +35,8 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	// Bring up full stack with defaults (celestia-app, DA bridge, reth, evm-single)
 	stack, err := DeployMinimalStack(t, testCfg)
 	require.NoError(t, err)
-	chain := stack.celestia
-	rnode := stack.reth
+	chain := stack.Celestia
+	rnode := stack.Reth
 
 	// 4) Initialize the Hyperlane deployer with the reth node as a provider
 	// Select a hyperlane image. Allow override via HYPERLANE_IMAGE (format repo:tag)
@@ -54,6 +55,8 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	// Validate that init wrote basic config files
+	// Read relayer-config.json and ensure it contains the reth chain
 	relayerBytes, err := d.ReadFile(ctx, "relayer-config.json")
 	require.NoError(t, err)
 	var relayerCfg hyperlane.RelayerConfig
@@ -61,6 +64,9 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	require.NotEmpty(t, relayerCfg.Chains["rethlocal"]) // name from reth provider
 	// also expect the cosmos chain entry by its configured name
 	require.NotEmpty(t, relayerCfg.Chains[chain.Config.Name])
+
+	_, err = d.ReadFile(ctx, filepath.Join("registry", "chains", chain.Config.Name, "metadata.yaml"))
+	require.NoError(t, err)
 
 	require.NoError(t, d.Deploy(ctx))
 
@@ -91,6 +97,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	broadcaster := cosmos.NewBroadcaster(chain)
 	faucetWallet := chain.GetNode().GetFaucetWallet()
+
 	config, err := d.DeployCosmosNoopISM(ctx, broadcaster, faucetWallet)
 	require.NoError(t, err)
 	require.NotNil(t, config)
@@ -98,11 +105,11 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	t.Logf("Deployed cosmos-native hyperlane: ISM=%s, Hooks=%s, Mailbox=%s, Token=%s",
 		config.IsmID.String(), config.HooksID.String(), config.MailboxID.String(), config.TokenID.String())
 
-	networkInfo, err := stack.reth.GetNetworkInfo(ctx)
+	networkInfo, err := stack.Reth.GetNetworkInfo(ctx)
 	require.NoError(t, err)
 	rpcURL := fmt.Sprintf("http://%s", networkInfo.External.RPCAddress())
 
-	networkInfo, err = stack.celestia.GetNetworkInfo(ctx)
+	networkInfo, err = stack.Celestia.GetNetworkInfo(ctx)
 	require.NoError(t, err)
 
 	hash, err := enrollRemoteRouter(ctx, d, networkInfo.External.GRPCAddress(), rpcURL)
