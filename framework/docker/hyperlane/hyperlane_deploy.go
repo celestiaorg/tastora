@@ -2,6 +2,7 @@ package hyperlane
 
 import (
 	"context"
+	sdkmath "cosmossdk.io/math"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/docker/hyperlane/internal"
 	"path"
@@ -159,6 +160,27 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	}
 
 	d.Logger.Info("wrote core-config.yaml")
+	return nil
+}
+
+// EnrollRemoteRouterOnCosmos enrolls a remote router for a given token on the Cosmos chain
+// by broadcasting a MsgEnrollRemoteRouter via the provided broadcaster and wallet.
+// tokenID is the Cosmos bytes32 identifier for the router/token (hyputil.HexAddress),
+// remoteDomain is the EVM domain ID, and receiverContract is the EVM router contract (0x-prefixed hex).
+func (d *Deployer) EnrollRemoteRouterOnCosmos(ctx context.Context, b types.Broadcaster, wallet *types.Wallet, tokenID hyputil.HexAddress, remoteDomain uint32, receiverContract string) error {
+	msg := &warptypes.MsgEnrollRemoteRouter{
+		Owner:   wallet.GetFormattedAddress(),
+		TokenId: tokenID,
+		RemoteRouter: &warptypes.RemoteRouter{
+			ReceiverDomain:   remoteDomain,
+			ReceiverContract: receiverContract,
+			Gas:              sdkmath.NewInt(0),
+		},
+	}
+	if _, err := b.BroadcastMessages(ctx, wallet, msg); err != nil {
+		return fmt.Errorf("broadcast MsgEnrollRemoteRouter failed: %w", err)
+	}
+	d.Logger.Info("enrolled remote router on cosmos", zap.Uint32("remote_domain", remoteDomain), zap.String("receiver_contract", receiverContract))
 	return nil
 }
 
@@ -322,7 +344,6 @@ func (d *Deployer) createCollateralToken(ctx context.Context, chain types.Broadc
 	if err != nil {
 		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateCollateralToken: %w", err)
 	}
-
 	return parseEventValue(resp.Events, "/hyperlane.warp.v1.EventCreateCollateralToken", func(e *warptypes.EventCreateCollateralToken) (hyputil.HexAddress, bool) {
 		return e.TokenId, true
 	})
