@@ -4,15 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
-	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/celestiaorg/tastora/framework/docker/cosmos"
-	gethcommon "github.com/ethereum/go-ethereum/common"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"path/filepath"
 	"testing"
 	"time"
+
+	sdkmath "cosmossdk.io/math"
+	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
+	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
+	"github.com/celestiaorg/tastora/framework/testutil/evm"
+	query "github.com/celestiaorg/tastora/framework/testutil/query"
+	"github.com/celestiaorg/tastora/framework/testutil/wait"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	gethcommon "github.com/ethereum/go-ethereum/common"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
 	"github.com/stretchr/testify/require"
@@ -130,9 +136,46 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	evmRouter := onDiskSchema.Registry.Chains[evmName].Addresses.InterchainAccountRouter
 	require.NotEmpty(t, evmRouter)
 
-	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, evmRouter)
+	// receiverContract must be a valid 32-byte HexAddress, pad EVM router address
+	evmAddr20 := gethcommon.HexToAddress(evmRouter)
+	paddedReceiver := evm.PadAddress(evmAddr20)
+	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, paddedReceiver.String())
 	require.NoError(t, err)
 
+	// capture sender utia balance before
+	ci, err := stack.Celestia.GetNetworkInfo(ctx)
+	require.NoError(t, err)
+	celestiaGRPC := ci.External.GRPCAddress()
+	cconn, err := grpc.NewClient(celestiaGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer func() { _ = cconn.Close() }()
+
+	// warp module escrow balance before
+	warpModuleAddr := authtypes.NewModuleAddress(warptypes.ModuleName).String()
+	beforeEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.Celestia.Config.Denom)
+	require.NoError(t, err)
+	require.Equal(t, sdkmath.NewInt(0), beforeEscrow, "escrow should be empty on start")
+
+	sendAmount := sdkmath.NewInt(1000)
+
+	txMsg := &warptypes.MsgRemoteTransfer{
+		Sender:            faucetWallet.GetFormattedAddress(),
+		TokenId:           config.TokenID,
+		DestinationDomain: evmDomain,
+		Recipient:         paddedReceiver,
+		Amount:            sendAmount,
+	}
+
+	resp, err := broadcaster.BroadcastMessages(ctx, faucetWallet, txMsg)
+	require.NoError(t, err)
+	require.Equal(t, resp.Code, uint32(0), "remote transfer tx should succeed: code=%d, log=%s", resp.Code, resp.RawLog)
+	require.NoError(t, wait.ForBlocks(ctx, 3, stack.Celestia))
+
+	afterEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, stack.Celestia.Config.Denom)
+	require.NoError(t, err)
+	require.Truef(t, afterEscrow.Equal(sendAmount), "escrow should increase by sendAmount %s on success", stack.Celestia.Config.Denom)
+	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, evmRouter)
+	require.NoError(t, err)
 }
 
 func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCelestiaRPCUrl, externalEVMRPCUrl string) (gethcommon.Hash, error) {
