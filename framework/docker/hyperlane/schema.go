@@ -64,6 +64,7 @@ type ContractAddresses struct {
 	StorageGasOracle         string `yaml:"storageGasOracle,omitempty" json:"storageGasOracle,omitempty"`
 	TestRecipient            string `yaml:"testRecipient,omitempty" json:"testRecipient,omitempty"`
 	TestIsm                  string `yaml:"testIsm,omitempty" json:"testIsm,omitempty"`
+
 	// Additional factory and router addresses used by Hyperlane
 	DomainRoutingIsmFactory                    string `yaml:"domainRoutingIsmFactory,omitempty" json:"domainRoutingIsmFactory,omitempty"`
 	InterchainAccountIsm                       string `yaml:"interchainAccountIsm,omitempty" json:"interchainAccountIsm,omitempty"`

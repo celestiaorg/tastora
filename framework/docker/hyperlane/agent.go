@@ -21,7 +21,6 @@ const (
 // This is separate from the Hyperlane deployer - agents are long-lived containers
 type Agent struct {
 	*container.Node
-
 	cfg       Config
 	agentType AgentType
 }
