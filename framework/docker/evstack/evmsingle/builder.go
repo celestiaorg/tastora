@@ -18,6 +18,7 @@ type ChainBuilder struct {
 	dockerClient types.TastoraDockerClient
 	networkID    string
 	image        container.Image
+	bin          string
 	env          []string
 	addlArgs     []string
 	nodes        []NodeConfig
@@ -33,7 +34,8 @@ func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
 		WithT(t).
 		WithTestName(testName).
 		WithLogger(zaptest.NewLogger(t)).
-		WithImage(DefaultImage())
+		WithImage(DefaultImage()).
+		WithBinary(DefaultBinary())
 }
 
 func (b *ChainBuilder) WithT(t *testing.T) *ChainBuilder {
@@ -63,6 +65,11 @@ func (b *ChainBuilder) WithDockerNetworkID(id string) *ChainBuilder {
 
 func (b *ChainBuilder) WithImage(img container.Image) *ChainBuilder {
 	b.image = img
+	return b
+}
+
+func (b *ChainBuilder) WithBinary(bin string) *ChainBuilder {
+	b.bin = bin
 	return b
 }
 
@@ -97,7 +104,7 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 		DockerClient:        b.dockerClient,
 		DockerNetworkID:     b.networkID,
 		Image:               b.image,
-		Bin:                 "evm-single",
+		Bin:                 b.bin,
 		Env:                 b.env,
 		AdditionalStartArgs: b.addlArgs,
 	}
