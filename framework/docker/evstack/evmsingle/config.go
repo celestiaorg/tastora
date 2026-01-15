@@ -27,3 +27,8 @@ type Config struct {
 func DefaultImage() container.Image {
 	return container.Image{Repository: "ghcr.io/evstack/ev-node-evm-single", Version: "main"}
 }
+
+// DefaultBinary returns the default binary name for ev-node-evm-single.
+func DefaultBinary() string {
+	return "evm-single"
+}
