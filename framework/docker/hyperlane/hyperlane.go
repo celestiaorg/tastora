@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
+	"path/filepath"
+
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
-	"path"
-	"path/filepath"
 )
 
 const (
@@ -303,10 +304,8 @@ func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) 
 	return addresses, nil
 }
 
-// GetEVMWarpTokenAddress reads the deployed EVM warp token address.
+// GetEVMWarpTokenAddress returns the deployed EVM warp token address.
+// The address is deterministic due to CREATE2 deployment.
 func (d *Deployer) GetEVMWarpTokenAddress() (common.Address, error) {
-	// TODO: parse from deployment output instead of hardcoding
-	addr := common.HexToAddress("0x345a583028762De4d733852c9D4f419077093A48")
-	d.Logger.Info("using hardcoded EVM warp token address", zap.String("address", addr.Hex()))
-	return addr, nil
+	return common.HexToAddress("0x345a583028762De4d733852c9D4f419077093A48"), nil
 }

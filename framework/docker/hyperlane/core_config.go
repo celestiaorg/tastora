@@ -18,19 +18,19 @@ func (qs QuotedHexAddress) MarshalYAML() (interface{}, error) {
 
 // ProxyAdminCfg models the proxy admin address and owner fields.
 type ProxyAdminCfg struct {
-	Address QuotedHexAddress `yaml:"address"`
-	Owner   QuotedHexAddress `yaml:"owner"`
+	Address QuotedHexAddress `yaml:"address,omitempty"`
+	Owner   QuotedHexAddress `yaml:"owner,omitempty"`
 }
 
 // HookCfg models a generic hook address + type.
 type HookCfg struct {
-	Address QuotedHexAddress `yaml:"address"`
+	Address QuotedHexAddress `yaml:"address,omitempty"`
 	Type    string           `yaml:"type"`
 }
 
 // RequiredHookCfg models the required/protocol fee hook configuration.
 type RequiredHookCfg struct {
-	Address        QuotedHexAddress `yaml:"address"`
+	Address        QuotedHexAddress `yaml:"address,omitempty"`
 	Beneficiary    QuotedHexAddress `yaml:"beneficiary"`
 	MaxProtocolFee string           `yaml:"maxProtocolFee"`
 	Owner          QuotedHexAddress `yaml:"owner"`
@@ -40,19 +40,19 @@ type RequiredHookCfg struct {
 
 // InterchainAccountRouterCfg models the Interchain Account Router settings.
 type InterchainAccountRouterCfg struct {
-	Address          QuotedHexAddress  `yaml:"address"`
-	Mailbox          QuotedHexAddress  `yaml:"mailbox"`
-	Owner            QuotedHexAddress  `yaml:"owner"`
-	ProxyAdmin       ProxyAdminCfg     `yaml:"proxyAdmin"`
-	RemoteIcaRouters map[string]string `yaml:"remoteIcaRouters"`
+	Address          QuotedHexAddress  `yaml:"address,omitempty"`
+	Mailbox          QuotedHexAddress  `yaml:"mailbox,omitempty"`
+	Owner            QuotedHexAddress  `yaml:"owner,omitempty"`
+	ProxyAdmin       ProxyAdminCfg     `yaml:"proxyAdmin,omitempty"`
+	RemoteIcaRouters map[string]string `yaml:"remoteIcaRouters,omitempty"`
 }
 
 // CoreConfig is the top-level structure for core-config.yaml
 type CoreConfig struct {
 	DefaultHook             HookCfg                    `yaml:"defaultHook"`
 	DefaultIsm              HookCfg                    `yaml:"defaultIsm"`
-	InterchainAccountRouter InterchainAccountRouterCfg `yaml:"interchainAccountRouter"`
+	InterchainAccountRouter InterchainAccountRouterCfg `yaml:"interchainAccountRouter,omitempty"`
 	Owner                   QuotedHexAddress           `yaml:"owner"`
-	ProxyAdmin              ProxyAdminCfg              `yaml:"proxyAdmin"`
+	ProxyAdmin              ProxyAdminCfg              `yaml:"proxyAdmin,omitempty"`
 	RequiredHook            RequiredHookCfg            `yaml:"requiredHook"`
 }

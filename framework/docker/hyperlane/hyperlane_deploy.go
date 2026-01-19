@@ -2,10 +2,12 @@ package hyperlane
 
 import (
 	"context"
-	sdkmath "cosmossdk.io/math"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/hyperlane/internal"
 	"path"
+
+	sdkmath "cosmossdk.io/math"
+
+	"github.com/celestiaorg/tastora/framework/docker/hyperlane/internal"
 
 	hyputil "github.com/bcp-innovations/hyperlane-cosmos/util"
 	ismtypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/01_interchain_security/types"
@@ -54,6 +56,45 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 
 	d.Logger.Info("core contracts deployed", zap.String("chain", d.evmChainName))
 
+	if err := d.writeFactoryAddresses(ctx); err != nil {
+		return fmt.Errorf("failed to write factory addresses: %w", err)
+	}
+
+	return nil
+}
+
+func (d *Deployer) writeFactoryAddresses(ctx context.Context) error {
+	addressesPath := path.Join("registry", "chains", d.evmChainName, "addresses.yaml")
+
+	existingBytes, err := d.ReadFile(ctx, addressesPath)
+	if err != nil {
+		return fmt.Errorf("read deployed addresses: %w", err)
+	}
+
+	var addresses ContractAddresses
+	if err := yaml.Unmarshal(existingBytes, &addresses); err != nil {
+		return fmt.Errorf("unmarshal deployed addresses: %w", err)
+	}
+
+	// add factory addresses required by warp deploy (these are deterministic CREATE2 addresses)
+	addresses.DomainRoutingIsmFactory = QuotedHexAddress("0xE2c1756b8825C54638f98425c113b51730cc47f6")
+	addresses.StaticAggregationHookFactory = QuotedHexAddress("0xe53275A1FcA119e1c5eeB32E7a72e54835A63936")
+	addresses.StaticAggregationIsmFactory = QuotedHexAddress("0x25CdBD2bf399341F8FEe22eCdB06682AC81fDC37")
+	addresses.StaticMerkleRootMultisigIsmFactory = QuotedHexAddress("0x2854CFaC53FCaB6C95E28de8C91B96a31f0af8DD")
+	addresses.StaticMerkleRootWeightedMultisigIsmFactory = QuotedHexAddress("0x94B9B5bD518109dB400ADC62ab2022D2F0008ff7")
+	addresses.StaticMessageIdMultisigIsmFactory = QuotedHexAddress("0xCb1DC4aF63CFdaa4b9BFF307A8Dd4dC11B197E8f")
+	addresses.StaticMessageIdWeightedMultisigIsmFactory = QuotedHexAddress("0x70Ac5980099d71F4cb561bbc0fcfEf08AA6279ec")
+
+	bz, err := yaml.Marshal(addresses)
+	if err != nil {
+		return fmt.Errorf("marshal addresses: %w", err)
+	}
+
+	if err := d.WriteFile(ctx, addressesPath, bz); err != nil {
+		return fmt.Errorf("write addresses: %w", err)
+	}
+
+	d.Logger.Info("appended factory addresses to registry")
 	return nil
 }
 
@@ -75,55 +116,26 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 	}
 
 	d.Logger.Info("warp routes deployed")
-
 	return nil
 }
 
-// writeCoreConfig generates configs/core-config.yaml from the registry and signer
+// writeCoreConfig generates configs/core-config.yaml for fresh contract deployment
 func (d *Deployer) writeCoreConfig(ctx context.Context) error {
-	// find first EVM chain and signer
-	var chainCfg RelayerChainConfig
-	for _, c := range d.relayerCfg.Chains {
-		if c.Protocol == "ethereum" {
-			chainCfg = c
-			break
-		}
-	}
-
-	if chainCfg.Name == "" {
-		return fmt.Errorf("no EVM chain found for core config")
-	}
-
-	// build core-config structure
-	// modeled after https://github.com/celestiaorg/celestia-zkevm/blob/927364fec76bc78bc390953590f07d48d430dc20/hyperlane/configs/core-config.yaml#L1
+	// build core-config structure for fresh deployment (no addresses)
 	core := CoreConfig{
-		DefaultHook: HookCfg{
-			Address: QuotedHexAddress(chainCfg.MerkleTreeHook),
-			Type:    "merkleTreeHook",
-		},
-		InterchainAccountRouter: InterchainAccountRouterCfg{
-			Address:          QuotedHexAddress("0x4dc4E8bf5D0390C95Af9AFEb1e9c9927c4dB83e7"), // TODO: don't hard code this
-			Mailbox:          QuotedHexAddress(chainCfg.Mailbox),
-			Owner:            QuotedHexAddress(ownerAddr),
-			ProxyAdmin:       ProxyAdminCfg{Address: QuotedHexAddress(chainCfg.ProxyAdmin), Owner: QuotedHexAddress(ownerAddr)},
-			RemoteIcaRouters: map[string]string{},
-		},
 		Owner: QuotedHexAddress(ownerAddr),
-		ProxyAdmin: ProxyAdminCfg{
-			Address: QuotedHexAddress(chainCfg.ProxyAdmin),
-			Owner:   QuotedHexAddress(ownerAddr),
+		DefaultHook: HookCfg{
+			Type: "merkleTreeHook",
+		},
+		DefaultIsm: HookCfg{
+			Type: "testIsm",
 		},
 		RequiredHook: RequiredHookCfg{
-			Address:        QuotedHexAddress(chainCfg.InterchainGasPaymaster),
 			Beneficiary:    QuotedHexAddress(ownerAddr),
-			MaxProtocolFee: "10000000000000000000000000000",
+			MaxProtocolFee: "100000000000000000",
 			Owner:          QuotedHexAddress(ownerAddr),
 			ProtocolFee:    "0",
 			Type:           "protocolFee",
-		},
-		DefaultIsm: HookCfg{
-			Address: QuotedHexAddress(chainCfg.InterchainSecurityModule),
-			Type:    "testIsm",
 		},
 	}
 

@@ -77,9 +77,9 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 
 	// pick a few critical contracts to verify
 	critical := map[string]string{
-		"Mailbox":        addrs.Mailbox,
-		"ProxyAdmin":     addrs.ProxyAdmin,
-		"MerkleTreeHook": addrs.MerkleTreeHook,
+		"Mailbox":        string(addrs.Mailbox),
+		"ProxyAdmin":     string(addrs.ProxyAdmin),
+		"MerkleTreeHook": string(addrs.MerkleTreeHook),
 	}
 
 	for name, hex := range critical {
@@ -238,7 +238,11 @@ func enrollRemoteRouter(ctx context.Context, d *hyperlane.Deployer, externalCele
 		return gethcommon.Hash{}, fmt.Errorf("no ethereum chain found in schema")
 	}
 
-	contractAddr := "0x345a583028762De4d733852c9D4f419077093A48"
+	warpTokenAddr, err := d.GetEVMWarpTokenAddress()
+	if err != nil {
+		return gethcommon.Hash{}, fmt.Errorf("failed to get warp token address: %w", err)
+	}
+	contractAddr := warpTokenAddr.Hex()
 
 	var cosmosName string
 	for name, cfg := range schema.RelayerConfig.Chains {
