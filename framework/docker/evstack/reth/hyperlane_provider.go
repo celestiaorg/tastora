@@ -39,8 +39,7 @@ func (n *Node) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Registr
 		},
 	}
 
-	// Leave registry addresses empty, the Hyperlane CLI will populate these on disk.
-	// TODO: potentially revert interface to not require contract addresses.
+	// leave addresses empty - core deploy will populate addresses.yaml
 	return hyperlane.RegistryEntry{Metadata: meta, Addresses: hyperlane.ContractAddresses{}}, nil
 
 }

@@ -77,6 +77,10 @@ type ContractAddresses struct {
 	StaticMessageIdWeightedMultisigIsmFactory  string `yaml:"staticMessageIdWeightedMultisigIsmFactory,omitempty" json:"staticMessageIdWeightedMultisigIsmFactory,omitempty"`
 }
 
+func (c ContractAddresses) HasAddresses() bool {
+	return c.Mailbox != ""
+}
+
 type Strategy struct {
 	Submitter Submitter `yaml:"submitter" json:"submitter"`
 }

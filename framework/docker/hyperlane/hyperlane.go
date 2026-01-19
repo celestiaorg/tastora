@@ -173,6 +173,18 @@ func (d *Deployer) writeRegistry(ctx context.Context) error {
 		if err := d.WriteFile(ctx, metadataPath, metadataBytes); err != nil {
 			return fmt.Errorf("failed to write metadata for %s: %w", chainName, err)
 		}
+
+		if entry.Addresses.HasAddresses() {
+			addressesBytes, err := yaml.Marshal(entry.Addresses)
+			if err != nil {
+				return fmt.Errorf("failed to marshal addresses for %s: %w", chainName, err)
+			}
+
+			addressesPath := path.Join("registry", "chains", chainName, "addresses.yaml")
+			if err := d.WriteFile(ctx, addressesPath, addressesBytes); err != nil {
+				return fmt.Errorf("failed to write addresses for %s: %w", chainName, err)
+			}
+		}
 	}
 
 	return nil
