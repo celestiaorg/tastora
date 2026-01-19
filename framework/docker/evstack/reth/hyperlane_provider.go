@@ -3,6 +3,7 @@ package reth
 import (
 	"context"
 	"fmt"
+
 	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
 )
 
@@ -38,8 +39,7 @@ func (n *Node) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Registr
 		},
 	}
 
-	// Leave registry addresses empty, the Hyperlane CLI will populate these on disk.
-	// TODO: potentially revert interface to not require contract addresses.
+	// leave addresses empty - core deploy will populate addresses.yaml
 	return hyperlane.RegistryEntry{Metadata: meta, Addresses: hyperlane.ContractAddresses{}}, nil
 
 }
@@ -91,9 +91,9 @@ func (n *Node) GetHyperlaneWarpConfigEntry(ctx context.Context) (*hyperlane.Warp
 
 	return &hyperlane.WarpConfigEntry{
 		Type:                     "synthetic",
-		Owner:                    "0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d",
-		Mailbox:                  cfg.Mailbox,
-		InterchainSecurityModule: cfg.InterchainSecurityModule,
+		Owner:                    hyperlane.QuotedHexAddress("0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d"),
+		Mailbox:                  hyperlane.QuotedHexAddress(cfg.Mailbox),
+		InterchainSecurityModule: hyperlane.QuotedHexAddress(cfg.InterchainSecurityModule),
 		Name:                     "wTIA",
 		Symbol:                   "TIA",
 		Decimals:                 6,

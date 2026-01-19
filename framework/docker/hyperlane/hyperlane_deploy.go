@@ -2,10 +2,12 @@ package hyperlane
 
 import (
 	"context"
-	sdkmath "cosmossdk.io/math"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/docker/hyperlane/internal"
 	"path"
+
+	sdkmath "cosmossdk.io/math"
+
+	"github.com/celestiaorg/tastora/framework/docker/hyperlane/internal"
 
 	hyputil "github.com/bcp-innovations/hyperlane-cosmos/util"
 	ismtypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/01_interchain_security/types"
@@ -31,46 +33,68 @@ const (
 )
 
 func (d *Deployer) deployCoreContracts(ctx context.Context) error {
-	var evmChainName string
-	var signerKey string
-	for name, chainCfg := range d.relayerCfg.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			evmChainName = name
-			if chainCfg.Signer != nil {
-				signerKey = chainCfg.Signer.Key
-			}
-			break
-		}
-	}
-
-	if evmChainName == "" {
-		d.Logger.Info("no EVM chain found, skipping core deployment")
-		return nil
-	}
-
 	cmd := []string{
 		"hyperlane", "core", "deploy",
-		"--chain", evmChainName,
+		"--config", path.Join(configsPath, "core-config.yaml"),
+		"--chain", d.evmChainName,
 		"--registry", registryPath,
 		"--yes",
 	}
 
 	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", signerKey),
+		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
 	}
+
+	if err := d.writeCoreConfig(ctx); err != nil {
+		return fmt.Errorf("failed to write core config: %w", err)
+	}
+
 	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
 	if err != nil {
 		return fmt.Errorf("core deploy failed: %w", err)
 	}
 
-	d.Logger.Info("core contracts deployed", zap.String("chain", evmChainName))
+	d.Logger.Info("core contracts deployed", zap.String("chain", d.evmChainName))
 
-	// NOTE: the `hyperlane core deploy` step writes `addresses.yaml` to disk which is required to write the core
-	// config to disk and so this step happens after execution.
-	if err := d.writeCoreConfig(ctx); err != nil {
-		return fmt.Errorf("failed to write core config: %w", err)
+	if err := d.writeFactoryAddresses(ctx); err != nil {
+		return fmt.Errorf("failed to write factory addresses: %w", err)
 	}
 
+	return nil
+}
+
+func (d *Deployer) writeFactoryAddresses(ctx context.Context) error {
+	addressesPath := path.Join("registry", "chains", d.evmChainName, "addresses.yaml")
+
+	existingBytes, err := d.ReadFile(ctx, addressesPath)
+	if err != nil {
+		return fmt.Errorf("read deployed addresses: %w", err)
+	}
+
+	var addresses ContractAddresses
+	if err := yaml.Unmarshal(existingBytes, &addresses); err != nil {
+		return fmt.Errorf("unmarshal deployed addresses: %w", err)
+	}
+
+	// add factory addresses required by warp deploy (these are deterministic CREATE2 addresses)
+	addresses.DomainRoutingIsmFactory = QuotedHexAddress("0xE2c1756b8825C54638f98425c113b51730cc47f6")
+	addresses.StaticAggregationHookFactory = QuotedHexAddress("0xe53275A1FcA119e1c5eeB32E7a72e54835A63936")
+	addresses.StaticAggregationIsmFactory = QuotedHexAddress("0x25CdBD2bf399341F8FEe22eCdB06682AC81fDC37")
+	addresses.StaticMerkleRootMultisigIsmFactory = QuotedHexAddress("0x2854CFaC53FCaB6C95E28de8C91B96a31f0af8DD")
+	addresses.StaticMerkleRootWeightedMultisigIsmFactory = QuotedHexAddress("0x94B9B5bD518109dB400ADC62ab2022D2F0008ff7")
+	addresses.StaticMessageIdMultisigIsmFactory = QuotedHexAddress("0xCb1DC4aF63CFdaa4b9BFF307A8Dd4dC11B197E8f")
+	addresses.StaticMessageIdWeightedMultisigIsmFactory = QuotedHexAddress("0x70Ac5980099d71F4cb561bbc0fcfEf08AA6279ec")
+
+	bz, err := yaml.Marshal(addresses)
+	if err != nil {
+		return fmt.Errorf("marshal addresses: %w", err)
+	}
+
+	if err := d.WriteFile(ctx, addressesPath, bz); err != nil {
+		return fmt.Errorf("write addresses: %w", err)
+	}
+
+	d.Logger.Info("appended factory addresses to registry")
 	return nil
 }
 
@@ -82,71 +106,36 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 		"--yes",
 	}
 
-	_, _, err := d.Exec(ctx, d.Logger, cmd, nil)
+	env := []string{
+		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
+	}
+
+	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
 	if err != nil {
 		return fmt.Errorf("warp deploy failed: %w", err)
 	}
 
 	d.Logger.Info("warp routes deployed")
-
 	return nil
 }
 
-// writeCoreConfig generates configs/core-config.yaml from the registry and signer
+// writeCoreConfig generates configs/core-config.yaml for fresh contract deployment
 func (d *Deployer) writeCoreConfig(ctx context.Context) error {
-	// find first EVM chain and signer
-	var evmChainName string
-	for name, chainCfg := range d.relayerCfg.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			evmChainName = name
-			break
-		}
-	}
-	if evmChainName == "" {
-		return fmt.Errorf("no EVM chain found for core config")
-	}
-
-	// read addresses written by CLI from registry
-	addrBytes, err := d.ReadFile(ctx, path.Join("registry", "chains", evmChainName, "addresses.yaml"))
-	if err != nil {
-		return fmt.Errorf("read addresses: %w", err)
-	}
-
-	var addrs ContractAddresses
-	if err := yaml.Unmarshal(addrBytes, &addrs); err != nil {
-		return fmt.Errorf("unmarshal addresses: %w", err)
-	}
-
-	// build core-config structure
-	// modeled after https://github.com/celestiaorg/celestia-zkevm/blob/927364fec76bc78bc390953590f07d48d430dc20/hyperlane/configs/core-config.yaml#L1
+	// build core-config structure for fresh deployment (no addresses)
 	core := CoreConfig{
+		Owner: QuotedHexAddress(ownerAddr),
 		DefaultHook: HookCfg{
-			Address: addrs.MerkleTreeHook,
-			Type:    "merkleTreeHook",
-		},
-		InterchainAccountRouter: InterchainAccountRouterCfg{
-			Address:          addrs.InterchainAccountRouter,
-			Mailbox:          addrs.Mailbox,
-			Owner:            ownerAddr,
-			ProxyAdmin:       ProxyAdminCfg{Address: addrs.ProxyAdmin, Owner: ownerAddr},
-			RemoteIcaRouters: map[string]string{},
-		},
-		Owner: ownerAddr,
-		ProxyAdmin: ProxyAdminCfg{
-			Address: addrs.ProxyAdmin,
-			Owner:   ownerAddr,
-		},
-		RequiredHook: RequiredHookCfg{
-			Address:        addrs.InterchainGasPaymaster,
-			Beneficiary:    ownerAddr,
-			MaxProtocolFee: "10000000000000000000000000000",
-			Owner:          ownerAddr,
-			ProtocolFee:    "0",
-			Type:           "protocolFee",
+			Type: "merkleTreeHook",
 		},
 		DefaultIsm: HookCfg{
-			Address: addrs.InterchainSecurityModule,
-			Type:    "testIsm",
+			Type: "testIsm",
+		},
+		RequiredHook: RequiredHookCfg{
+			Beneficiary:    QuotedHexAddress(ownerAddr),
+			MaxProtocolFee: "100000000000000000",
+			Owner:          QuotedHexAddress(ownerAddr),
+			ProtocolFee:    "0",
+			Type:           "protocolFee",
 		},
 	}
 
@@ -344,6 +333,7 @@ func (d *Deployer) createCollateralToken(ctx context.Context, chain types.Broadc
 	if err != nil {
 		return hyputil.HexAddress{}, fmt.Errorf("broadcast MsgCreateCollateralToken: %w", err)
 	}
+
 	return parseEventValue(resp.Events, "/hyperlane.warp.v1.EventCreateCollateralToken", func(e *warptypes.EventCreateCollateralToken) (hyputil.HexAddress, bool) {
 		return e.TokenId, true
 	})

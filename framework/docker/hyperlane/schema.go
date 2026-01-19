@@ -34,13 +34,13 @@ type WarpRouteDeploy struct {
 }
 
 type WarpConfigEntry struct {
-	Type                     string `yaml:"type" json:"type"`
-	Owner                    string `yaml:"owner,omitempty" json:"owner,omitempty"`
-	Mailbox                  string `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
-	InterchainSecurityModule string `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
-	Name                     string `yaml:"name,omitempty" json:"name,omitempty"`
-	Symbol                   string `yaml:"symbol,omitempty" json:"symbol,omitempty"`
-	Decimals                 int    `yaml:"decimals,omitempty" json:"decimals,omitempty"`
+	Type                     string           `yaml:"type" json:"type"`
+	Owner                    QuotedHexAddress `yaml:"owner,omitempty" json:"owner,omitempty"`
+	Mailbox                  QuotedHexAddress `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
+	InterchainSecurityModule QuotedHexAddress `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
+	Name                     string           `yaml:"name,omitempty" json:"name,omitempty"`
+	Symbol                   string           `yaml:"symbol,omitempty" json:"symbol,omitempty"`
+	Decimals                 int              `yaml:"decimals,omitempty" json:"decimals,omitempty"`
 }
 
 type RegistryEntry struct {
@@ -50,31 +50,37 @@ type RegistryEntry struct {
 
 // ContractAddresses models core contract addresses as a structured object
 // rather than a generic map to align with file layouts.
+// NOTE: Uses QuotedHexAddress to ensure hex addresses are serialized as quoted strings in YAML,
+// preventing them from being interpreted as numbers by the Hyperlane CLI.
 type ContractAddresses struct {
-	Mailbox                  string `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
-	InterchainSecurityModule string `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
-	InterchainGasPaymaster   string `yaml:"interchainGasPaymaster,omitempty" json:"interchainGasPaymaster,omitempty"`
-	MerkleTreeHook           string `yaml:"merkleTreeHook,omitempty" json:"merkleTreeHook,omitempty"`
-	ProxyAdmin               string `yaml:"proxyAdmin,omitempty" json:"proxyAdmin,omitempty"`
-	ValidatorAnnounce        string `yaml:"validatorAnnounce,omitempty" json:"validatorAnnounce,omitempty"`
-	AggregationHook          string `yaml:"aggregationHook,omitempty" json:"aggregationHook,omitempty"`
-	DomainRoutingIsm         string `yaml:"domainRoutingIsm,omitempty" json:"domainRoutingIsm,omitempty"`
-	FallbackRoutingHook      string `yaml:"fallbackRoutingHook,omitempty" json:"fallbackRoutingHook,omitempty"`
-	ProtocolFee              string `yaml:"protocolFee,omitempty" json:"protocolFee,omitempty"`
-	StorageGasOracle         string `yaml:"storageGasOracle,omitempty" json:"storageGasOracle,omitempty"`
-	TestRecipient            string `yaml:"testRecipient,omitempty" json:"testRecipient,omitempty"`
-	TestIsm                  string `yaml:"testIsm,omitempty" json:"testIsm,omitempty"`
+	Mailbox                  QuotedHexAddress `yaml:"mailbox,omitempty" json:"mailbox,omitempty"`
+	InterchainSecurityModule QuotedHexAddress `yaml:"interchainSecurityModule,omitempty" json:"interchainSecurityModule,omitempty"`
+	InterchainGasPaymaster   QuotedHexAddress `yaml:"interchainGasPaymaster,omitempty" json:"interchainGasPaymaster,omitempty"`
+	MerkleTreeHook           QuotedHexAddress `yaml:"merkleTreeHook,omitempty" json:"merkleTreeHook,omitempty"`
+	ProxyAdmin               QuotedHexAddress `yaml:"proxyAdmin,omitempty" json:"proxyAdmin,omitempty"`
+	ValidatorAnnounce        QuotedHexAddress `yaml:"validatorAnnounce,omitempty" json:"validatorAnnounce,omitempty"`
+	AggregationHook          QuotedHexAddress `yaml:"aggregationHook,omitempty" json:"aggregationHook,omitempty"`
+	DomainRoutingIsm         QuotedHexAddress `yaml:"domainRoutingIsm,omitempty" json:"domainRoutingIsm,omitempty"`
+	FallbackRoutingHook      QuotedHexAddress `yaml:"fallbackRoutingHook,omitempty" json:"fallbackRoutingHook,omitempty"`
+	ProtocolFee              QuotedHexAddress `yaml:"protocolFee,omitempty" json:"protocolFee,omitempty"`
+	StorageGasOracle         QuotedHexAddress `yaml:"storageGasOracle,omitempty" json:"storageGasOracle,omitempty"`
+	TestRecipient            QuotedHexAddress `yaml:"testRecipient,omitempty" json:"testRecipient,omitempty"`
+	TestIsm                  QuotedHexAddress `yaml:"testIsm,omitempty" json:"testIsm,omitempty"`
 
 	// Additional factory and router addresses used by Hyperlane
-	DomainRoutingIsmFactory                    string `yaml:"domainRoutingIsmFactory,omitempty" json:"domainRoutingIsmFactory,omitempty"`
-	InterchainAccountIsm                       string `yaml:"interchainAccountIsm,omitempty" json:"interchainAccountIsm,omitempty"`
-	InterchainAccountRouter                    string `yaml:"interchainAccountRouter,omitempty" json:"interchainAccountRouter,omitempty"`
-	StaticAggregationHookFactory               string `yaml:"staticAggregationHookFactory,omitempty" json:"staticAggregationHookFactory,omitempty"`
-	StaticAggregationIsmFactory                string `yaml:"staticAggregationIsmFactory,omitempty" json:"staticAggregationIsmFactory,omitempty"`
-	StaticMerkleRootMultisigIsmFactory         string `yaml:"staticMerkleRootMultisigIsmFactory,omitempty" json:"staticMerkleRootMultisigIsmFactory,omitempty"`
-	StaticMerkleRootWeightedMultisigIsmFactory string `yaml:"staticMerkleRootWeightedMultisigIsmFactory,omitempty" json:"staticMerkleRootWeightedMultisigIsmFactory,omitempty"`
-	StaticMessageIdMultisigIsmFactory          string `yaml:"staticMessageIdMultisigIsmFactory,omitempty" json:"staticMessageIdMultisigIsmFactory,omitempty"`
-	StaticMessageIdWeightedMultisigIsmFactory  string `yaml:"staticMessageIdWeightedMultisigIsmFactory,omitempty" json:"staticMessageIdWeightedMultisigIsmFactory,omitempty"`
+	DomainRoutingIsmFactory                    QuotedHexAddress `yaml:"domainRoutingIsmFactory,omitempty" json:"domainRoutingIsmFactory,omitempty"`
+	InterchainAccountIsm                       QuotedHexAddress `yaml:"interchainAccountIsm,omitempty" json:"interchainAccountIsm,omitempty"`
+	InterchainAccountRouter                    QuotedHexAddress `yaml:"interchainAccountRouter,omitempty" json:"interchainAccountRouter,omitempty"`
+	StaticAggregationHookFactory               QuotedHexAddress `yaml:"staticAggregationHookFactory,omitempty" json:"staticAggregationHookFactory,omitempty"`
+	StaticAggregationIsmFactory                QuotedHexAddress `yaml:"staticAggregationIsmFactory,omitempty" json:"staticAggregationIsmFactory,omitempty"`
+	StaticMerkleRootMultisigIsmFactory         QuotedHexAddress `yaml:"staticMerkleRootMultisigIsmFactory,omitempty" json:"staticMerkleRootMultisigIsmFactory,omitempty"`
+	StaticMerkleRootWeightedMultisigIsmFactory QuotedHexAddress `yaml:"staticMerkleRootWeightedMultisigIsmFactory,omitempty" json:"staticMerkleRootWeightedMultisigIsmFactory,omitempty"`
+	StaticMessageIdMultisigIsmFactory          QuotedHexAddress `yaml:"staticMessageIdMultisigIsmFactory,omitempty" json:"staticMessageIdMultisigIsmFactory,omitempty"`
+	StaticMessageIdWeightedMultisigIsmFactory  QuotedHexAddress `yaml:"staticMessageIdWeightedMultisigIsmFactory,omitempty" json:"staticMessageIdWeightedMultisigIsmFactory,omitempty"`
+}
+
+func (c ContractAddresses) HasAddresses() bool {
+	return c.Mailbox != ""
 }
 
 type Strategy struct {
@@ -96,8 +102,7 @@ type RelayerConfig struct {
 
 // RelayerChainConfig represents a single chain's relayer config (relayer/chains/<name>.json).
 type RelayerChainConfig struct {
-	// Name is not serialized; used only as the map key.
-	Name        string        `json:"-" yaml:"-"`
+	Name        string        `json:"name" yaml:"name"`
 	Blocks      *BlockConfig  `json:"blocks,omitempty" yaml:"blocks,omitempty"`
 	ChainID     interface{}   `json:"chainId" yaml:"chainId"`
 	DisplayName string        `json:"displayName" yaml:"displayName"`
