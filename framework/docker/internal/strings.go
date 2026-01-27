@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -56,4 +57,24 @@ func parsePrefix(arg, prefix string, result map[string]string) {
 	} else {
 		result[arg] = ""
 	}
+}
+
+var validHostnamePartRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$`)
+
+// ValidateDockerHostnamePart validates a name segment for use in Docker hostnames.
+// Returns error if invalid. Rules:
+// - only lowercase letters, digits, and hyphens
+// - cannot start or end with hyphen
+// - max 30 characters (leaves room for rest of hostname)
+func ValidateDockerHostnamePart(name string) error {
+	if len(name) == 0 {
+		return fmt.Errorf("name cannot be empty")
+	}
+	if len(name) > 30 {
+		return fmt.Errorf("name too long: %d chars (max 30)", len(name))
+	}
+	if !validHostnamePartRE.MatchString(name) {
+		return fmt.Errorf("invalid name %q: must be lowercase alphanumeric with hyphens, cannot start/end with hyphen", name)
+	}
+	return nil
 }

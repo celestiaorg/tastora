@@ -16,6 +16,7 @@ type Chain struct {
 	cfg      Config
 	log      *zap.Logger
 	testName string
+	name     string
 
 	mu        sync.Mutex
 	nodes     map[string]*Node
@@ -52,7 +53,7 @@ func (c *Chain) AddNodes(ctx context.Context, nodeConfigs ...NodeConfig) ([]*Nod
 	created := make([]*Node, 0, len(nodeConfigs))
 	for i, nc := range nodeConfigs {
 		idx := start + i
-		n, err := newNode(ctx, c.cfg, c.testName, idx, nc)
+		n, err := newNode(ctx, c.cfg, c.testName, idx, nc, c.name)
 		if err != nil {
 			return nil, err
 		}
