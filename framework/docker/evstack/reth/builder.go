@@ -23,6 +23,7 @@ type NodeBuilder struct {
 	bin                 string
 	genesis             []byte
 	jwtSecretHex        string
+	nextIndex           int
 }
 
 func NewNodeBuilder(t *testing.T) *NodeBuilder {
@@ -104,10 +105,12 @@ func (b *NodeBuilder) Build(ctx context.Context) (*Node, error) {
 		GenesisFileBz:       b.genesis,
 	}
 
-	n, err := newNode(ctx, cfg, b.testName, 0)
+	index := b.nextIndex
+	n, err := newNode(ctx, cfg, b.testName, index)
 	if err != nil {
 		return nil, err
 	}
+	b.nextIndex++
 
 	return n, nil
 }

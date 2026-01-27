@@ -7,26 +7,40 @@ import (
 	"testing"
 	"time"
 
+	"github.com/celestiaorg/tastora/framework/docker/cosmos"
+	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
+	evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
+	reth "github.com/celestiaorg/tastora/framework/docker/evstack/reth"
 	"github.com/stretchr/testify/require"
 )
 
-// TestEvmSingle_WithReth starts a single reth node and an ev-node-evm-single
-// configured to talk to it via Engine/RPC, then checks basic liveness.
-func TestEvmSingle_WithReth(t *testing.T) {
+type MultiChainDeployment struct {
+	Celestia *cosmos.Chain
+	DA       *da.Network
+
+	Reth1      *reth.Node
+	Sequencer1 *evmsingle.Chain
+
+	Reth2      *reth.Node
+	Sequencer2 *evmsingle.Chain
+}
+
+func TestMultiChain(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")
 	}
+	t.Parallel()
 
 	// provision the full stack with defaults.
 	testCfg := setupDockerTest(t)
-	stack, err := DeployMinimalStack(t, testCfg)
+	stack, err := DeployMultiChainStack(t, testCfg)
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	enodes := stack.EvmSeq.Nodes()
-	require.Len(t, enodes, 1)
+	evnodes := stack.EvmSeq1.Nodes()
+	require.Len(t, evnodes, 1)
 
-	networkInfo, err := enodes[0].GetNetworkInfo(ctx)
+	networkInfo, err := evnodes[0].GetNetworkInfo(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, networkInfo.External.Ports.RPC)
 

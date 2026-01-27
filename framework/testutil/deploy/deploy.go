@@ -27,7 +27,18 @@ type Stack struct {
 	Celestia *cosmos.Chain
 	DA       *da.Network
 	Reth     *reth.Node
-	EVM      *evmsingle.Chain
+	EvmSeq   *evmsingle.Chain
+}
+
+type MultiChainStack struct {
+	Celestia *cosmos.Chain
+	DA       *da.Network
+
+	Reth1   *reth.Node
+	EvmSeq1 *evmsingle.Chain
+
+	Reth2   *reth.Node
+	EvmSeq2 *evmsingle.Chain
 }
 
 // WithDefaults deploys a celestia chain, a da network, a reth node and evm single in with default values
@@ -97,7 +108,34 @@ func Deploy(ctx context.Context, chainBuilder *cosmos.ChainBuilder, daBuilder *d
 		Celestia: celestia,
 		DA:       daNetwork,
 		Reth:     rethNode,
-		EVM:      evmSingle,
+		EvmSeq:   evmSingle,
+	}, nil
+}
+
+// DeployMultiChain deploys a 2 chain evolve stack with the provided set of builders. Every component is wired up together and started.
+func DeployMultiChain(ctx context.Context, chainBuilder *cosmos.ChainBuilder, daBuilder *da.NetworkBuilder, rethBuilder *reth.NodeBuilder, evmBuilder *evmsingle.ChainBuilder) (*MultiChainStack, error) {
+	celestia, daNetwork, err := CelestiaWithDA(ctx, chainBuilder, daBuilder)
+	if err != nil {
+		return nil, err
+	}
+
+	rethNode1, evmSingle1, err := RethWithEVMSingle(ctx, rethBuilder, evmBuilder, daNetwork)
+	if err != nil {
+		return nil, err
+	}
+
+	rethNode2, evmSingle2, err := RethWithEVMSingle(ctx, rethBuilder, evmBuilder, daNetwork)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MultiChainStack{
+		Celestia: celestia,
+		DA:       daNetwork,
+		Reth1:    rethNode1,
+		EvmSeq1:  evmSingle1,
+		Reth2:    rethNode2,
+		EvmSeq2:  evmSingle2,
 	}, nil
 }
 
