@@ -59,7 +59,7 @@ func parsePrefix(arg, prefix string, result map[string]string) {
 	}
 }
 
-var validHostnamePartRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$`)
+var validHostnamePartRE = regexp.MustCompile(`[^a-z0-9-]`)
 
 // ValidateDockerHostnamePart validates a name segment for use in Docker hostnames.
 // Returns error if invalid. Rules:
@@ -73,8 +73,11 @@ func ValidateDockerHostnamePart(name string) error {
 	if len(name) > 30 {
 		return fmt.Errorf("name too long: %d chars (max 30)", len(name))
 	}
-	if !validHostnamePartRE.MatchString(name) {
-		return fmt.Errorf("invalid name %q: must be lowercase alphanumeric with hyphens, cannot start/end with hyphen", name)
+	if validHostnamePartRE.MatchString(name) {
+		return fmt.Errorf("invalid name %q: must be lowercase alphanumeric with hyphens only", name)
+	}
+	if name[0] == '-' || name[len(name)-1] == '-' {
+		return fmt.Errorf("invalid name %q: cannot start or end with hyphen", name)
 	}
 	return nil
 }

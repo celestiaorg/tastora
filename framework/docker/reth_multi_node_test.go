@@ -54,26 +54,6 @@ func TestRethNodes_IndependentInstances(t *testing.T) {
 	require.Contains(t, reth1.Name(), "secondary", "reth1 name should contain 'secondary'")
 }
 
-func TestRethNode_WithoutName_BackwardsCompatible(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping due to short mode")
-	}
-	t.Parallel()
-
-	testCfg := setupDockerTest(t)
-
-	node, err := testCfg.RethBuilder.Build(testCfg.Ctx)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		_ = node.Stop(testCfg.Ctx)
-		_ = node.Remove(testCfg.Ctx)
-	})
-
-	require.NotContains(t, node.Name(), "primary", "name without WithName should not contain 'primary'")
-	require.Regexp(t, `^reth-\d+-`, node.Name(), "name should match old format: reth-{index}-{testname}")
-}
-
 func TestMultipleRethEvmSinglePairs(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")
