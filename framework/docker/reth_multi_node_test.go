@@ -47,6 +47,9 @@ func TestRethNodes_IndependentInstances(t *testing.T) {
 		_ = reth1.Remove(testCfg.Ctx)
 	})
 
+	require.NoError(t, reth0.Start(testCfg.Ctx))
+	require.NoError(t, reth1.Start(testCfg.Ctx))
+
 	require.NotEqual(t, reth0.HostName(), reth1.HostName(), "hostnames should be unique")
 	require.NotEqual(t, reth0.Name(), reth1.Name(), "container names should be unique")
 
