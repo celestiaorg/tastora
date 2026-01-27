@@ -7,23 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/celestiaorg/tastora/framework/docker/cosmos"
-	da "github.com/celestiaorg/tastora/framework/docker/dataavailability"
-	evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
-	reth "github.com/celestiaorg/tastora/framework/docker/evstack/reth"
 	"github.com/stretchr/testify/require"
 )
-
-type MultiChainDeployment struct {
-	Celestia *cosmos.Chain
-	DA       *da.Network
-
-	Reth1      *reth.Node
-	Sequencer1 *evmsingle.Chain
-
-	Reth2      *reth.Node
-	Sequencer2 *evmsingle.Chain
-}
 
 func TestMultiChain(t *testing.T) {
 	if testing.Short() {
