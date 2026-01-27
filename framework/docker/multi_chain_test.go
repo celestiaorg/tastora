@@ -10,23 +10,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEvmSingle_WithReth starts a single reth node and an ev-node-evm-single
-// configured to talk to it via Engine/RPC, then checks basic liveness.
-func TestEvmSingle_WithReth(t *testing.T) {
+func TestMultiChain(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")
 	}
+	t.Parallel()
 
 	// provision the full stack with defaults.
 	testCfg := setupDockerTest(t)
-	stack, err := DeployMinimalStack(t, testCfg)
+	stack, err := DeployMultiChainStack(t, testCfg)
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	enodes := stack.EvmSeq.Nodes()
-	require.Len(t, enodes, 1)
+	evnodes := stack.EvmSeq1.Nodes()
+	require.Len(t, evnodes, 1)
 
-	networkInfo, err := enodes[0].GetNetworkInfo(ctx)
+	networkInfo, err := evnodes[0].GetNetworkInfo(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, networkInfo.External.Ports.RPC)
 
