@@ -21,9 +21,10 @@ import (
 type Node struct {
 	*container.Node
 
-	cfg     Config
-	nodeCfg NodeConfig
-	logger  *zap.Logger
+	cfg       Config
+	nodeCfg   NodeConfig
+	logger    *zap.Logger
+	chainName string
 
 	isInitialized bool
 	mu            sync.Mutex
@@ -31,7 +32,7 @@ type Node struct {
 	external      types.Ports
 }
 
-func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCfg NodeConfig) (*Node, error) {
+func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCfg NodeConfig, chainName string) (*Node, error) {
 	image := cfg.Image
 	if nodeCfg.Image.Repository != "" {
 		image = nodeCfg.Image
@@ -44,7 +45,7 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCf
 	// This image expects the home at /root/.evm-single by convention
 	homeDir := "/root/.evm-single"
 
-	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports}
+	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports, chainName: chainName}
 	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, NodeType, log)
 	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
 	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
@@ -55,6 +56,9 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCf
 
 // Name returns a stable container name
 func (n *Node) Name() string {
+	if n.chainName != "" {
+		return fmt.Sprintf("evm-single-%s-%d-%s", n.chainName, n.Index, internal.SanitizeDockerResourceName(n.TestName))
+	}
 	return fmt.Sprintf("evm-single-%d-%s", n.Index, internal.SanitizeDockerResourceName(n.TestName))
 }
 

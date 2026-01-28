@@ -2,10 +2,12 @@ package evmsingle
 
 import (
 	"context"
-	"github.com/celestiaorg/tastora/framework/types"
+	"fmt"
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
@@ -22,6 +24,7 @@ type ChainBuilder struct {
 	env          []string
 	addlArgs     []string
 	nodes        []NodeConfig
+	name         string
 }
 
 func NewChainBuilder(t *testing.T) *ChainBuilder {
@@ -97,6 +100,14 @@ func (b *ChainBuilder) WithNodes(cfgs ...NodeConfig) *ChainBuilder {
 	return b
 }
 
+func (b *ChainBuilder) WithName(name string) *ChainBuilder {
+	if err := internal.ValidateDockerHostnamePart(name); err != nil {
+		panic(fmt.Sprintf("invalid evmsingle chain name: %v", err))
+	}
+	b.name = name
+	return b
+}
+
 // Build constructs a Chain with nodes created and volumes initialized (not isInitialized)
 func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 	cfg := Config{
@@ -113,12 +124,13 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 		cfg:       cfg,
 		log:       b.logger,
 		testName:  b.testName,
+		name:      b.name,
 		nodes:     make(map[string]*Node),
 		nextIndex: 0,
 	}
 
 	for i, nc := range b.nodes {
-		n, err := newNode(ctx, cfg, b.testName, i, nc)
+		n, err := newNode(ctx, cfg, b.testName, i, nc, b.name)
 		if err != nil {
 			return nil, err
 		}

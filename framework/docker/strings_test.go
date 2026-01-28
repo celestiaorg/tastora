@@ -89,3 +89,36 @@ func TestSanitizeContainerName(t *testing.T) {
 		require.Equal(t, tt.Want, internal.SanitizeDockerResourceName(tt.Name), tt)
 	}
 }
+
+func TestValidateDockerHostnamePart(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"valid lowercase", "primary", false},
+		{"valid with digits", "node1", false},
+		{"valid with hyphen", "my-node", false},
+		{"valid single char", "a", false},
+		{"valid two chars", "ab", false},
+		{"empty string", "", true},
+		{"uppercase", "Primary", true},
+		{"starts with hyphen", "-node", true},
+		{"ends with hyphen", "node-", true},
+		{"too long", "this-name-is-way-too-long-for-a-hostname-part", true},
+		{"contains underscore", "my_node", true},
+		{"contains dot", "my.node", true},
+		{"contains space", "my node", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := internal.ValidateDockerHostnamePart(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

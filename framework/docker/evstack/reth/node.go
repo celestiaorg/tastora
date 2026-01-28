@@ -28,11 +28,12 @@ type Node struct {
 	started  bool
 	mu       sync.Mutex
 	external types.Ports // RPC, P2P, API(ws), Engine, Metrics
+	name     string
 }
 
 // newNode creates a new Reth node instance with the provided configuration. This creates the underlying docker resources
 // but does not start the container.
-func newNode(ctx context.Context, cfg Config, testName string, index int) (*Node, error) {
+func newNode(ctx context.Context, cfg Config, testName string, index int, name string) (*Node, error) {
 	image := cfg.Image
 
 	log := cfg.Logger.With(zap.String("component", "reth-node"), zap.Int("i", index))
@@ -41,6 +42,7 @@ func newNode(ctx context.Context, cfg Config, testName string, index int) (*Node
 	n := &Node{
 		cfg:    cfg,
 		logger: log,
+		name:   name,
 	}
 	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, NodeType, log)
 	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
@@ -54,6 +56,9 @@ func newNode(ctx context.Context, cfg Config, testName string, index int) (*Node
 
 // Name returns a stable container name
 func (n *Node) Name() string {
+	if n.name != "" {
+		return fmt.Sprintf("reth-%s-%d-%s", n.name, n.Index, internal.SanitizeDockerResourceName(n.TestName))
+	}
 	return fmt.Sprintf("reth-%d-%s", n.Index, internal.SanitizeDockerResourceName(n.TestName))
 }
 
