@@ -38,10 +38,6 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 	}
 
 	for _, chain := range d.SignerKeys {
-		if err := d.ensureRegistryMetadata(ctx, chain.Name); err != nil {
-			return err
-		}
-
 		cmd := []string{
 			"hyperlane", "core", "deploy",
 			"--config", path.Join(configsPath, "core-config.yaml"),
@@ -66,31 +62,6 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 		}
 	}
 
-	return nil
-}
-
-func (d *Deployer) ensureRegistryMetadata(ctx context.Context, chainName string) error {
-	metadataPath := path.Join("registry", "chains", chainName, "metadata.yaml")
-	bz, err := d.ReadFile(ctx, metadataPath)
-	if err != nil {
-		return fmt.Errorf("read registry metadata for %s: %w", chainName, err)
-	}
-	if len(bz) == 0 {
-		return fmt.Errorf("empty registry metadata for %s", chainName)
-	}
-
-	var meta ChainMetadata
-	if err := yaml.Unmarshal(bz, &meta); err != nil {
-		return fmt.Errorf("unmarshal registry metadata for %s: %w", chainName, err)
-	}
-	if meta.Name == "" {
-		return fmt.Errorf("registry metadata for %s missing name", chainName)
-	}
-	if meta.Name != chainName {
-		return fmt.Errorf("registry metadata name mismatch for %s: %s", chainName, meta.Name)
-	}
-
-	d.Logger.Info("registry metadata present", zap.String("chain", chainName), zap.Uint32("domain", meta.DomainID))
 	return nil
 }
 
