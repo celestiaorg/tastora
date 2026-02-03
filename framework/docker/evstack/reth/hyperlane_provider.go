@@ -9,6 +9,10 @@ import (
 )
 
 const (
+	DefaultChainName = "rethlocal"
+	DefaultChainID   = 1234
+	DefaultDomainID  = 1234
+
 	Protocol      = "ethereum"
 	TokenName     = "Ether"
 	TokenSymbol   = "ETH"
@@ -57,17 +61,25 @@ func (n *Node) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Registr
 
 func (n *Node) HyperlaneChainName() string {
 	if n.cfg.HyperlaneChainName == "" {
-		return "rethlocal"
+		return DefaultChainName
 	}
 
 	return n.cfg.HyperlaneChainName
 }
 
 func (n *Node) HyperlaneChainID() uint64 {
+	if n.cfg.HyperlaneChainID == 0 {
+		return DefaultChainID
+	}
+
 	return n.cfg.HyperlaneChainID
 }
 
 func (n *Node) HyperlaneDomainID() uint32 {
+	if n.cfg.HyperlaneDomainID == 0 {
+		return DefaultDomainID
+	}
+
 	return n.cfg.HyperlaneDomainID
 
 }
