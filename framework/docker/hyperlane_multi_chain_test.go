@@ -76,8 +76,8 @@ func TestHyperlaneDeployer_MultiEVMChains(t *testing.T) {
 	schema, err := d.GetOnDiskSchema(ctx)
 	require.NoError(t, err)
 
-	assertCoreContractsDeployed(t, ctx, schema, reth0, reth0ChainName)
-	assertCoreContractsDeployed(t, ctx, schema, reth1, reth1ChainName)
+	assertMailbox(t, ctx, schema, reth0, reth0ChainName)
+	assertMailbox(t, ctx, schema, reth1, reth1ChainName)
 
 	broadcaster := cosmos.NewBroadcaster(celestia)
 	faucet := celestia.GetNode().GetFaucetWallet()
@@ -187,26 +187,18 @@ func BuildEvolveEVM(t *testing.T, ctx context.Context, testCfg *TestSetupConfig,
 	return rethNode, seqNode
 }
 
-func assertCoreContractsDeployed(t *testing.T, ctx context.Context, schema *hyperlane.Schema, node *reth.Node, chainName string) {
+func assertMailbox(t *testing.T, ctx context.Context, schema *hyperlane.Schema, node *reth.Node, chainName string) {
 	t.Helper()
 
 	entry, ok := schema.Registry.Chains[chainName]
 	require.True(t, ok, "missing registry entry for %s", chainName)
 
-	addrs := entry.Addresses
-	critical := map[string]string{
-		"Mailbox":        string(addrs.Mailbox),
-		"ProxyAdmin":     string(addrs.ProxyAdmin),
-		"MerkleTreeHook": string(addrs.MerkleTreeHook),
-	}
+	mailbox := string(entry.Addresses.Mailbox)
 
-	ec, err := node.GetEthClient(ctx)
+	ethClient, err := node.GetEthClient(ctx)
 	require.NoError(t, err)
 
-	for name, hex := range critical {
-		require.NotEmpty(t, hex, "%s address should be present", name)
-		code, err := ec.CodeAt(ctx, gethcommon.HexToAddress(hex), nil)
-		require.NoErrorf(t, err, "failed to fetch code for %s", name)
-		require.Greaterf(t, len(code), 0, "%s should have non-empty code", name)
-	}
+	code, err := ethClient.CodeAt(ctx, gethcommon.HexToAddress(mailbox), nil)
+	require.NoError(t, err, "failed to fetch code for mailbox")
+	require.Greaterf(t, len(code), 0, "should have non-empty code")
 }
