@@ -31,15 +31,16 @@ type Deployer struct {
 	deployed   bool
 	hasWarp    bool
 
+	// TODO: remove the hypPrivateKey and evmChainName here in favour of []evmSigningKey
 	// hypPrivateKey is the private key to use with the hyperlane tool.
 	hypPrivateKey string
 	evmChainName  string
-	evmChains     []evmChain
+	SignerKeys    []evmSignerKey
 }
 
-type evmChain struct {
-	Name      string
-	SignerKey string
+type evmSignerKey struct {
+	Name       string
+	PrivKeyHex string
 }
 
 // NewDeployer creates a new Hyperlane deployment coordinator
@@ -99,7 +100,7 @@ func (d *Deployer) init(ctx context.Context) error {
 	}
 	d.relayerCfg = relayerCfg
 
-	evmChains := make([]evmChain, 0)
+	evmChains := make([]evmSignerKey, 0)
 	for _, chainCfg := range d.relayerCfg.Chains {
 		if chainCfg.Protocol != "ethereum" {
 			continue
@@ -107,16 +108,16 @@ func (d *Deployer) init(ctx context.Context) error {
 		if chainCfg.Signer == nil || chainCfg.Signer.Key == "" {
 			return fmt.Errorf("evm chain %s missing signer configuration", chainCfg.Name)
 		}
-		evmChains = append(evmChains, evmChain{Name: chainCfg.Name, SignerKey: chainCfg.Signer.Key})
+		evmChains = append(evmChains, evmSignerKey{Name: chainCfg.Name, PrivKeyHex: chainCfg.Signer.Key})
 	}
 
 	if len(evmChains) == 0 {
 		return fmt.Errorf("no ethereum signer configured for hyperlane")
 	}
 
-	d.evmChains = evmChains
+	d.SignerKeys = evmChains
 	d.evmChainName = evmChains[0].Name
-	d.hypPrivateKey = evmChains[0].SignerKey
+	d.hypPrivateKey = evmChains[0].PrivKeyHex
 
 	registry, err := BuildRegistry(ctx, d.chains)
 	if err != nil {

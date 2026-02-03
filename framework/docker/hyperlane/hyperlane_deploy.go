@@ -37,7 +37,7 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 		return fmt.Errorf("failed to write core config: %w", err)
 	}
 
-	for _, chain := range d.evmChains {
+	for _, chain := range d.SignerKeys {
 		if err := d.ensureRegistryMetadata(ctx, chain.Name); err != nil {
 			return err
 		}
@@ -51,7 +51,7 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 		}
 
 		env := []string{
-			fmt.Sprintf("HYP_KEY=%s", chain.SignerKey),
+			fmt.Sprintf("HYP_KEY=%s", chain.PrivKeyHex),
 		}
 
 		_, _, err := d.Exec(ctx, d.Logger, cmd, env)
