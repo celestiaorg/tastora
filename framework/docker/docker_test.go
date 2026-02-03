@@ -78,6 +78,7 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 	coretypes.RegisterInterfaces(encConfig.InterfaceRegistry)
 	warptypes.RegisterInterfaces(encConfig.InterfaceRegistry)
 
+	// TODO(notice!): when updating to >= v6.x there is a new field (signers) in the ExecTxResult
 	defaultImage := container.Image{
 		Repository: "ghcr.io/celestiaorg/celestia-app",
 		Version:    "v5.0.10",

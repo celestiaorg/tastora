@@ -33,38 +33,69 @@ const (
 )
 
 func (d *Deployer) deployCoreContracts(ctx context.Context) error {
-	cmd := []string{
-		"hyperlane", "core", "deploy",
-		"--config", path.Join(configsPath, "core-config.yaml"),
-		"--chain", d.evmChainName,
-		"--registry", registryPath,
-		"--yes",
-	}
-
-	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
-	}
-
 	if err := d.writeCoreConfig(ctx); err != nil {
 		return fmt.Errorf("failed to write core config: %w", err)
 	}
 
-	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
-	if err != nil {
-		return fmt.Errorf("core deploy failed: %w", err)
-	}
+	for _, chain := range d.evmChains {
+		if err := d.ensureRegistryMetadata(ctx, chain.Name); err != nil {
+			return err
+		}
 
-	d.Logger.Info("core contracts deployed", zap.String("chain", d.evmChainName))
+		cmd := []string{
+			"hyperlane", "core", "deploy",
+			"--config", path.Join(configsPath, "core-config.yaml"),
+			"--chain", chain.Name,
+			"--registry", registryPath,
+			"--yes",
+		}
 
-	if err := d.writeFactoryAddresses(ctx); err != nil {
-		return fmt.Errorf("failed to write factory addresses: %w", err)
+		env := []string{
+			fmt.Sprintf("HYP_KEY=%s", chain.SignerKey),
+		}
+
+		_, _, err := d.Exec(ctx, d.Logger, cmd, env)
+		if err != nil {
+			return fmt.Errorf("core deploy failed for %s: %w", chain.Name, err)
+		}
+
+		d.Logger.Info("core contracts deployed", zap.String("chain", chain.Name))
+
+		if err := d.writeFactoryAddresses(ctx, chain.Name); err != nil {
+			return fmt.Errorf("failed to write factory addresses for %s: %w", chain.Name, err)
+		}
 	}
 
 	return nil
 }
 
-func (d *Deployer) writeFactoryAddresses(ctx context.Context) error {
-	addressesPath := path.Join("registry", "chains", d.evmChainName, "addresses.yaml")
+func (d *Deployer) ensureRegistryMetadata(ctx context.Context, chainName string) error {
+	metadataPath := path.Join("registry", "chains", chainName, "metadata.yaml")
+	bz, err := d.ReadFile(ctx, metadataPath)
+	if err != nil {
+		return fmt.Errorf("read registry metadata for %s: %w", chainName, err)
+	}
+	if len(bz) == 0 {
+		return fmt.Errorf("empty registry metadata for %s", chainName)
+	}
+
+	var meta ChainMetadata
+	if err := yaml.Unmarshal(bz, &meta); err != nil {
+		return fmt.Errorf("unmarshal registry metadata for %s: %w", chainName, err)
+	}
+	if meta.Name == "" {
+		return fmt.Errorf("registry metadata for %s missing name", chainName)
+	}
+	if meta.Name != chainName {
+		return fmt.Errorf("registry metadata name mismatch for %s: %s", chainName, meta.Name)
+	}
+
+	d.Logger.Info("registry metadata present", zap.String("chain", chainName), zap.Uint32("domain", meta.DomainID))
+	return nil
+}
+
+func (d *Deployer) writeFactoryAddresses(ctx context.Context, chainName string) error {
+	addressesPath := path.Join("registry", "chains", chainName, "addresses.yaml")
 
 	existingBytes, err := d.ReadFile(ctx, addressesPath)
 	if err != nil {
@@ -94,7 +125,7 @@ func (d *Deployer) writeFactoryAddresses(ctx context.Context) error {
 		return fmt.Errorf("write addresses: %w", err)
 	}
 
-	d.Logger.Info("appended factory addresses to registry")
+	d.Logger.Info("appended factory addresses to registry", zap.String("chain", chainName))
 	return nil
 }
 
