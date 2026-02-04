@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	sdkmath "cosmossdk.io/math"
+	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
 	"github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
@@ -14,8 +16,13 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
 	"github.com/celestiaorg/tastora/framework/testutil/deploy"
 	"github.com/celestiaorg/tastora/framework/testutil/evm"
+	query "github.com/celestiaorg/tastora/framework/testutil/query"
+	"github.com/celestiaorg/tastora/framework/testutil/wait"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
@@ -125,6 +132,95 @@ func TestHyperlaneDeployer_MultiEVMChains(t *testing.T) {
 
 	enrollRemote(reth0ChainName, reth0)
 	enrollRemote(reth1ChainName, reth1)
+
+	ci, err := celestia.GetNetworkInfo(ctx)
+	require.NoError(t, err)
+	celestiaGRPC := ci.External.GRPCAddress()
+	cconn, err := grpc.NewClient(celestiaGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer func() {
+		_ = cconn.Close()
+	}()
+
+	warpModuleAddr := authtypes.NewModuleAddress(warptypes.ModuleName).String()
+	beforeEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, celestia.Config.Denom)
+	require.NoError(t, err)
+
+	sendAmount0 := sdkmath.NewInt(1000)
+	sendAmount1 := sdkmath.NewInt(2000)
+	receiver := gethcommon.HexToAddress("0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d")
+
+	reth0Entry := schema.Registry.Chains[reth0ChainName]
+	reth1Entry := schema.Registry.Chains[reth1ChainName]
+
+	txMsg0 := &warptypes.MsgRemoteTransfer{
+		Sender:            faucet.GetFormattedAddress(),
+		TokenId:           config.TokenID,
+		DestinationDomain: reth0Entry.Metadata.DomainID,
+		Recipient:         evm.PadAddress(receiver),
+		Amount:            sendAmount0,
+	}
+	resp, err := broadcaster.BroadcastMessages(ctx, faucet, txMsg0)
+	require.NoError(t, err)
+	require.Equal(t, resp.Code, uint32(0), "reth0 transfer tx should succeed: code=%d, log=%s", resp.Code, resp.RawLog)
+	require.NoError(t, wait.ForBlocks(ctx, 3, celestia))
+
+	txMsg1 := &warptypes.MsgRemoteTransfer{
+		Sender:            faucet.GetFormattedAddress(),
+		TokenId:           config.TokenID,
+		DestinationDomain: reth1Entry.Metadata.DomainID,
+		Recipient:         evm.PadAddress(receiver),
+		Amount:            sendAmount1,
+	}
+	resp, err = broadcaster.BroadcastMessages(ctx, faucet, txMsg1)
+	require.NoError(t, err)
+	require.Equal(t, resp.Code, uint32(0), "reth1 transfer tx should succeed: code=%d, log=%s", resp.Code, resp.RawLog)
+	require.NoError(t, wait.ForBlocks(ctx, 3, celestia))
+
+	expectedEscrow := beforeEscrow.Add(sendAmount0).Add(sendAmount1)
+	afterEscrow, err := query.Balance(ctx, cconn, warpModuleAddr, celestia.Config.Denom)
+	require.NoError(t, err)
+	require.Truef(t, afterEscrow.Equal(expectedEscrow), "escrow should increase by transfers (%s)", celestia.Config.Denom)
+
+	agentCfg := hyperlane.Config{
+		Logger:          testCfg.Logger,
+		DockerClient:    testCfg.DockerClient,
+		DockerNetworkID: testCfg.NetworkID,
+		HyperlaneImage:  container.NewImage("damiannolan/hyperlane-agent", "test", "1000:1000"),
+	}
+
+	agent, err := hyperlane.NewAgent(ctx, agentCfg, testCfg.TestName, hyperlane.AgentTypeRelayer, d)
+	require.NoError(t, err)
+	require.NoError(t, agent.Start(ctx))
+	t.Cleanup(func() {
+		_ = agent.Stop(ctx)
+		_ = agent.Remove(ctx)
+	})
+
+	ec0, err := reth0.GetEthClient(ctx)
+	require.NoError(t, err)
+	ec1, err := reth1.GetEthClient(ctx)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		balance, err := evm.GetERC20Balance(ctx, ec0, tokenRouter, receiver)
+		if err != nil {
+			t.Logf("reth0 balance query failed: %v", err)
+			return false
+		}
+		t.Logf("reth0 recipient warp token balance: %s", balance.String())
+		return balance.Cmp(sendAmount0.BigInt()) == 0
+	}, 2*time.Minute, 5*time.Second, "reth0 recipient should receive minted warp tokens")
+
+	require.Eventually(t, func() bool {
+		balance, err := evm.GetERC20Balance(ctx, ec1, tokenRouter, receiver)
+		if err != nil {
+			t.Logf("reth1 balance query failed: %v", err)
+			return false
+		}
+		t.Logf("reth1 recipient warp token balance: %s", balance.String())
+		return balance.Cmp(sendAmount1.BigInt()) == 0
+	}, 2*time.Minute, 5*time.Second, "reth1 recipient should receive minted warp tokens")
 }
 
 func BuildEvolveEVM(t *testing.T, ctx context.Context, testCfg *TestSetupConfig, daAddress, chainName string, chainID int) (*reth.Node, *evmsingle.Chain) {
