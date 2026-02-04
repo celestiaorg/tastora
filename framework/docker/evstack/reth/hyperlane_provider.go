@@ -3,8 +3,20 @@ package reth
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
+)
+
+const (
+	DefaultChainName = "rethlocal"
+	DefaultChainID   = 1234
+	DefaultDomainID  = 1234
+
+	Protocol      = "ethereum"
+	TokenName     = "Ether"
+	TokenSymbol   = "ETH"
+	TokenDecimals = 18
 )
 
 var _ hyperlane.ChainConfigProvider = (*Node)(nil)
@@ -16,18 +28,21 @@ func (n *Node) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Registr
 	}
 
 	rpcURL := fmt.Sprintf("http://%s", networkInfo.Internal.RPCAddress())
+	chainName := n.HyperlaneChainName()
+	chainID := n.HyperlaneChainID()
+	domainID := n.HyperlaneDomainID()
 
 	meta := hyperlane.ChainMetadata{
-		ChainID:     1234, // hard coded to the value in the default genesis.
-		DomainID:    1234,
-		Name:        "rethlocal",
-		DisplayName: "Reth",
-		Protocol:    "ethereum",
+		ChainID:     int64(chainID),
+		DomainID:    domainID,
+		Name:        chainName,
+		DisplayName: strings.ToTitle(chainName),
+		Protocol:    Protocol,
 		IsTestnet:   true,
 		NativeToken: hyperlane.NativeToken{
-			Name:     "Ether",
-			Symbol:   "ETH",
-			Decimals: 18,
+			Name:     TokenName,
+			Symbol:   TokenSymbol,
+			Decimals: TokenDecimals,
 		},
 		RpcURLs: []hyperlane.Endpoint{
 			{HTTP: rpcURL},
@@ -41,6 +56,31 @@ func (n *Node) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Registr
 
 	// leave addresses empty - core deploy will populate addresses.yaml
 	return hyperlane.RegistryEntry{Metadata: meta, Addresses: hyperlane.ContractAddresses{}}, nil
+
+}
+
+func (n *Node) HyperlaneChainName() string {
+	if n.cfg.HyperlaneChainName == "" {
+		return DefaultChainName
+	}
+
+	return n.cfg.HyperlaneChainName
+}
+
+func (n *Node) HyperlaneChainID() uint64 {
+	if n.cfg.HyperlaneChainID == 0 {
+		return DefaultChainID
+	}
+
+	return n.cfg.HyperlaneChainID
+}
+
+func (n *Node) HyperlaneDomainID() uint32 {
+	if n.cfg.HyperlaneDomainID == 0 {
+		return DefaultDomainID
+	}
+
+	return n.cfg.HyperlaneDomainID
 
 }
 

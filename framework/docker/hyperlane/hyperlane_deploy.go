@@ -33,38 +33,40 @@ const (
 )
 
 func (d *Deployer) deployCoreContracts(ctx context.Context) error {
-	cmd := []string{
-		"hyperlane", "core", "deploy",
-		"--config", path.Join(configsPath, "core-config.yaml"),
-		"--chain", d.evmChainName,
-		"--registry", registryPath,
-		"--yes",
-	}
-
-	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
-	}
-
 	if err := d.writeCoreConfig(ctx); err != nil {
 		return fmt.Errorf("failed to write core config: %w", err)
 	}
 
-	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
-	if err != nil {
-		return fmt.Errorf("core deploy failed: %w", err)
-	}
+	for _, chain := range d.ChainHypKeys {
+		cmd := []string{
+			"hyperlane", "core", "deploy",
+			"--config", path.Join(configsPath, "core-config.yaml"),
+			"--chain", chain.ChainName,
+			"--registry", registryPath,
+			"--yes",
+		}
 
-	d.Logger.Info("core contracts deployed", zap.String("chain", d.evmChainName))
+		env := []string{
+			fmt.Sprintf("HYP_KEY=%s", chain.PrivKeyHex),
+		}
 
-	if err := d.writeFactoryAddresses(ctx); err != nil {
-		return fmt.Errorf("failed to write factory addresses: %w", err)
+		_, _, err := d.Exec(ctx, d.Logger, cmd, env)
+		if err != nil {
+			return fmt.Errorf("core deploy failed for %s: %w", chain.ChainName, err)
+		}
+
+		d.Logger.Info("core contracts deployed", zap.String("chain", chain.ChainName))
+
+		if err := d.writeFactoryAddresses(ctx, chain.ChainName); err != nil {
+			return fmt.Errorf("failed to write factory addresses for %s: %w", chain.ChainName, err)
+		}
 	}
 
 	return nil
 }
 
-func (d *Deployer) writeFactoryAddresses(ctx context.Context) error {
-	addressesPath := path.Join("registry", "chains", d.evmChainName, "addresses.yaml")
+func (d *Deployer) writeFactoryAddresses(ctx context.Context, chainName string) error {
+	addressesPath := path.Join("registry", "chains", chainName, "addresses.yaml")
 
 	existingBytes, err := d.ReadFile(ctx, addressesPath)
 	if err != nil {
@@ -94,7 +96,7 @@ func (d *Deployer) writeFactoryAddresses(ctx context.Context) error {
 		return fmt.Errorf("write addresses: %w", err)
 	}
 
-	d.Logger.Info("appended factory addresses to registry")
+	d.Logger.Info("appended factory addresses to registry", zap.String("chain", chainName))
 	return nil
 }
 
@@ -106,8 +108,12 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 		"--yes",
 	}
 
+	if len(d.ChainHypKeys) == 0 {
+		return fmt.Errorf("no hyperlane signer configured for warp deploy")
+	}
+
 	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", d.hypPrivateKey),
+		fmt.Sprintf("HYP_KEY=%s", d.ChainHypKeys[0].PrivKeyHex),
 	}
 
 	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
