@@ -21,6 +21,8 @@ import (
 var (
 	reth0ChainName = "reth0"
 	reth1ChainName = "reth1"
+	reth0ChainID   = 1234
+	reth1ChainID   = 1235
 )
 
 func TestHyperlaneDeployer_MultiEVMChains(t *testing.T) {
@@ -46,8 +48,8 @@ func TestHyperlaneDeployer_MultiEVMChains(t *testing.T) {
 	require.NoError(t, err)
 	daAddress := fmt.Sprintf("http://%s:%s", bridgeNodeNetworkInfo.Internal.IP, bridgeNodeNetworkInfo.Internal.Ports.RPC)
 
-	reth0, _ := BuildEvolveEVM(t, ctx, testCfg, daAddress, reth0ChainName, 1234)
-	reth1, _ := BuildEvolveEVM(t, ctx, testCfg, daAddress, reth1ChainName, 1235)
+	reth0, _ := BuildEvolveEVM(t, ctx, testCfg, daAddress, reth0ChainName, reth0ChainID)
+	reth1, _ := BuildEvolveEVM(t, ctx, testCfg, daAddress, reth1ChainName, reth1ChainID)
 
 	d, err := hyperlane.NewDeployer(
 		ctx,
