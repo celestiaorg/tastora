@@ -92,7 +92,7 @@ func (c *Chain) getFaucetPrivateKeyHex() (string, error) {
 		return "", fmt.Errorf("failed to get keyring: %w", err)
 	}
 
-	armoredKey, err := kr.ExportPrivKeyArmor(consts.FaucetAccountKeyName, "")
+	armoredKey, err := kr.ExportPrivKeyArmor(c.faucetWallet.GetKeyName(), "")
 	if err != nil {
 		return "", fmt.Errorf("failed to export faucet key: %w", err)
 	}
