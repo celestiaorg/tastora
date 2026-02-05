@@ -52,6 +52,7 @@ func (n *Node) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Registr
 			EstimateBlockTime: 3,
 			ReorgPeriod:       0,
 		},
+		TechnicalStack: "other",
 	}
 
 	// leave addresses empty - core deploy will populate addresses.yaml
@@ -106,19 +107,19 @@ func (n *Node) GetHyperlaneRelayerChainConfig(ctx context.Context) (hyperlane.Re
 	cfg.Signer = &hyperlane.SignerConfig{Key: "0x82bfcfadbf1712f6550d8d2c00a39f05b33ec78939d0167be2a737d691f33a6a", Type: "hexKey"}
 
 	// Populate core contract addresses directly.
-	// ref: https://github.com/celestiaorg/celestia-zkevm/blob/bcead83f455dbdc2f1b3671d1c10e03480b49407/hyperlane/relayer-config.json#L29
+	// ref: https://github.com/celestiaorg/celestia-zkevm/blob/main/hyperlane/relayer-config.json
 	cfg.Mailbox = "0xb1c938F5BA4B3593377F399e12175e8db0C787Ff"
 	cfg.InterchainSecurityModule = "0xa05915fD6E32A1AA7E67d800164CaCB12487142d"
-	cfg.InterchainGasPaymaster = "0xFCb1d485ef46344029D9E8A7925925e146B3430E"
+	cfg.InterchainGasPaymaster = "0x1D957dA7A6988f5a9d2D2454637B4B7fea0Aeea5"
 	cfg.MerkleTreeHook = "0x1D957dA7A6988f5a9d2D2454637B4B7fea0Aeea5"
 	cfg.ProxyAdmin = "0x7e7aD18Adc99b94d4c728fDf13D4dE97B926A0D8"
-	cfg.ValidatorAnnounce = "0x79ec7bF05AF122D3782934d4Fb94eE32f0C01c97"
+	cfg.ValidatorAnnounce = "0x67cff9B0F9F25c00C71bd8300c3f38553088e234"
 	cfg.AggregationHook = "0xe53275A1FcA119e1c5eeB32E7a72e54835A63936"
 	cfg.DomainRoutingIsm = "0xE2c1756b8825C54638f98425c113b51730cc47f6"
 	cfg.FallbackRoutingHook = "0xE2c1756b8825C54638f98425c113b51730cc47f6"
-	cfg.ProtocolFee = "0x8A93d247134d91e0de6f96547cB0204e5BE8e5D8"
+	cfg.ProtocolFee = "0xFCb1d485ef46344029D9E8A7925925e146B3430E"
 	cfg.StorageGasOracle = "0x457cCf29090fe5A24c19c1bc95F492168C0EaFdb"
-	cfg.TestRecipient = "0xd7958B336f0019081Ad2279B2B7B7c3f744Bce0a"
+	cfg.TestRecipient = "0x6253964a75a5ae755a05C8460E690AF5914f93b2"
 
 	return cfg, nil
 }
