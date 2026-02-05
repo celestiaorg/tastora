@@ -175,7 +175,7 @@ func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
 		WithDenom("utia").
 		WithChainID("test").
 		WithLogger(zaptest.NewLogger(t)).
-		WithName("celestiadev")
+		WithName("celestia")
 }
 
 // NewChainBuilderFromChain initializes and returns a new ChainBuilder that copies the values from the given chain.

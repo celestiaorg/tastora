@@ -19,11 +19,16 @@ func (c *Chain) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Regist
 	// parse gas price amount from string like "0.025utia"
 	gasPriceAmount := parseGasPriceAmount(c.Config.GasPrices, c.Config.Denom)
 
+	hypChainName := c.Config.Name
+	if c.Config.Name == "celestia" {
+		hypChainName = hypChainName + "dev"
+	}
+
 	meta := hyperlane.ChainMetadata{
 		ChainID:     c.GetChainID(),
 		DomainID:    69420,
-		Name:        c.Config.Name,
-		DisplayName: c.Config.Name,
+		Name:        hypChainName,
+		DisplayName: hypChainName,
 		Protocol:    "cosmosnative",
 		IsTestnet:   true,
 		NativeToken: hyperlane.NativeToken{
