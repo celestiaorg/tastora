@@ -78,7 +78,7 @@ func TestHyperlaneDeployer_MultiEVMChains(t *testing.T) {
 	require.NoError(t, json.Unmarshal(relayerBytes, &relayerCfg))
 	require.NotEmpty(t, relayerCfg.Chains[reth0ChainName])
 	require.NotEmpty(t, relayerCfg.Chains[reth1ChainName])
-	require.NotEmpty(t, relayerCfg.Chains[celestia.Config.Name])
+	require.NotEmpty(t, relayerCfg.Chains[HypChainName])
 
 	require.NoError(t, d.Deploy(ctx))
 
@@ -95,7 +95,7 @@ func TestHyperlaneDeployer_MultiEVMChains(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, config)
 
-	cosmosEntry, ok := schema.Registry.Chains[celestia.Config.Name]
+	cosmosEntry, ok := schema.Registry.Chains[HypChainName]
 	require.True(t, ok, "missing registry entry for %s", celestia.Config.Name)
 	cosmosDomain := cosmosEntry.Metadata.DomainID
 
