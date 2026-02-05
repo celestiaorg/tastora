@@ -96,7 +96,7 @@ func TestHyperlaneDeployer_MultiEVMChains(t *testing.T) {
 	require.NotNil(t, config)
 
 	cosmosEntry, ok := schema.Registry.Chains[HypChainName]
-	require.True(t, ok, "missing registry entry for %s", celestia.Config.Name)
+	require.True(t, ok, "missing registry entry for %s", HypChainName)
 	cosmosDomain := cosmosEntry.Metadata.DomainID
 
 	networkInfo, err := celestia.GetNetworkInfo(ctx)
