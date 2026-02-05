@@ -21,6 +21,9 @@ func (c *Chain) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Regist
 
 	hypChainName := c.Config.Name
 	if c.Config.Name == "celestia" {
+		// NOTE: This a workaround as using the chain name "celestia" causes configuration overlay issues
+		// with the Hyperlane agents container. This can be reverted when the following issue is addressed.
+		// See https://github.com/hyperlane-xyz/hyperlane-monorepo/issues/7598.
 		hypChainName = hypChainName + "dev"
 	}
 
