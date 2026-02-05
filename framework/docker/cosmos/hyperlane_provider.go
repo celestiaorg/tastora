@@ -90,6 +90,8 @@ func (c *Chain) GetHyperlaneRelayerChainConfig(ctx context.Context) (hyperlane.R
 
 	// set index configuration in relayer config
 	cfg.Index = &hyperlane.IndexConfig{From: 1, Chunk: 10}
+	cfg.TechnicalStack = "other"
+	cfg.TransactionOverrides = &hyperlane.TransactionOverrides{GasPrice: "0.0"}
 
 	cfg.Mailbox = "0x68797065726c616e650000000000000000000000000000000000000000000000"
 	cfg.MerkleTreeHook = "0x726f757465725f706f73745f6469737061746368000000030000000000000001"

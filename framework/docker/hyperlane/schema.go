@@ -130,12 +130,14 @@ type RelayerChainConfig struct {
 	ValidatorAnnounce        string `json:"validatorAnnounce,omitempty" yaml:"validatorAnnounce,omitempty"`
 
 	// Cosmos-only fields
-	Bech32Prefix         string       `json:"bech32Prefix,omitempty" yaml:"bech32Prefix,omitempty"`
-	CanonicalAsset       string       `json:"canonicalAsset,omitempty" yaml:"canonicalAsset,omitempty"`
-	ContractAddressBytes int          `json:"contractAddressBytes,omitempty" yaml:"contractAddressBytes,omitempty"`
-	GasPrice             *GasPrice    `json:"gasPrice,omitempty" yaml:"gasPrice,omitempty"`
-	Index                *IndexConfig `json:"index,omitempty" yaml:"index,omitempty"`
-	Slip44               int          `json:"slip44,omitempty" yaml:"slip44,omitempty"`
+	Bech32Prefix         string                `json:"bech32Prefix,omitempty" yaml:"bech32Prefix,omitempty"`
+	CanonicalAsset       string                `json:"canonicalAsset,omitempty" yaml:"canonicalAsset,omitempty"`
+	ContractAddressBytes int                   `json:"contractAddressBytes,omitempty" yaml:"contractAddressBytes,omitempty"`
+	GasPrice             *GasPrice             `json:"gasPrice,omitempty" yaml:"gasPrice,omitempty"`
+	Index                *IndexConfig          `json:"index,omitempty" yaml:"index,omitempty"`
+	Slip44               int                   `json:"slip44,omitempty" yaml:"slip44,omitempty"`
+	TechnicalStack       string                `json:"technicalStack,omitempty" yaml:"technicalStack,omitempty"`
+	TransactionOverrides *TransactionOverrides `json:"transactionOverrides,omitempty" yaml:"transactionOverrides,omitempty"`
 }
 
 type SignerConfig struct {
@@ -147,6 +149,10 @@ type SignerConfig struct {
 type IndexConfig struct {
 	From  int `json:"from" yaml:"from"`
 	Chunk int `json:"chunk" yaml:"chunk"`
+}
+
+type TransactionOverrides struct {
+	GasPrice string `json:"gasPrice,omitempty" yaml:"gasPrice,omitempty"`
 }
 
 type NativeToken struct {
