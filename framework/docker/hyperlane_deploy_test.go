@@ -23,6 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	// NOTE: This a workaround as using the chain name "celestia" causes configuration overlay issues
+	// with the Hyperlane agents container. This can be reverted when the following issue is addressed.
+	// See https://github.com/hyperlane-xyz/hyperlane-monorepo/issues/7598.
+	HypChainName = "celestiadev"
+)
+
 // TestHyperlaneDeployer_Bootstrap starts celestia-app, a DA bridge, and a reth node,
 // then initializes and optionally runs the Hyperlane deployer steps.
 func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
@@ -66,7 +73,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	require.NoError(t, json.Unmarshal(relayerBytes, &relayerCfg))
 	require.NotEmpty(t, relayerCfg.Chains["rethlocal"]) // name from reth provider
 	// also expect the cosmos chain entry by its configured name
-	require.NotEmpty(t, relayerCfg.Chains[chain.Config.Name])
+	require.NotEmpty(t, relayerCfg.Chains[HypChainName])
 
 	require.NoError(t, d.Deploy(ctx))
 

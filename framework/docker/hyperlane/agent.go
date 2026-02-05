@@ -78,6 +78,7 @@ func (a *Agent) Start(ctx context.Context) error {
 		fmt.Sprintf("CONFIG_FILES=%s", cfgPath),
 		// Provide other common env flags as no-ops to reduce surprises
 		"RUST_LOG=info",
+		"HYP_LOG_LEVEL=debug",
 	}
 
 	if err := a.CreateContainer(

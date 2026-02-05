@@ -169,7 +169,7 @@ func NewChainBuilderWithTestName(t *testing.T, testName string) *ChainBuilder {
 		WithTestName(testName).
 		WithBinaryName("celestia-appd").
 		WithCoinType("118").
-		WithGasPrices("0.025utia").
+		WithGasPrices("0.1utia").
 		WithGasAdjustment(1.3).
 		WithBech32Prefix("celestia").
 		WithDenom("utia").

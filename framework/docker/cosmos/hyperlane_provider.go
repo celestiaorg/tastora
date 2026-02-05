@@ -3,6 +3,7 @@ package cosmos
 import (
 	"context"
 	"fmt"
+
 	"github.com/celestiaorg/tastora/framework/docker/hyperlane"
 )
 
@@ -18,11 +19,19 @@ func (c *Chain) GetHyperlaneRegistryEntry(ctx context.Context) (hyperlane.Regist
 	// parse gas price amount from string like "0.025utia"
 	gasPriceAmount := parseGasPriceAmount(c.Config.GasPrices, c.Config.Denom)
 
+	hypChainName := c.Config.Name
+	if c.Config.Name == "celestia" {
+		// NOTE: This a workaround as using the chain name "celestia" causes configuration overlay issues
+		// with the Hyperlane agents container. This can be reverted when the following issue is addressed.
+		// See https://github.com/hyperlane-xyz/hyperlane-monorepo/issues/7598.
+		hypChainName = hypChainName + "dev"
+	}
+
 	meta := hyperlane.ChainMetadata{
 		ChainID:     c.GetChainID(),
 		DomainID:    69420,
-		Name:        c.Config.Name,
-		DisplayName: c.Config.Name,
+		Name:        hypChainName,
+		DisplayName: hypChainName,
 		Protocol:    "cosmosnative",
 		IsTestnet:   true,
 		NativeToken: hyperlane.NativeToken{
@@ -88,7 +97,9 @@ func (c *Chain) GetHyperlaneRelayerChainConfig(ctx context.Context) (hyperlane.R
 	cfg.Slip44 = entry.Metadata.Slip44
 
 	// set index configuration in relayer config
-	cfg.Index = &hyperlane.IndexConfig{From: 1150, Chunk: 10}
+	cfg.Index = &hyperlane.IndexConfig{From: 1, Chunk: 10}
+	cfg.TechnicalStack = "other"
+	cfg.TransactionOverrides = &hyperlane.TransactionOverrides{GasPrice: "0.0"}
 
 	cfg.Mailbox = "0x68797065726c616e650000000000000000000000000000000000000000000000"
 	cfg.MerkleTreeHook = "0x726f757465725f706f73745f6469737061746368000000030000000000000001"

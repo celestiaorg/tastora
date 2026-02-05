@@ -28,8 +28,18 @@ type HookCfg struct {
 	Type    string           `yaml:"type"`
 }
 
-// RequiredHookCfg models the required/protocol fee hook configuration.
-type RequiredHookCfg struct {
+type TestIsmCfg struct {
+	Address QuotedHexAddress `yaml:"address,omitempty"`
+	Type    string           `yaml:"type"`
+}
+
+type MerkleTreeHookCfg struct {
+	Address QuotedHexAddress `yaml:"address,omitempty"`
+	Type    string           `yaml:"type"`
+}
+
+// ProtocolFeeHookCfg models the protocol fee hook configuration.
+type ProtocolFeeHookCfg struct {
 	Address        QuotedHexAddress `yaml:"address,omitempty"`
 	Beneficiary    QuotedHexAddress `yaml:"beneficiary"`
 	MaxProtocolFee string           `yaml:"maxProtocolFee"`
@@ -49,10 +59,10 @@ type InterchainAccountRouterCfg struct {
 
 // CoreConfig is the top-level structure for core-config.yaml
 type CoreConfig struct {
-	DefaultHook             HookCfg                    `yaml:"defaultHook"`
-	DefaultIsm              HookCfg                    `yaml:"defaultIsm"`
+	DefaultHook             ProtocolFeeHookCfg         `yaml:"defaultHook"`
+	RequiredHook            MerkleTreeHookCfg          `yaml:"requiredHook"`
+	DefaultIsm              TestIsmCfg                 `yaml:"defaultIsm"`
 	InterchainAccountRouter InterchainAccountRouterCfg `yaml:"interchainAccountRouter,omitempty"`
 	Owner                   QuotedHexAddress           `yaml:"owner"`
 	ProxyAdmin              ProxyAdminCfg              `yaml:"proxyAdmin,omitempty"`
-	RequiredHook            RequiredHookCfg            `yaml:"requiredHook"`
 }
