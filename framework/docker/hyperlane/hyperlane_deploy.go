@@ -130,18 +130,18 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	// build core-config structure for fresh deployment (no addresses)
 	core := CoreConfig{
 		Owner: QuotedHexAddress(ownerAddr),
-		DefaultHook: HookCfg{
-			Type: "merkleTreeHook",
-		},
-		DefaultIsm: HookCfg{
-			Type: "testIsm",
-		},
-		RequiredHook: RequiredHookCfg{
+		DefaultHook: ProtocolFeeHookCfg{
 			Beneficiary:    QuotedHexAddress(ownerAddr),
 			MaxProtocolFee: "100000000000000000",
 			Owner:          QuotedHexAddress(ownerAddr),
 			ProtocolFee:    "0",
 			Type:           "protocolFee",
+		},
+		DefaultIsm: TestIsmCfg{
+			Type: "testIsm",
+		},
+		RequiredHook: MerkleTreeHookCfg{
+			Type: "merkleTreeHook",
 		},
 	}
 

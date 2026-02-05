@@ -109,8 +109,8 @@ func (n *Node) GetHyperlaneRelayerChainConfig(ctx context.Context) (hyperlane.Re
 	// ref: https://github.com/celestiaorg/celestia-zkevm/blob/bcead83f455dbdc2f1b3671d1c10e03480b49407/hyperlane/relayer-config.json#L29
 	cfg.Mailbox = "0xb1c938F5BA4B3593377F399e12175e8db0C787Ff"
 	cfg.InterchainSecurityModule = "0xa05915fD6E32A1AA7E67d800164CaCB12487142d"
-	cfg.InterchainGasPaymaster = "0x1D957dA7A6988f5a9d2D2454637B4B7fea0Aeea5"
-	cfg.MerkleTreeHook = "0xFCb1d485ef46344029D9E8A7925925e146B3430E"
+	cfg.InterchainGasPaymaster = "0xFCb1d485ef46344029D9E8A7925925e146B3430E"
+	cfg.MerkleTreeHook = "0x1D957dA7A6988f5a9d2D2454637B4B7fea0Aeea5"
 	cfg.ProxyAdmin = "0x7e7aD18Adc99b94d4c728fDf13D4dE97B926A0D8"
 	cfg.ValidatorAnnounce = "0x79ec7bF05AF122D3782934d4Fb94eE32f0C01c97"
 	cfg.AggregationHook = "0xe53275A1FcA119e1c5eeB32E7a72e54835A63936"
