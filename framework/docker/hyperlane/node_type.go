@@ -3,8 +3,9 @@ package hyperlane
 import "github.com/celestiaorg/tastora/framework/types"
 
 var (
-    DeployerNodeType = hyperlaneNodeType("hyperlane-deployer")
-    AgentNodeType    = hyperlaneNodeType("hyperlane-agent")
+	DeployerNodeType       = hyperlaneNodeType("hyperlane-deployer")
+	AgentNodeType          = hyperlaneNodeType("hyperlane-agent")
+	ForwardRelayerNodeType = hyperlaneNodeType("hyperlane-forward-rly")
 )
 
 type hyperlaneNodeType string
