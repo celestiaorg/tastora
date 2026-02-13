@@ -3,6 +3,7 @@ package hyperlane
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
@@ -48,13 +49,18 @@ type ForwardRelayerSettings struct {
 }
 
 func (s *ForwardRelayerSettings) ToEnv() []string {
+	port := s.Port
+	if port == "" {
+		port = DefaultBackendPort
+	}
+
 	env := []string{
 		fmt.Sprintf("CHAIN_ID=%s", s.ChainID),
-		fmt.Sprintf("CELESTIA_RPC=%s", s.CelestiaRPC),
+		fmt.Sprintf("CELESTIA_RPC=%s", ensureHTTPScheme(s.CelestiaRPC)),
 		fmt.Sprintf("CELESTIA_GRPC=%s", s.CelestiaGRPC),
-		fmt.Sprintf("BACKEND_URL=%s", s.BackendURL),
+		fmt.Sprintf("BACKEND_URL=%s", ensureHTTPScheme(s.BackendURL)),
 		fmt.Sprintf("PRIVATE_KEY_HEX=%s", s.PrivateKeyHex),
-		fmt.Sprintf("PORT=%s", s.Port),
+		fmt.Sprintf("PORT=%s", port),
 	}
 
 	return append(env, s.Env...)
@@ -114,15 +120,18 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 		ports nat.PortMap
 	)
 
-	cfg := rly.cfg
-	env := cfg.Settings.ToEnv()
+	settings := rly.cfg.Settings
+	if err := settings.validate(rly.mode); err != nil {
+		return fmt.Errorf("invalid forward relayer settings: %w", err)
+	}
+	env := settings.ToEnv()
 
 	switch rly.mode {
 	case BackendMode:
 		cmd = append(cmd, "backend")
 
 		ports = nat.PortMap{
-			nat.Port(cfg.Settings.Port + "/tcp"): {},
+			nat.Port(settings.PortValue() + "/tcp"): {},
 		}
 
 	case RelayerMode:
@@ -149,4 +158,57 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 	}
 
 	return rly.StartContainer(ctx)
+}
+
+func (s *ForwardRelayerSettings) validate(mode Mode) error {
+	switch mode {
+	case BackendMode:
+		if s.PortValue() == "" {
+			return fmt.Errorf("port is required")
+		}
+	case RelayerMode:
+		missing := make([]string, 0, 5)
+		if s.ChainID == "" {
+			missing = append(missing, "ChainID")
+		}
+		if s.CelestiaRPC == "" {
+			missing = append(missing, "CelestiaRPC")
+		}
+		if s.CelestiaGRPC == "" {
+			missing = append(missing, "CelestiaGRPC")
+		}
+		if s.BackendURL == "" {
+			missing = append(missing, "BackendURL")
+		}
+		if s.PrivateKeyHex == "" {
+			missing = append(missing, "PrivateKeyHex")
+		}
+
+		if len(missing) > 0 {
+			return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
+		}
+	default:
+		return fmt.Errorf("unsupported mode: %q", mode)
+	}
+
+	return nil
+}
+
+func (s *ForwardRelayerSettings) PortValue() string {
+	if s.Port != "" {
+		return s.Port
+	}
+	return DefaultBackendPort
+}
+
+func ensureHTTPScheme(address string) string {
+	if address == "" {
+		return address
+	}
+
+	if strings.Contains(address, "://") {
+		return address
+	}
+
+	return "http://" + address
 }
