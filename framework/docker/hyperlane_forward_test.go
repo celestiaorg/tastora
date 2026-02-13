@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -133,18 +134,32 @@ func TestHyperlaneForwardRelayer(t *testing.T) {
 	err = backend.Start(ctx)
 	require.NoError(t, err)
 
+	backendNetworkInfo, err := backend.GetNetworkInfo(ctx)
+	require.NoError(t, err)
+	require.Equal(t, backendCfg.Settings.PortValue(), backendNetworkInfo.Internal.Ports.HTTP)
+	require.NotEmpty(t, backendNetworkInfo.External.Ports.HTTP)
+
+	backendExternalURL := fmt.Sprintf("http://%s", backendNetworkInfo.External.HTTPAddress())
+	require.Eventually(t, func() bool {
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, reqErr := client.Get(backendExternalURL)
+		if reqErr != nil {
+			return false
+		}
+		_ = resp.Body.Close()
+		return true
+	}, 30*time.Second, time.Second)
+
 	amount := sdkmath.NewInt(1000000)
 	sendAmount := sdk.NewCoins(sdk.NewCoin(celestia.Config.Denom, amount))
 	forwardRlyWallet, err := wallet.CreateAndFund(ctx, "forward-rly", sendAmount, celestia)
 	require.NoError(t, err)
 
-	_ = forwardRlyWallet
-
 	chainNode := celestia.GetNode()
 	keyring, err := chainNode.GetKeyring()
 	require.NoError(t, err)
 
-	armor, err := keyring.ExportPrivKeyArmor("forward-rly", "")
+	armor, err := keyring.ExportPrivKeyArmor(forwardRlyWallet.GetKeyName(), "")
 	require.NoError(t, err)
 
 	privKey, _, err := crypto.UnarmorDecryptPrivKey(armor, "")
@@ -162,7 +177,7 @@ func TestHyperlaneForwardRelayer(t *testing.T) {
 			ChainID:       celestia.GetChainID(),
 			CelestiaRPC:   fmt.Sprintf("http://%s", networkInfo.Internal.RPCAddress()),
 			CelestiaGRPC:  networkInfo.Internal.GRPCAddress(),
-			BackendURL:    "http://" + backend.Name() + ":8080",
+			BackendURL:    fmt.Sprintf("http://%s", backendNetworkInfo.Internal.HTTPAddress()),
 			PrivateKeyHex: fmt.Sprintf("0x%x", privKey.Bytes()),
 		},
 	}
@@ -172,5 +187,9 @@ func TestHyperlaneForwardRelayer(t *testing.T) {
 
 	err = forwardRly.Start(ctx)
 	require.NoError(t, err)
+
+	forwardRlyNetworkInfo, err := forwardRly.GetNetworkInfo(ctx)
+	require.NoError(t, err)
+	require.Empty(t, forwardRlyNetworkInfo.External.Ports.HTTP)
 
 }

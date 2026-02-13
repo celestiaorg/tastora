@@ -29,8 +29,7 @@ type ForwardRelayerConfig struct {
 	DockerClient    types.TastoraDockerClient
 	DockerNetworkID string
 
-	Image container.Image
-
+	Image    container.Image
 	Settings ForwardRelayerSettings
 }
 
@@ -48,6 +47,17 @@ type ForwardRelayerSettings struct {
 	Env []string
 }
 
+// PortValue returns the configured backend port value or a sensible default.
+func (s *ForwardRelayerSettings) PortValue() string {
+	if s.Port != "" {
+		return s.Port
+	}
+
+	return DefaultBackendPort
+}
+
+// ToEnv converts the settings to a comma separate list of environment variables
+// which can be consumed within the container.
 func (s *ForwardRelayerSettings) ToEnv() []string {
 	port := s.Port
 	if port == "" {
@@ -66,17 +76,35 @@ func (s *ForwardRelayerSettings) ToEnv() []string {
 	return append(env, s.Env...)
 }
 
-// docker pull ghcr.io/celestiaorg/forwarding-relayer:sha-d43e7c6
-type ForwardRelayer struct {
-	*container.Node
-	cfg  ForwardRelayerConfig
-	mode Mode
+// Validate performs basic sanity checks on the configuration settings.
+func (s *ForwardRelayerSettings) Validate(mode Mode) error {
+	switch mode {
+	case BackendMode:
+		if strings.TrimSpace(s.PortValue()) == "" {
+			return fmt.Errorf("port is required")
+		}
+	case RelayerMode:
+		if strings.TrimSpace(s.ChainID) == "" {
+			return fmt.Errorf("chain id is required")
+		}
+
+		if strings.TrimSpace(s.PrivateKeyHex) == "" {
+			return fmt.Errorf("private key is required")
+		}
+	default:
+		return fmt.Errorf("unsupported mode: %q", mode)
+	}
+
+	return nil
 }
 
-// Name returns the hostname/container name for the agent container
-func (rly *ForwardRelayer) Name() string {
-	base := fmt.Sprintf("hyperlane-forward-%s-%d-%s", rly.mode, rly.Index, internal.SanitizeDockerResourceName(rly.TestName))
-	return internal.CondenseHostName(base)
+// ForwardRelayer encapsulates the container runtime for the Hyperlane forwarding relayer service.
+type ForwardRelayer struct {
+	*container.Node
+
+	cfg           ForwardRelayerConfig
+	mode          Mode
+	externalPorts types.Ports
 }
 
 // NewForwardRelayer creates a new Hyperlane forward relayer with mode-specific runtime config.
@@ -115,16 +143,15 @@ func NewForwardRelayer(ctx context.Context, cfg ForwardRelayerConfig, testName s
 
 // Start creates and starts the forward relayer container in the configured mode.
 func (rly *ForwardRelayer) Start(ctx context.Context) error {
+	settings := rly.cfg.Settings
+	if err := settings.Validate(rly.mode); err != nil {
+		return fmt.Errorf("invalid forward relayer settings: %w", err)
+	}
+
 	var (
 		cmd   []string
 		ports nat.PortMap
 	)
-
-	settings := rly.cfg.Settings
-	if err := settings.validate(rly.mode); err != nil {
-		return fmt.Errorf("invalid forward relayer settings: %w", err)
-	}
-	env := settings.ToEnv()
 
 	switch rly.mode {
 	case BackendMode:
@@ -140,6 +167,8 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 		return fmt.Errorf("unsupported forward relayer mode: %q", rly.mode)
 	}
 
+	env := settings.ToEnv()
+
 	if err := rly.CreateContainer(
 		ctx,
 		rly.TestName,
@@ -149,7 +178,7 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 		"",
 		rly.Bind(),
 		nil,
-		rly.Name(),
+		rly.HostName(),
 		cmd,
 		env,
 		nil,
@@ -157,48 +186,60 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 		return fmt.Errorf("create agent container: %w", err)
 	}
 
-	return rly.StartContainer(ctx)
-}
+	if err := rly.StartContainer(ctx); err != nil {
+		return err
+	}
 
-func (s *ForwardRelayerSettings) validate(mode Mode) error {
-	switch mode {
-	case BackendMode:
-		if s.PortValue() == "" {
-			return fmt.Errorf("port is required")
-		}
-	case RelayerMode:
-		missing := make([]string, 0, 5)
-		if s.ChainID == "" {
-			missing = append(missing, "ChainID")
-		}
-		if s.CelestiaRPC == "" {
-			missing = append(missing, "CelestiaRPC")
-		}
-		if s.CelestiaGRPC == "" {
-			missing = append(missing, "CelestiaGRPC")
-		}
-		if s.BackendURL == "" {
-			missing = append(missing, "BackendURL")
-		}
-		if s.PrivateKeyHex == "" {
-			missing = append(missing, "PrivateKeyHex")
-		}
+	if rly.mode != BackendMode {
+		return nil
+	}
 
-		if len(missing) > 0 {
-			return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
-		}
-	default:
-		return fmt.Errorf("unsupported mode: %q", mode)
+	hostPorts, err := rly.ContainerLifecycle.GetHostPorts(ctx, settings.PortValue()+"/tcp")
+	if err != nil {
+		return fmt.Errorf("get backend host port: %w", err)
+	}
+
+	rly.externalPorts = types.Ports{
+		HTTP: internal.MustExtractPort(hostPorts[0]),
 	}
 
 	return nil
 }
 
-func (s *ForwardRelayerSettings) PortValue() string {
-	if s.Port != "" {
-		return s.Port
+// Name returns the hostname/container name for the agent container
+func (rly *ForwardRelayer) Name() string {
+	return fmt.Sprintf("hyperlane-forward-%s-%d-%s", rly.mode, rly.Index, internal.SanitizeDockerResourceName(rly.TestName))
+}
+
+// HostName returns the condensed hostname used for in-network container communication.
+func (rly *ForwardRelayer) HostName() string {
+	return internal.CondenseHostName(rly.Name())
+}
+
+// GetNetworkInfo returns internal/external network address information.
+func (rly *ForwardRelayer) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	internalIP, err := internal.GetContainerInternalIP(ctx, rly.DockerClient, rly.ContainerLifecycle.ContainerID())
+	if err != nil {
+		return types.NetworkInfo{}, err
 	}
-	return DefaultBackendPort
+
+	internalPorts := types.Ports{}
+	if rly.mode == BackendMode {
+		internalPorts.HTTP = rly.cfg.Settings.PortValue()
+	}
+
+	return types.NetworkInfo{
+		Internal: types.Network{
+			Hostname: rly.HostName(),
+			IP:       internalIP,
+			Ports:    internalPorts,
+		},
+		External: types.Network{
+			Hostname: "localhost",
+			IP:       "127.0.0.1",
+			Ports:    rly.externalPorts,
+		},
+	}, nil
 }
 
 func ensureHTTPScheme(address string) string {
