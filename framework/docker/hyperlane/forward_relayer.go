@@ -79,12 +79,18 @@ func (s *ForwardRelayerSettings) ToEnv() []string {
 func (s *ForwardRelayerSettings) Validate(mode Mode) error {
 	switch mode {
 	case BackendMode:
-		if strings.TrimSpace(s.PortValue()) == "" {
+		if strings.TrimSpace(s.Port) == "" {
 			return fmt.Errorf("port is required")
 		}
 	case RelayerMode:
 		if strings.TrimSpace(s.PrivateKeyHex) == "" {
 			return fmt.Errorf("private key is required")
+		}
+		if strings.TrimSpace(s.CelestiaGRPC) == "" {
+			return fmt.Errorf("celestia gRPC address is required")
+		}
+		if strings.TrimSpace(s.BackendURL) == "" {
+			return fmt.Errorf("backend URL is required")
 		}
 	default:
 		return fmt.Errorf("unsupported mode: %q", mode)
@@ -192,6 +198,9 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 	hostPorts, err := rly.ContainerLifecycle.GetHostPorts(ctx, settings.PortValue()+"/tcp")
 	if err != nil {
 		return fmt.Errorf("get backend host port: %w", err)
+	}
+	if len(hostPorts) == 0 {
+		return fmt.Errorf("no host ports returned for backend port %s", settings.PortValue())
 	}
 
 	rly.HostPorts = types.Ports{
