@@ -184,7 +184,7 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 		env,
 		nil,
 	); err != nil {
-		return fmt.Errorf("create agent container: %w", err)
+		return fmt.Errorf("create forward relayer container: %w", err)
 	}
 
 	if err := rly.StartContainer(ctx); err != nil {
