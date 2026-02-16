@@ -36,14 +36,15 @@ type ForwardRelayerConfig struct {
 // ForwardRelayerSettings contains settings used for the forward relayer container in both backend
 // and relayer mode.
 type ForwardRelayerSettings struct {
-	ChainID       string
-	CelestiaRPC   string
+	// Relayer config settings
 	CelestiaGRPC  string
 	BackendURL    string
 	PrivateKeyHex string
 
+	// Backend config settings
 	Port string
 
+	// Additional overrides
 	Env []string
 }
 
@@ -65,9 +66,7 @@ func (s *ForwardRelayerSettings) ToEnv() []string {
 	}
 
 	env := []string{
-		fmt.Sprintf("CHAIN_ID=%s", s.ChainID),
-		fmt.Sprintf("CELESTIA_RPC=%s", ensureHTTPScheme(s.CelestiaRPC)),
-		fmt.Sprintf("CELESTIA_GRPC=%s", s.CelestiaGRPC),
+		fmt.Sprintf("CELESTIA_GRPC=%s", ensureHTTPScheme(s.CelestiaGRPC)),
 		fmt.Sprintf("BACKEND_URL=%s", ensureHTTPScheme(s.BackendURL)),
 		fmt.Sprintf("PRIVATE_KEY_HEX=%s", s.PrivateKeyHex),
 		fmt.Sprintf("PORT=%s", port),
@@ -84,10 +83,6 @@ func (s *ForwardRelayerSettings) Validate(mode Mode) error {
 			return fmt.Errorf("port is required")
 		}
 	case RelayerMode:
-		if strings.TrimSpace(s.ChainID) == "" {
-			return fmt.Errorf("chain id is required")
-		}
-
 		if strings.TrimSpace(s.PrivateKeyHex) == "" {
 			return fmt.Errorf("private key is required")
 		}
