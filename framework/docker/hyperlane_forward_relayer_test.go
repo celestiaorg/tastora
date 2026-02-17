@@ -19,7 +19,6 @@ func TestForwardRelayerAndBackendStart(t *testing.T) {
 
 	testCfg := setupDockerTest(t)
 	ctx, cancel := context.WithTimeout(testCfg.Ctx, 8*time.Minute)
-	defer cancel()
 
 	// Keep parity with other forward relayer coverage that targets this image variant.
 	testCfg.ChainBuilder = testCfg.ChainBuilder.WithImage(
@@ -80,6 +79,7 @@ func TestForwardRelayerAndBackendStart(t *testing.T) {
 	require.NoError(t, relayer.ContainerLifecycle.Running(ctx))
 
 	t.Cleanup(func() {
+		defer cancel()
 		_ = celestia.Stop(ctx)
 		_ = backend.Stop(ctx)
 		_ = relayer.Stop(ctx)
