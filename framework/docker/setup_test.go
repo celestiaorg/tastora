@@ -40,7 +40,7 @@ func (m *mockTestingT) Logf(format string, args ...any) {
 func generateSampleLogs(lines int) string {
 	var buffer bytes.Buffer
 	for i := 1; i <= lines; i++ {
-		buffer.WriteString(fmt.Sprintf("Log line %d: This is sample log content for testing\n", i))
+		fmt.Fprintf(&buffer, "Log line %d: This is sample log content for testing\n", i)
 	}
 	return buffer.String()
 }
