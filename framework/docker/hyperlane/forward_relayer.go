@@ -3,6 +3,7 @@ package hyperlane
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
@@ -59,20 +60,30 @@ func (s *ForwardRelayerSettings) PortValue() string {
 
 // ToEnv converts the settings to a comma separate list of environment variables
 // which can be consumed within the container.
-func (s *ForwardRelayerSettings) ToEnv() []string {
+func (s *ForwardRelayerSettings) ToEnv() ([]string, error) {
 	port := s.Port
 	if port == "" {
 		port = DefaultBackendPort
 	}
 
+	celestiaGRPC, err := ensureHTTPScheme(s.CelestiaGRPC)
+	if err != nil {
+		return nil, fmt.Errorf("invalid CelestiaGRPC: %w", err)
+	}
+
+	backendURL, err := ensureHTTPScheme(s.BackendURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid BackendURL: %w", err)
+	}
+
 	env := []string{
-		fmt.Sprintf("CELESTIA_GRPC=%s", ensureHTTPScheme(s.CelestiaGRPC)),
-		fmt.Sprintf("BACKEND_URL=%s", ensureHTTPScheme(s.BackendURL)),
+		fmt.Sprintf("CELESTIA_GRPC=%s", celestiaGRPC),
+		fmt.Sprintf("BACKEND_URL=%s", backendURL),
 		fmt.Sprintf("PRIVATE_KEY_HEX=%s", s.PrivateKeyHex),
 		fmt.Sprintf("PORT=%s", port),
 	}
 
-	return append(env, s.Env...)
+	return append(env, s.Env...), nil
 }
 
 // Validate performs basic sanity checks on the configuration settings.
@@ -168,7 +179,10 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 		return fmt.Errorf("unsupported forward relayer mode: %q", rly.Mode)
 	}
 
-	env := settings.ToEnv()
+	env, err := settings.ToEnv()
+	if err != nil {
+		return fmt.Errorf("build forward relayer environment: %w", err)
+	}
 
 	if err := rly.CreateContainer(
 		ctx,
@@ -251,14 +265,29 @@ func (rly *ForwardRelayer) Settings() ForwardRelayerSettings {
 	return rly.Config.Settings
 }
 
-func ensureHTTPScheme(address string) string {
-	if address == "" {
-		return address
+func ensureHTTPScheme(raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", nil
 	}
 
-	if strings.Contains(address, "://") {
-		return address
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", err
 	}
 
-	return "http://" + address
+	// url.Parse("host:port") treats "host" as scheme; normalize this common case.
+	if u.Scheme != "" && u.Host == "" && !strings.Contains(raw, "://") {
+		return "http://" + raw, nil
+	}
+
+	if u.Scheme == "" {
+		u.Scheme = "http"
+	}
+
+	if u.Host == "" && u.Path != "" {
+		u.Host = u.Path
+		u.Path = ""
+	}
+
+	return u.String(), nil
 }
