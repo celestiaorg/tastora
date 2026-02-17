@@ -111,7 +111,7 @@ type ForwardRelayer struct {
 // NewForwardRelayer creates a new Hyperlane forward relayer with mode-specific runtime config.
 func NewForwardRelayer(ctx context.Context, cfg ForwardRelayerConfig, testName string, mode Mode) (*ForwardRelayer, error) {
 	image := cfg.Image
-	if image.UIDGID == "" {
+	if strings.TrimSpace(image.UIDGID) == "" {
 		image.UIDGID = hyperlaneDefaultUIDGID
 	}
 
@@ -121,7 +121,7 @@ func NewForwardRelayer(ctx context.Context, cfg ForwardRelayerConfig, testName s
 		testName,
 		image,
 		"/app",
-		0,
+		0, // should not be a need to ever have more than 1
 		ForwardRelayerNodeType,
 		cfg.Logger,
 	)
