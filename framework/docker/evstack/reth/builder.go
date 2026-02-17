@@ -2,10 +2,12 @@ package reth
 
 import (
 	"context"
-	"github.com/celestiaorg/tastora/framework/types"
+	"fmt"
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/celestiaorg/tastora/framework/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
@@ -23,6 +25,10 @@ type NodeBuilder struct {
 	bin                 string
 	genesis             []byte
 	jwtSecretHex        string
+	name                string
+	hyperlaneChainName  string
+	hyperlaneChainID    uint64
+	hyperlaneDomainID   uint32
 }
 
 func NewNodeBuilder(t *testing.T) *NodeBuilder {
@@ -90,6 +96,29 @@ func (b *NodeBuilder) WithJWTSecretHex(secret string) *NodeBuilder {
 	return b
 }
 
+func (b *NodeBuilder) WithName(name string) *NodeBuilder {
+	if err := internal.ValidateDockerHostnamePart(name); err != nil {
+		panic(fmt.Sprintf("invalid reth node name: %v", err))
+	}
+	b.name = name
+	return b
+}
+
+func (b *NodeBuilder) WithHyperlaneChainName(name string) *NodeBuilder {
+	b.hyperlaneChainName = name
+	return b
+}
+
+func (b *NodeBuilder) WithHyperlaneChainID(chainID uint64) *NodeBuilder {
+	b.hyperlaneChainID = chainID
+	return b
+}
+
+func (b *NodeBuilder) WithHyperlaneDomainID(domainID uint32) *NodeBuilder {
+	b.hyperlaneDomainID = domainID
+	return b
+}
+
 // Build constructs the Node and initializes its Docker volume but does not start the container.
 func (b *NodeBuilder) Build(ctx context.Context) (*Node, error) {
 	cfg := Config{
@@ -102,9 +131,16 @@ func (b *NodeBuilder) Build(ctx context.Context) (*Node, error) {
 		AdditionalStartArgs: b.additionalStartArgs,
 		JWTSecretHex:        b.jwtSecretHex,
 		GenesisFileBz:       b.genesis,
+		HyperlaneChainName:  b.hyperlaneChainName,
+		HyperlaneChainID:    b.hyperlaneChainID,
+		HyperlaneDomainID:   b.hyperlaneDomainID,
 	}
 
-	n, err := newNode(ctx, cfg, b.testName, 0)
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
+	n, err := newNode(ctx, cfg, b.testName, 0, b.name)
 	if err != nil {
 		return nil, err
 	}

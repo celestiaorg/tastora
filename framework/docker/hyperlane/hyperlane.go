@@ -9,6 +9,8 @@ import (
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
+	"github.com/ethereum/go-ethereum/common"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,6 +30,16 @@ type Deployer struct {
 	chains     []ChainConfigProvider
 	deployed   bool
 	hasWarp    bool
+
+	ChainHypKeys []ChainHypKey
+}
+
+// ChainHypKey encapsulates a Hyperlane chain and signer key used as the Hyperlane deployment owner account.
+type ChainHypKey struct {
+	// ChainName is the chain name as defined in the Hyperlane registry
+	ChainName string
+	// PrivKeyHex is the account private key
+	PrivKeyHex string
 }
 
 // NewDeployer creates a new Hyperlane deployment coordinator
@@ -86,6 +98,25 @@ func (d *Deployer) init(ctx context.Context) error {
 		return fmt.Errorf("failed to build relayer config: %w", err)
 	}
 	d.relayerCfg = relayerCfg
+
+	chainHypKeys := make([]ChainHypKey, 0)
+	for _, chainCfg := range d.relayerCfg.Chains {
+		if chainCfg.Protocol != "ethereum" {
+			continue
+		}
+
+		if chainCfg.Signer == nil || chainCfg.Signer.Key == "" {
+			return fmt.Errorf("evm chain %s missing signer configuration", chainCfg.Name)
+		}
+
+		chainHypKeys = append(chainHypKeys, ChainHypKey{ChainName: chainCfg.Name, PrivKeyHex: chainCfg.Signer.Key})
+	}
+
+	if len(chainHypKeys) == 0 {
+		return fmt.Errorf("no ethereum signer configured for hyperlane")
+	}
+
+	d.ChainHypKeys = chainHypKeys
 
 	registry, err := BuildRegistry(ctx, d.chains)
 	if err != nil {
@@ -153,6 +184,18 @@ func (d *Deployer) writeRegistry(ctx context.Context) error {
 		metadataPath := path.Join("registry", "chains", chainName, "metadata.yaml")
 		if err := d.WriteFile(ctx, metadataPath, metadataBytes); err != nil {
 			return fmt.Errorf("failed to write metadata for %s: %w", chainName, err)
+		}
+
+		if entry.Addresses.HasAddresses() {
+			addressesBytes, err := yaml.Marshal(entry.Addresses)
+			if err != nil {
+				return fmt.Errorf("failed to marshal addresses for %s: %w", chainName, err)
+			}
+
+			addressesPath := path.Join("registry", "chains", chainName, "addresses.yaml")
+			if err := d.WriteFile(ctx, addressesPath, addressesBytes); err != nil {
+				return fmt.Errorf("failed to write addresses for %s: %w", chainName, err)
+			}
 		}
 	}
 
@@ -256,16 +299,12 @@ func (d *Deployer) readMetadataFromDisk(ctx context.Context, chainName string) (
 
 // readAddressFromDisk reads the contract addresses from the YAML file on disk.
 func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) (ContractAddresses, error) {
-	// TODO: cosmos side not being handled yet, however ethereum addresses should be written to disk after
-	// deployment.
-	if meta.Protocol != "ethereum" {
-		return ContractAddresses{}, nil
-	}
-
 	addressPath := filepath.Join("registry", "chains", meta.Name, "addresses.yaml")
 	bz, err := d.ReadFile(ctx, addressPath)
-	if err != nil {
-		return ContractAddresses{}, fmt.Errorf("read %s addresses: %w", meta.Name, err)
+	if err != nil && meta.Name != "ethereum" {
+		// NOTE: the cosmosnative side gets populated later manually, not by the deploy step.
+		d.Logger.Warn("failed to read file", zap.String("path", addressPath))
+		return ContractAddresses{}, nil
 	}
 
 	var addresses ContractAddresses
@@ -274,4 +313,10 @@ func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) 
 	}
 
 	return addresses, nil
+}
+
+// GetEVMWarpTokenAddress returns the deployed EVM warp token address.
+// The address is deterministic due to CREATE2 deployment.
+func (d *Deployer) GetEVMWarpTokenAddress() (common.Address, error) {
+	return common.HexToAddress("0x345a583028762De4d733852c9D4f419077093A48"), nil
 }

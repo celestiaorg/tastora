@@ -5,14 +5,20 @@ import (
 	"fmt"
 	"path"
 
+	sdkmath "cosmossdk.io/math"
+
+	"github.com/celestiaorg/tastora/framework/docker/hyperlane/internal"
+
 	hyputil "github.com/bcp-innovations/hyperlane-cosmos/util"
 	ismtypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/01_interchain_security/types"
 	hooktypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/02_post_dispatch/types"
 	coretypes "github.com/bcp-innovations/hyperlane-cosmos/x/core/types"
 	warptypes "github.com/bcp-innovations/hyperlane-cosmos/x/warp/types"
+	evmutil "github.com/celestiaorg/tastora/framework/testutil/evm"
 	"github.com/celestiaorg/tastora/framework/types"
 	abci "github.com/cometbft/cometbft/abci/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	gethcommon "github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
@@ -27,46 +33,70 @@ const (
 )
 
 func (d *Deployer) deployCoreContracts(ctx context.Context) error {
-	var evmChainName string
-	var signerKey string
-	for name, chainCfg := range d.relayerCfg.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			evmChainName = name
-			if chainCfg.Signer != nil {
-				signerKey = chainCfg.Signer.Key
-			}
-			break
-		}
-	}
-
-	if evmChainName == "" {
-		d.Logger.Info("no EVM chain found, skipping core deployment")
-		return nil
-	}
-
-	cmd := []string{
-		"hyperlane", "core", "deploy",
-		"--chain", evmChainName,
-		"--registry", registryPath,
-		"--yes",
-	}
-
-	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", signerKey),
-	}
-	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
-	if err != nil {
-		return fmt.Errorf("core deploy failed: %w", err)
-	}
-
-	d.Logger.Info("core contracts deployed", zap.String("chain", evmChainName))
-
-	// NOTE: the `hyperlane core deploy` step writes `addresses.yaml` to disk which is required to write the core
-	// config to disk and so this step happens after execution.
 	if err := d.writeCoreConfig(ctx); err != nil {
 		return fmt.Errorf("failed to write core config: %w", err)
 	}
 
+	for _, chain := range d.ChainHypKeys {
+		cmd := []string{
+			"hyperlane", "core", "deploy",
+			"--config", path.Join(configsPath, "core-config.yaml"),
+			"--chain", chain.ChainName,
+			"--registry", registryPath,
+			"--yes",
+		}
+
+		env := []string{
+			fmt.Sprintf("HYP_KEY=%s", chain.PrivKeyHex),
+		}
+
+		_, _, err := d.Exec(ctx, d.Logger, cmd, env)
+		if err != nil {
+			return fmt.Errorf("core deploy failed for %s: %w", chain.ChainName, err)
+		}
+
+		d.Logger.Info("core contracts deployed", zap.String("chain", chain.ChainName))
+
+		if err := d.writeFactoryAddresses(ctx, chain.ChainName); err != nil {
+			return fmt.Errorf("failed to write factory addresses for %s: %w", chain.ChainName, err)
+		}
+	}
+
+	return nil
+}
+
+func (d *Deployer) writeFactoryAddresses(ctx context.Context, chainName string) error {
+	addressesPath := path.Join("registry", "chains", chainName, "addresses.yaml")
+
+	existingBytes, err := d.ReadFile(ctx, addressesPath)
+	if err != nil {
+		return fmt.Errorf("read deployed addresses: %w", err)
+	}
+
+	var addresses ContractAddresses
+	if err := yaml.Unmarshal(existingBytes, &addresses); err != nil {
+		return fmt.Errorf("unmarshal deployed addresses: %w", err)
+	}
+
+	// add factory addresses required by warp deploy (these are deterministic CREATE2 addresses)
+	addresses.DomainRoutingIsmFactory = QuotedHexAddress("0xE2c1756b8825C54638f98425c113b51730cc47f6")
+	addresses.StaticAggregationHookFactory = QuotedHexAddress("0xe53275A1FcA119e1c5eeB32E7a72e54835A63936")
+	addresses.StaticAggregationIsmFactory = QuotedHexAddress("0x25CdBD2bf399341F8FEe22eCdB06682AC81fDC37")
+	addresses.StaticMerkleRootMultisigIsmFactory = QuotedHexAddress("0x2854CFaC53FCaB6C95E28de8C91B96a31f0af8DD")
+	addresses.StaticMerkleRootWeightedMultisigIsmFactory = QuotedHexAddress("0x94B9B5bD518109dB400ADC62ab2022D2F0008ff7")
+	addresses.StaticMessageIdMultisigIsmFactory = QuotedHexAddress("0xCb1DC4aF63CFdaa4b9BFF307A8Dd4dC11B197E8f")
+	addresses.StaticMessageIdWeightedMultisigIsmFactory = QuotedHexAddress("0x70Ac5980099d71F4cb561bbc0fcfEf08AA6279ec")
+
+	bz, err := yaml.Marshal(addresses)
+	if err != nil {
+		return fmt.Errorf("marshal addresses: %w", err)
+	}
+
+	if err := d.WriteFile(ctx, addressesPath, bz); err != nil {
+		return fmt.Errorf("write addresses: %w", err)
+	}
+
+	d.Logger.Info("appended factory addresses to registry", zap.String("chain", chainName))
 	return nil
 }
 
@@ -78,71 +108,40 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 		"--yes",
 	}
 
-	_, _, err := d.Exec(ctx, d.Logger, cmd, nil)
+	if len(d.ChainHypKeys) == 0 {
+		return fmt.Errorf("no hyperlane signer configured for warp deploy")
+	}
+
+	env := []string{
+		fmt.Sprintf("HYP_KEY=%s", d.ChainHypKeys[0].PrivKeyHex),
+	}
+
+	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
 	if err != nil {
 		return fmt.Errorf("warp deploy failed: %w", err)
 	}
 
 	d.Logger.Info("warp routes deployed")
-
 	return nil
 }
 
-// writeCoreConfig generates configs/core-config.yaml from the registry and signer
+// writeCoreConfig generates configs/core-config.yaml for fresh contract deployment
 func (d *Deployer) writeCoreConfig(ctx context.Context) error {
-	// find first EVM chain and signer
-	var evmChainName string
-	for name, chainCfg := range d.relayerCfg.Chains {
-		if chainCfg.Protocol == "ethereum" {
-			evmChainName = name
-			break
-		}
-	}
-	if evmChainName == "" {
-		return fmt.Errorf("no EVM chain found for core config")
-	}
-
-	// read addresses written by CLI from registry
-	addrBytes, err := d.ReadFile(ctx, path.Join("registry", "chains", evmChainName, "addresses.yaml"))
-	if err != nil {
-		return fmt.Errorf("read addresses: %w", err)
-	}
-
-	var addrs ContractAddresses
-	if err := yaml.Unmarshal(addrBytes, &addrs); err != nil {
-		return fmt.Errorf("unmarshal addresses: %w", err)
-	}
-
-	// build core-config structure
-	// modeled after https://github.com/celestiaorg/celestia-zkevm/blob/927364fec76bc78bc390953590f07d48d430dc20/hyperlane/configs/core-config.yaml#L1
+	// build core-config structure for fresh deployment (no addresses)
 	core := CoreConfig{
-		DefaultHook: HookCfg{
-			Address: addrs.MerkleTreeHook,
-			Type:    "merkleTreeHook",
-		},
-		InterchainAccountRouter: InterchainAccountRouterCfg{
-			Address:          addrs.InterchainAccountRouter,
-			Mailbox:          addrs.Mailbox,
-			Owner:            ownerAddr,
-			ProxyAdmin:       ProxyAdminCfg{Address: addrs.ProxyAdmin, Owner: ownerAddr},
-			RemoteIcaRouters: map[string]string{},
-		},
-		Owner: ownerAddr,
-		ProxyAdmin: ProxyAdminCfg{
-			Address: addrs.ProxyAdmin,
-			Owner:   ownerAddr,
-		},
-		RequiredHook: RequiredHookCfg{
-			Address:        addrs.InterchainGasPaymaster,
-			Beneficiary:    ownerAddr,
-			MaxProtocolFee: "10000000000000000000000000000",
-			Owner:          ownerAddr,
+		Owner: QuotedHexAddress(ownerAddr),
+		DefaultHook: ProtocolFeeHookCfg{
+			Beneficiary:    QuotedHexAddress(ownerAddr),
+			MaxProtocolFee: "100000000000000000",
+			Owner:          QuotedHexAddress(ownerAddr),
 			ProtocolFee:    "0",
 			Type:           "protocolFee",
 		},
-		DefaultIsm: HookCfg{
-			Address: addrs.InterchainSecurityModule,
-			Type:    "testIsm",
+		DefaultIsm: TestIsmCfg{
+			Type: "testIsm",
+		},
+		RequiredHook: MerkleTreeHookCfg{
+			Type: "merkleTreeHook",
 		},
 	}
 
@@ -156,6 +155,27 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 	}
 
 	d.Logger.Info("wrote core-config.yaml")
+	return nil
+}
+
+// EnrollRemoteRouterOnCosmos enrolls a remote router for a given token on the Cosmos chain
+// by broadcasting a MsgEnrollRemoteRouter via the provided broadcaster and wallet.
+// tokenID is the Cosmos bytes32 identifier for the router/token (hyputil.HexAddress),
+// remoteDomain is the EVM domain ID, and receiverContract is the EVM router contract (0x-prefixed hex).
+func (d *Deployer) EnrollRemoteRouterOnCosmos(ctx context.Context, b types.Broadcaster, wallet *types.Wallet, tokenID hyputil.HexAddress, remoteDomain uint32, receiverContract string) error {
+	msg := &warptypes.MsgEnrollRemoteRouter{
+		Owner:   wallet.GetFormattedAddress(),
+		TokenId: tokenID,
+		RemoteRouter: &warptypes.RemoteRouter{
+			ReceiverDomain:   remoteDomain,
+			ReceiverContract: receiverContract,
+			Gas:              sdkmath.NewInt(0),
+		},
+	}
+	if _, err := b.BroadcastMessages(ctx, wallet, msg); err != nil {
+		return fmt.Errorf("broadcast MsgEnrollRemoteRouter failed: %w", err)
+	}
+	d.Logger.Info("enrolled remote router on cosmos", zap.Uint32("remote_domain", remoteDomain), zap.String("receiver_contract", receiverContract))
 	return nil
 }
 
@@ -207,6 +227,44 @@ func (d *Deployer) DeployCosmosNoopISM(ctx context.Context, chain types.Broadcas
 
 	d.Logger.Info("cosmos-native noop-ism deployment completed")
 	return config, nil
+}
+
+// EnrollRemoteRouter invokes enrollRemoteRouter(uint32,bytes32) on the given contract
+// using EVM settings (RPC URL + signer) from the relayer config for the first EVM chain.
+// routerHex must be a 0x-prefixed 32-byte hex string.
+func (d *Deployer) EnrollRemoteRouter(ctx context.Context, contractAddress string, domain uint32, routerHex string, chainName string, rpcURL string) (gethcommon.Hash, error) {
+	var signerKey string
+	for _, chainCfg := range d.relayerCfg.Chains {
+		if chainCfg.Name == chainName {
+			if chainCfg.Protocol != "ethereum" {
+				return gethcommon.Hash{}, fmt.Errorf("chain %s is not an evm chain", chainName)
+			}
+			if len(chainCfg.RpcURLs) == 0 || chainCfg.Signer == nil {
+				return gethcommon.Hash{}, fmt.Errorf("evm chain missing rpcUrls or signer in relayer config")
+			}
+			signerKey = chainCfg.Signer.Key
+			break
+		}
+	}
+
+	if rpcURL == "" || signerKey == "" {
+		return gethcommon.Hash{}, fmt.Errorf("no evm chain configured in relayer config")
+	}
+
+	router := gethcommon.HexToHash(routerHex)
+
+	sender, err := evmutil.NewSender(ctx, rpcURL)
+	if err != nil {
+		return gethcommon.Hash{}, fmt.Errorf("connect evm rpc: %w", err)
+	}
+	defer sender.Close()
+
+	txHash, err := sender.SendFunctionTx(ctx, signerKey, contractAddress, internal.HyperlaneRouterABI, "enrollRemoteRouter", domain, router)
+	if err != nil {
+		return gethcommon.Hash{}, fmt.Errorf("enrollRemoteRouter tx failed: %w", err)
+	}
+	d.Logger.Info("enrolled remote router", zap.Uint32("domain", domain), zap.String("contract", contractAddress), zap.String("tx", txHash.Hex()))
+	return txHash, nil
 }
 
 func (d *Deployer) deployNoopISM(ctx context.Context, chain types.Broadcaster, sender *types.Wallet) (hyputil.HexAddress, error) {

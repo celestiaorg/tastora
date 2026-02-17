@@ -2,8 +2,11 @@ package hyperlane
 
 import (
 	"context"
+	"fmt"
+	"path"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
+	"github.com/celestiaorg/tastora/framework/docker/internal"
 )
 
 // AgentType defines the type of Hyperlane agent
@@ -18,14 +21,82 @@ const (
 // This is separate from the Hyperlane deployer - agents are long-lived containers
 type Agent struct {
 	*container.Node
+	cfg       Config
+	agentType AgentType
 }
 
-// NewAgent creates a new Hyperlane agent (for future implementation)
-func NewAgent(cfg Config, testName string, agentType AgentType, config *RelayerConfig) *Agent {
-	return nil
+// Name returns the hostname/container name for the agent container
+func (a *Agent) Name() string {
+	base := fmt.Sprintf("hyperlane-agent-%s-%d-%s", a.agentType, a.Index, internal.SanitizeDockerResourceName(a.TestName))
+	return internal.CondenseHostName(base)
 }
 
-// Start starts the agent container (for future implementation)
+// NewAgent creates a new Hyperlane agent that will run with the provided config.
+// The config should be a relayer config JSON (as produced by BuildRelayerConfig).
+func NewAgent(ctx context.Context, cfg Config, testName string, agentType AgentType, d *Deployer) (*Agent, error) {
+
+	image := cfg.HyperlaneImage
+	if image.UIDGID == "" {
+		image.UIDGID = hyperlaneDefaultUIDGID
+	}
+
+	node := container.NewNode(
+		cfg.DockerNetworkID,
+		cfg.DockerClient,
+		testName,
+		image,
+		hyperlaneHomeDir,
+		0,
+		AgentNodeType,
+		cfg.Logger,
+	)
+
+	a := &Agent{
+		Node:      node,
+		cfg:       cfg,
+		agentType: agentType,
+	}
+
+	lifecycle := container.NewLifecycle(cfg.Logger, cfg.DockerClient, a.Name())
+	a.SetContainerLifecycle(lifecycle)
+
+	if err := a.CreateAndSetupVolume(ctx, d.Name()); err != nil {
+		return nil, err
+	}
+
+	return a, nil
+}
+
+// Start starts the agent container with the relayer config mounted at /workspace/relayer-config.json
 func (a *Agent) Start(ctx context.Context) error {
-	return nil
+	// Use the agent binary entrypoint with CONFIG_FILES env to point at the config,
+	// matching docker-compose pattern for hyperlane-agent images.
+	// Some images expect /app/config/config.json; bind our file path via CONFIG_FILES.
+	cfgPath := path.Join(hyperlaneHomeDir, "relayer-config.json")
+	cmd := []string{"/app/relayer"}
+	env := []string{
+		fmt.Sprintf("CONFIG_FILES=%s", cfgPath),
+		// Provide other common env flags as no-ops to reduce surprises
+		"RUST_LOG=info",
+		"HYP_LOG_LEVEL=debug",
+	}
+
+	if err := a.CreateContainer(
+		ctx,
+		a.TestName,
+		a.NetworkID,
+		a.Image,
+		nil,
+		"",
+		a.Bind(),
+		nil,
+		a.Name(),
+		cmd,
+		env,
+		nil,
+	); err != nil {
+		return fmt.Errorf("create agent container: %w", err)
+	}
+
+	return a.StartContainer(ctx)
 }
