@@ -40,9 +40,9 @@ func (api *API) CreateSpammer(name, scenario string, config any, start bool) (in
 		return 0, fmt.Errorf("yaml marshal config: %w", err)
 	}
 	reqBody := createSpammerReq{
-		Name:             name,
-		Description:      name,
-		Scenario:         scenario,
+		Name:             strings.TrimSpace(name),
+		Description:      strings.TrimSpace(name),
+		Scenario:         strings.TrimSpace(scenario),
 		ConfigYAML:       bz,
 		StartImmediately: start,
 	}
