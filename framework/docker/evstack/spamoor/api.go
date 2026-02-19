@@ -11,6 +11,7 @@ import (
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	yaml "gopkg.in/yaml.v3"
 )
 
 // API is a thin HTTP client for the spamoor-daemon API
@@ -31,13 +32,18 @@ type createSpammerReq struct {
 	StartImmediately bool   `json:"startImmediately"`
 }
 
-// CreateSpammer posts a new spammer; returns its ID.
-func (api *API) CreateSpammer(name, scenario, configYAML string, start bool) (int, error) {
+// CreateSpammer posts a new spammer with a YAML-serializable config; returns its ID.
+// The config parameter is YAML marshalled and sent as the "config" field expected by the daemon.
+func (api *API) CreateSpammer(name, scenario string, config any, start bool) (int, error) {
+	bz, err := toYAMLString(config)
+	if err != nil {
+		return 0, fmt.Errorf("yaml marshal config: %w", err)
+	}
 	reqBody := createSpammerReq{
 		Name:             name,
 		Description:      name,
 		Scenario:         scenario,
-		ConfigYAML:       configYAML,
+		ConfigYAML:       bz,
 		StartImmediately: start,
 	}
 	b, _ := json.Marshal(reqBody)
@@ -62,8 +68,8 @@ func (api *API) CreateSpammer(name, scenario, configYAML string, start bool) (in
 // ValidateScenarioConfig attempts to create a spammer with the provided scenario/config
 // without starting it, and deletes it immediately if creation succeeds. It returns
 // a descriptive error when the daemon rejects the config.
-func (api *API) ValidateScenarioConfig(name, scenario, configYAML string) error {
-	id, err := api.CreateSpammer(name, scenario, configYAML, false)
+func (api *API) ValidateScenarioConfig(name, scenario string, config any) error {
+	id, err := api.CreateSpammer(name, scenario, config, false)
 	if err != nil {
 		return fmt.Errorf("invalid scenario config: %w", err)
 	}
@@ -291,6 +297,21 @@ func (api *API) Import(body string, contentType string) error {
         return fmt.Errorf("import failed: %s", string(b))
     }
     return nil
+}
+
+// toYAMLString marshals an input into YAML. If input is already a string, it is returned as-is.
+func toYAMLString(in any) (string, error) {
+    if in == nil {
+        return "", nil
+    }
+    if s, ok := in.(string); ok {
+        return s, nil
+    }
+    b, err := yaml.Marshal(in)
+    if err != nil {
+        return "", err
+    }
+    return string(b), nil
 }
 
 // GetMetrics fetches and parses Prometheus metrics into MetricFamily structs.
