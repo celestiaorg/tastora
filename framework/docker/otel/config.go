@@ -9,8 +9,9 @@ func MinimalLoggingConfigMap() map[string]any {
         "receivers": map[string]any{
             "otlp": map[string]any{
                 "protocols": map[string]any{
-                    "grpc": map[string]any{},
-                    "http": map[string]any{},
+                    // Bind explicitly to all interfaces for clarity across versions
+                    "grpc": map[string]any{"endpoint": "0.0.0.0:4317"},
+                    "http": map[string]any{"endpoint": "0.0.0.0:4318"},
                 },
             },
         },

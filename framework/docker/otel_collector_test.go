@@ -1,23 +1,22 @@
 package docker
 
 import (
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"testing"
-	"time"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "testing"
+    "time"
 
-	evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
-	"github.com/celestiaorg/tastora/framework/docker/evstack/spamoor"
-	otel "github.com/celestiaorg/tastora/framework/docker/otel"
-	"github.com/celestiaorg/tastora/framework/testutil/deploy"
-	"github.com/stretchr/testify/require"
+    evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
+    "github.com/celestiaorg/tastora/framework/docker/evstack/spamoor"
+    "github.com/celestiaorg/tastora/framework/docker/jaeger"
+    "github.com/celestiaorg/tastora/framework/testutil/deploy"
+    "github.com/stretchr/testify/require"
 )
 
 // TestOTELCollector_StackAndMetrics starts a minimal stack (reth+evmsingle), spamoor, and an OTEL collector,
 // then verifies the collector's Prometheus metrics endpoint is reachable and emits uptime.
-func TestOTELCollector_StackAndMetrics(t *testing.T) {
+func TestTracingWithJaegerBackend(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")
 	}
@@ -29,21 +28,19 @@ func TestOTELCollector_StackAndMetrics(t *testing.T) {
 	celestia, danet, err := deploy.CelestiaWithDA(testCfg.Ctx, testCfg.ChainBuilder, testCfg.DANetworkBuilder)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		//_ = danet.Stop(testCfg.Ctx)
-		//_ = danet.Remove(testCfg.Ctx)
-		_ = celestia.Stop(testCfg.Ctx)
+		_ = danet.Remove(testCfg.Ctx)
 		_ = celestia.Remove(testCfg.Ctx)
 	})
 
-	// Start OTEL collector with default minimal config (includes telemetry metrics on 8888)
-	collector, err := otel.NewCollector(testCfg.Ctx, otel.Config{
-		DockerClient:    testCfg.DockerClient,
-		DockerNetworkID: testCfg.NetworkID,
-		Logger:          testCfg.Logger,
-		ConfigMap:       otel.MinimalLoggingConfigMap(),
-	}, testCfg.TestName, 0)
-	require.NoError(t, err)
-	require.NoError(t, collector.Start(testCfg.Ctx))
+    // Start Jaeger all-in-one as the tracing backend
+    j, err := jaeger.New(testCfg.Ctx, jaeger.Config{
+        Logger:          testCfg.Logger,
+        DockerClient:    testCfg.DockerClient,
+        DockerNetworkID: testCfg.NetworkID,
+    }, testCfg.TestName, 0)
+    require.NoError(t, err)
+    require.NoError(t, j.Start(testCfg.Ctx))
+    t.Cleanup(func() { _ = j.Stop(testCfg.Ctx); _ = j.Remove(testCfg.Ctx) })
 
 	// Start reth using the pre-configured builder
 	rnode, err := testCfg.RethBuilder.Build(testCfg.Ctx)
@@ -72,7 +69,6 @@ func TestOTELCollector_StackAndMetrics(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, spamNode.Start(testCfg.Ctx))
 	t.Cleanup(func() {
-		_ = spamNode.Stop(testCfg.Ctx)
 		_ = spamNode.Remove(testCfg.Ctx)
 	})
 
@@ -81,45 +77,70 @@ func TestOTELCollector_StackAndMetrics(t *testing.T) {
 	bni, err := danet.GetBridgeNodes()[0].GetNetworkInfo(testCfg.Ctx)
 	require.NoError(t, err)
 	daAddress := fmt.Sprintf("http://%s:%s", bni.Internal.IP, bni.Internal.Ports.RPC)
-	evNodeCfg := evmsingle.NewNodeConfigBuilder().
-		WithEVMEngineURL(fmt.Sprintf("http://%s:%s", rni.Internal.Hostname, rni.Internal.Ports.Engine)).
-		WithEVMETHURL(fmt.Sprintf("http://%s:%s", rni.Internal.Hostname, rni.Internal.Ports.RPC)).
-		WithEVMJWTSecret(rnode.JWTSecretHex()).
-		WithEVMGenesisHash(func() string { h, _ := rnode.GenesisHash(testCfg.Ctx); return h }()).
-		WithEVMBlockTime("1s").
-		WithEVMSignerPassphrase("secret").
-		WithDAAddress(daAddress).
-		WithInstrumentationTracing(collector.GRPCEndpoint(), "ev-node-smoke", "1.0").
-		Build()
+    evNodeCfg := evmsingle.NewNodeConfigBuilder().
+        WithEVMEngineURL(fmt.Sprintf("http://%s:%s", rni.Internal.Hostname, rni.Internal.Ports.Engine)).
+        WithEVMETHURL(fmt.Sprintf("http://%s:%s", rni.Internal.Hostname, rni.Internal.Ports.RPC)).
+        WithEVMJWTSecret(rnode.JWTSecretHex()).
+        WithEVMGenesisHash(func() string { h, _ := rnode.GenesisHash(testCfg.Ctx); return h }()).
+        WithEVMBlockTime("1s").
+        WithEVMSignerPassphrase("secret").
+        WithDAAddress(daAddress).
+        // Send spans directly to Jaeger OTLP/HTTP
+        WithInstrumentationTracing(j.IngestHTTPEndpoint(), "ev-node-smoke", "1").
+        Build()
 
 	newEVM, err := evmsingle.NewChainBuilderWithTestName(t, testCfg.TestName).
 		WithDockerClient(testCfg.DockerClient).
 		WithDockerNetworkID(testCfg.NetworkID).
+		// Inject OpenTelemetry SDK env vars to ensure ev-node exports traces
+		//WithEnv(otel.EnvForService("ev-node-smoke", collector, "grpc")...).
 		WithNodes(evNodeCfg).
 		Build(testCfg.Ctx)
 	require.NoError(t, err)
 	require.NoError(t, newEVM.Start(testCfg.Ctx))
 	t.Cleanup(func() {
-		_ = newEVM.Stop(testCfg.Ctx)
 		_ = newEVM.Remove(testCfg.Ctx)
 	})
 
-	// Verify collector metrics endpoint responds and includes uptime metric
-	client := &http.Client{Timeout: 1 * time.Second}
-	url := collector.MetricsHostURL()
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		resp, err := client.Get(url)
-		if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			b, _ := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			if strings.Contains(string(b), "otelcol_process_uptime") {
-				break
-			}
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("collector metrics endpoint not ready or missing uptime metric at %s", url)
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
+    // Verify by querying Jaeger API for service and traces
+    client := &http.Client{Timeout: 1200 * time.Millisecond}
+    deadline := time.Now().Add(60 * time.Second)
+
+    // Wait for service registration
+    svcURL := j.QueryHostURL() + "/api/services"
+    seen := false
+    for time.Now().Before(deadline) && !seen {
+        resp, err := client.Get(svcURL)
+        if err == nil && resp.StatusCode == http.StatusOK {
+            var out struct{ Data []string `json:"data"` }
+            _ = json.NewDecoder(resp.Body).Decode(&out)
+            _ = resp.Body.Close()
+            for _, s := range out.Data {
+                if s == "ev-node-smoke" {
+                    seen = true
+                    break
+                }
+            }
+        }
+        time.Sleep(1 * time.Second)
+    }
+    require.True(t, seen, "jaeger should list ev-node-smoke service")
+
+    // Query traces for the service
+    haveTraces := false
+    tracesURL := j.QueryHostURL() + "/api/traces?service=ev-node-smoke&limit=5"
+    for time.Now().Before(deadline) && !haveTraces {
+        resp, err := client.Get(tracesURL)
+        if err == nil && resp.StatusCode == http.StatusOK {
+            var out struct{ Data []any `json:"data"` }
+            _ = json.NewDecoder(resp.Body).Decode(&out)
+            _ = resp.Body.Close()
+            if len(out.Data) > 0 {
+                haveTraces = true
+                break
+            }
+        }
+        time.Sleep(1 * time.Second)
+    }
+    require.True(t, haveTraces, "jaeger should contain traces for ev-node-smoke")
 }
