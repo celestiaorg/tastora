@@ -157,6 +157,80 @@ func TestDANetworkCreation(t *testing.T) {
 	})
 }
 
+// TestDANetworkStopAndRestart ensures a DA network can be stopped and then restarted,
+// and nodes continue to respond to RPC after restart.
+func TestDANetworkStopAndRestart(t *testing.T) {
+    if testing.Short() {
+        t.Skip("skipping due to short mode")
+    }
+    t.Parallel()
+    configureBech32PrefixOnce()
+
+    // Setup isolated docker environment for this test
+    testCfg := setupDockerTest(t)
+
+    chain, err := testCfg.ChainBuilder.Build(testCfg.Ctx)
+    require.NoError(t, err)
+
+    err = chain.Start(testCfg.Ctx)
+    require.NoError(t, err)
+    defer func() { _ = chain.Remove(testCfg.Ctx) }()
+
+    // Default image for the DA network
+    defaultImage := container.Image{
+        Repository: "ghcr.io/celestiaorg/celestia-node",
+        Version:    "v0.26.4",
+        UIDGID:     "10001:10001",
+    }
+
+    // Create bridge node config
+    bridgeNodeConfig := da.NewNodeBuilder().
+        WithNodeType(types.BridgeNode).
+        Build()
+
+    // Create DA network with a single bridge node
+    daNetwork, err := testCfg.DANetworkBuilder.
+        WithChainID(chain.GetChainID()).
+        WithImage(defaultImage).
+        WithNodes(bridgeNodeConfig).
+        Build(testCfg.Ctx)
+    require.NoError(t, err)
+
+    // Start the bridge node
+    bridgeNode := daNetwork.GetBridgeNodes()[0]
+
+    chainNetworkInfo, err := chain.GetNodes()[0].GetNetworkInfo(testCfg.Ctx)
+    require.NoError(t, err, "failed to get network info")
+    hostname := chainNetworkInfo.Internal.Hostname
+
+    chainID := chain.GetChainID()
+    genesisHash, err := getGenesisHash(testCfg.Ctx, chain)
+    require.NoError(t, err)
+
+    require.NoError(t, bridgeNode.Start(testCfg.Ctx,
+        da.WithChainID(chainID),
+        da.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", hostname, "--rpc.addr", "0.0.0.0"),
+        da.WithEnvironmentVariables(map[string]string{
+            "CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, ""),
+            "P2P_NETWORK":     chainID,
+        }),
+    ))
+
+    // Verify it is responding
+    _, err = bridgeNode.GetP2PInfo(testCfg.Ctx)
+    require.NoError(t, err, "failed to get bridge node p2p info before stop")
+
+    // Stop the entire DA network
+    require.NoError(t, daNetwork.Stop(testCfg.Ctx))
+
+    // Start the entire DA network again
+    require.NoError(t, daNetwork.Start(testCfg.Ctx))
+
+    // Verify RPC works after restart
+    _, err = bridgeNode.GetP2PInfo(testCfg.Ctx)
+    require.NoError(t, err, "failed to get bridge node p2p info after restart")
+}
+
 // TestModifyConfigFileDANetwork ensures modification of config files is possible by
 // - disabling auth at startup
 // - enabling auth and making sure it is not possible to query RPC
