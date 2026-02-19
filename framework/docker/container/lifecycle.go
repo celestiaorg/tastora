@@ -237,29 +237,19 @@ func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOpt
 }
 
 func (c *Lifecycle) RemoveVolumes(ctx context.Context) error {
-    filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, c.client.CleanupLabel())))
-    volumeList, err := c.client.VolumeList(ctx, volume.ListOptions{Filters: filterArgs})
-    if err != nil {
-        return fmt.Errorf("failed to list volumes: %w", err)
-    }
+	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, c.client.CleanupLabel())))
+	volumeList, err := c.client.VolumeList(ctx, volume.ListOptions{Filters: filterArgs})
+	if err != nil {
+		return fmt.Errorf("failed to list volumes: %w", err)
+	}
 
-    for _, vol := range volumeList.Volumes {
-        // Retry volume removal briefly to allow containers to fully detach
-        var lastErr error
-        for i := 0; i < 40; i++ { // ~20s max (40 * 500ms)
-            if err := c.client.VolumeRemove(ctx, vol.Name, true); err != nil {
-                lastErr = err
-                time.Sleep(500 * time.Millisecond)
-                continue
-            }
-            lastErr = nil
-            break
-        }
-        if lastErr != nil {
-            c.log.Warn("Failed to force remove volume", zap.String("volume", vol.Name), zap.Error(lastErr))
-        }
-    }
-    return nil
+	for _, vol := range volumeList.Volumes {
+		err := c.client.VolumeRemove(ctx, vol.Name, true)
+		if err != nil {
+			c.log.Warn("Failed to force remove volume", zap.String("volume", vol.Name), zap.Error(err))
+		}
+	}
+	return nil
 }
 
 func (c *Lifecycle) ContainerID() string {
