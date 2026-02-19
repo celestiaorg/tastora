@@ -23,6 +23,10 @@ func DefaultDeployerImage() container.Image {
 	return container.Image{Repository: "ghcr.io/celestiaorg/hyperlane-init", Version: "latest", UIDGID: "1000:1000"}
 }
 
+func DefaultForwardRelayerImage() container.Image {
+	return container.NewImage("ghcr.io/celestiaorg/forwarding-relayer", "v0.1.0", "1000:1000")
+}
+
 // CosmosConfig contains the IDs of all deployed cosmos-native hyperlane components
 type CosmosConfig struct {
 	IsmID            hyputil.HexAddress `json:"ism_id"`

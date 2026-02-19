@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
@@ -49,7 +50,7 @@ func NewDeployer(ctx context.Context, cfg Config, testName string, chains []Chai
 	}
 
 	image := cfg.HyperlaneImage
-	if image.UIDGID == "" {
+	if strings.TrimSpace(image.UIDGID) == "" {
 		image.UIDGID = hyperlaneDefaultUIDGID
 	}
 
