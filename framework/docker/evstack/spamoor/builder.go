@@ -1,19 +1,19 @@
 package spamoor
 
 import (
-	"context"
+    "context"
 
-	"github.com/celestiaorg/tastora/framework/docker/container"
-	"github.com/celestiaorg/tastora/framework/types"
-	"go.uber.org/zap"
+    "github.com/celestiaorg/tastora/framework/docker/container"
+    "github.com/celestiaorg/tastora/framework/types"
+    "go.uber.org/zap"
 )
 
 type Builder struct {
-	testName      string
-	dockerClient  types.TastoraDockerClient
-	dockerNetwork string
-	logger        *zap.Logger
-	image         container.Image
+    testName      string
+    dockerClient  types.TastoraDockerClient
+    dockerNetwork string
+    logger        *zap.Logger
+    image         container.Image
 
     rpcHosts   []string
     privKey    string
@@ -21,16 +21,13 @@ type Builder struct {
 }
 
 func NewNodeBuilder(testName string) *Builder {
-	return &Builder{
-		testName: testName,
-		image:    container.NewImage("ethpandaops/spamoor", "latest", ""),
-	}
+    return &Builder{
+        testName: testName,
+        image:    container.NewImage("ethpandaops/spamoor", "latest", ""),
+    }
 }
 
-func (b *Builder) WithDockerClient(c types.TastoraDockerClient) *Builder {
-	b.dockerClient = c
-	return b
-}
+func (b *Builder) WithDockerClient(c types.TastoraDockerClient) *Builder { b.dockerClient = c; return b }
 func (b *Builder) WithDockerNetworkID(id string) *Builder { b.dockerNetwork = id; return b }
 func (b *Builder) WithLogger(l *zap.Logger) *Builder      { b.logger = l; return b }
 func (b *Builder) WithImage(img container.Image) *Builder { b.image = img; return b }
@@ -47,5 +44,6 @@ func (b *Builder) Build(ctx context.Context) (*Node, error) {
         RPCHosts:        b.rpcHosts,
         PrivateKey:      b.privKey,
     }
-	return newNode(ctx, cfg, b.testName, 0, b.nameSuffix)
+    return newNode(ctx, cfg, b.testName, 0, b.nameSuffix)
 }
+
