@@ -42,8 +42,8 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCf
 
 	log := cfg.Logger.With(zap.String("component", "evm-single"), zap.Int("i", index))
 
-	// This image expects the home at /root/.evm-single by convention
-	homeDir := "/root/.evm-single"
+    // ev-node-evm default home
+    homeDir := "/root/.evm"
 
 	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports, chainName: chainName}
 	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, NodeType, log)
@@ -189,6 +189,20 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 
 	if n.nodeCfg.DANamespace != "" {
 		cmd = append(cmd, "--evnode.da.namespace", n.nodeCfg.DANamespace)
+	}
+
+	// Instrumentation (OpenTelemetry tracing)
+	if n.nodeCfg.InstrumentationTracingEnabled {
+		cmd = append(cmd, "--evnode.instrumentation.tracing=true")
+		if n.nodeCfg.InstrumentationTracingEndpoint != "" {
+			cmd = append(cmd, "--evnode.instrumentation.tracing_endpoint", n.nodeCfg.InstrumentationTracingEndpoint)
+		}
+		if n.nodeCfg.InstrumentationTracingSampleRate != "" {
+			cmd = append(cmd, "--evnode.instrumentation.tracing_sample_rate", n.nodeCfg.InstrumentationTracingSampleRate)
+		}
+		if n.nodeCfg.InstrumentationTracingServiceName != "" {
+			cmd = append(cmd, "--evnode.instrumentation.tracing_service_name", n.nodeCfg.InstrumentationTracingServiceName)
+		}
 	}
 
 	// Ensure RPC listens on all interfaces so other containers/host can reach it
