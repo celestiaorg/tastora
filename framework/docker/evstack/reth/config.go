@@ -53,5 +53,6 @@ func (c Config) Validate() error {
 
 // DefaultImage returns the default container image for Reth nodes.
 func DefaultImage() container.Image {
-	return container.Image{Repository: "ghcr.io/evstack/ev-reth", Version: "latest"}
+    // Pin default to a known stable release for local/E2E reproducibility
+    return container.Image{Repository: "ghcr.io/evstack/ev-reth", Version: "v0.2.2"}
 }
