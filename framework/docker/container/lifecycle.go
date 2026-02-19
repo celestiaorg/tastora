@@ -1,12 +1,12 @@
 package container
 
 import (
-    "context"
-    "fmt"
-    "io"
-    "regexp"
-    "strings"
-    "time"
+	"context"
+	"fmt"
+	"io"
+	"regexp"
+	"strings"
+	"time"
 
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
@@ -15,12 +15,12 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-    "github.com/docker/docker/api/types/mount"
-    "github.com/docker/docker/api/types/network"
-    "github.com/docker/docker/api/types/volume"
-    "github.com/docker/go-connections/nat"
-    "github.com/moby/moby/errdefs"
-    "go.uber.org/zap"
+	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/volume"
+	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/errdefs"
+	"go.uber.org/zap"
 )
 
 // Example Go/Cosmos-SDK panic format is `panic: bad Duration: time: invalid duration "bad"\n`.
@@ -80,20 +80,18 @@ func (c *Lifecycle) CreateContainer(
 
 	c.preStartListeners = listeners
 
-    var endpointSettings network.EndpointSettings
-    // Always set a DNS alias to the provided hostName so other containers on the
-    // same user-defined network can resolve it. This allows using HostName() in
-    // intra-network endpoints.
-    if ipAddr == "" {
-        endpointSettings = network.EndpointSettings{Aliases: aliasSlice(hostName)}
-    } else {
-        endpointSettings = network.EndpointSettings{
-            IPAMConfig: &network.EndpointIPAMConfig{IPv4Address: ipAddr},
-            Aliases:    aliasSlice(hostName),
-        }
-    }
+	var endpointSettings network.EndpointSettings
+	if ipAddr == "" {
+		endpointSettings = network.EndpointSettings{}
+	} else {
+		endpointSettings = network.EndpointSettings{
+			IPAMConfig: &network.EndpointIPAMConfig{
+				IPv4Address: ipAddr,
+			},
+		}
+	}
 
-    cc, err := c.client.ContainerCreate(
+	cc, err := c.client.ContainerCreate(
 		ctx,
 		&container.Config{
 			Image: imageRef,
@@ -113,14 +111,14 @@ func (c *Lifecycle) CreateContainer(
 			DNS:             []string{},
 			Mounts:          mounts,
 		},
-        &network.NetworkingConfig{
-            EndpointsConfig: map[string]*network.EndpointSettings{
-                networkID: &endpointSettings,
-            },
-        },
-        nil,
-        c.containerName,
-    )
+		&network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				networkID: &endpointSettings,
+			},
+		},
+		nil,
+		c.containerName,
+	)
 	if err != nil {
 		listeners.CloseAll()
 		c.preStartListeners = port.Listeners{}
@@ -128,14 +126,6 @@ func (c *Lifecycle) CreateContainer(
 	}
 	c.id = cc.ID
 	return nil
-}
-
-// aliasSlice returns a single-element slice if s is non-empty, otherwise nil.
-func aliasSlice(s string) []string {
-    if strings.TrimSpace(s) == "" {
-        return nil
-    }
-    return []string{s}
 }
 
 func (c *Lifecycle) StartContainer(ctx context.Context) error {

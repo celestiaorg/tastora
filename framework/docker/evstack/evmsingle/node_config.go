@@ -6,7 +6,7 @@ import (
 
 // NodeConfig defines per-node options for ev-node-evm-single
 type NodeConfig struct {
-    Image container.Image
+	Image container.Image
 
 	// Correspond to ev-node-evm-single env vars
 	EVMEngineURL        string
@@ -18,16 +18,16 @@ type NodeConfig struct {
 	DAAddress           string
 	DAAuthToken         string
 	DANamespace         string
-    // AdditionalStartArgs are appended to the entrypoint's default flags
-    AdditionalStartArgs []string
-    // AdditionalInitArgs are appended to the init command for flexibility.
-    AdditionalInitArgs []string
+	// AdditionalStartArgs are appended to the entrypoint's default flags
+	AdditionalStartArgs []string
+	// AdditionalInitArgs are appended to the init command for flexibility.
+	AdditionalInitArgs []string
 
-    // Instrumentation (OpenTelemetry tracing) flags for ev-node
-    InstrumentationTracingEnabled    bool
-    InstrumentationTracingEndpoint   string
-    InstrumentationTracingSampleRate string
-    InstrumentationTracingServiceName string
+	// Instrumentation (OpenTelemetry tracing) flags for ev-node
+	InstrumentationTracingEnabled     bool
+	InstrumentationTracingEndpoint    string
+	InstrumentationTracingSampleRate  string
+	InstrumentationTracingServiceName string
 }
 
 // NodeConfigBuilder provides a fluent builder for NodeConfig
@@ -81,24 +81,24 @@ func (b *NodeConfigBuilder) WithDANamespace(namespace string) *NodeConfigBuilder
 }
 
 func (b *NodeConfigBuilder) WithAdditionalStartArgs(args ...string) *NodeConfigBuilder {
-    b.cfg.AdditionalStartArgs = args
-    return b
+	b.cfg.AdditionalStartArgs = args
+	return b
 }
 
 // WithAdditionalInitArgs appends extra flags to the `init` command.
 func (b *NodeConfigBuilder) WithAdditionalInitArgs(args ...string) *NodeConfigBuilder {
-    b.cfg.AdditionalInitArgs = args
-    return b
+	b.cfg.AdditionalInitArgs = args
+	return b
 }
 
 // WithInstrumentationTracing enables OpenTelemetry tracing for ev-node with the provided endpoint, service name and sample rate.
-// endpoint example: "collector-host:4317" (for gRPC).
+// endpoint example: "jaeger-host:4318" (for http).
 func (b *NodeConfigBuilder) WithInstrumentationTracing(endpoint, serviceName, sampleRate string) *NodeConfigBuilder {
-    b.cfg.InstrumentationTracingEnabled = true
-    b.cfg.InstrumentationTracingEndpoint = endpoint
-    b.cfg.InstrumentationTracingServiceName = serviceName
-    b.cfg.InstrumentationTracingSampleRate = sampleRate
-    return b
+	b.cfg.InstrumentationTracingEnabled = true
+	b.cfg.InstrumentationTracingEndpoint = endpoint
+	b.cfg.InstrumentationTracingServiceName = serviceName
+	b.cfg.InstrumentationTracingSampleRate = sampleRate
+	return b
 }
 
 func (b *NodeConfigBuilder) Build() NodeConfig { return *b.cfg }
