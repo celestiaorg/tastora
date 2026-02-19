@@ -21,7 +21,9 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 	}
 	t.Parallel()
 
-	const serviceName = "test-service-name"
+	const evNodeServiceName = "ev-node"
+	// ev-reth hard codes this, we cannot change it.
+	// const rethServiceName = "ev-reth"
 
 	testCfg := setupDockerTest(t)
 
@@ -46,8 +48,16 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 		_ = j.Remove(testCfg.Ctx)
 	})
 
-	// Start reth using the pre-configured builder
-	rnode, err := testCfg.RethBuilder.Build(testCfg.Ctx)
+	// Start reth using generic OTEL envs, NOTE: won't have any impact until there is a tagged release built with support.
+	rnode, err := testCfg.RethBuilder.
+		WithEnv(
+			// Use OTLP/HTTP with explicit traces path per Rust exporter expectations
+			"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="+j.IngestHTTPEndpoint()+"/v1/traces",
+			"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf",
+			"RUST_LOG=info",
+		).
+		Build(testCfg.Ctx)
+
 	require.NoError(t, err)
 	require.NoError(t, rnode.Start(testCfg.Ctx))
 	t.Cleanup(func() {
@@ -90,30 +100,44 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 		WithEVMSignerPassphrase("secret").
 		WithDAAddress(daAddress).
 		// Send spans directly to Jaeger OTLP/HTTP
-		WithInstrumentationTracing(j.IngestHTTPEndpoint(), serviceName, "1").
+		WithInstrumentationTracing(j.IngestHTTPEndpoint(), evNodeServiceName, "1").
 		Build()
 
-	newEVM, err := evmsingle.NewChainBuilderWithTestName(t, testCfg.TestName).
+	evm, err := evmsingle.NewChainBuilderWithTestName(t, testCfg.TestName).
 		WithDockerClient(testCfg.DockerClient).
 		WithDockerNetworkID(testCfg.NetworkID).
-		// Inject OpenTelemetry SDK env vars to ensure ev-node exports traces
-		//WithEnv(otel.EnvForService("ev-node-smoke", collector, "grpc")...).
 		WithNodes(evNodeCfg).
 		Build(testCfg.Ctx)
 	require.NoError(t, err)
-	require.NoError(t, newEVM.Start(testCfg.Ctx))
+	require.NoError(t, evm.Start(testCfg.Ctx))
 	t.Cleanup(func() {
-		_ = newEVM.Remove(testCfg.Ctx)
+		_ = evm.Remove(testCfg.Ctx)
 	})
 
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(1*time.Minute))
 	defer cancel()
 
-	hasService, err := j.HasService(ctx, serviceName, time.Second*5)
+	hasService, err := j.HasService(ctx, evNodeServiceName, time.Second*5)
 	require.NoError(t, err)
 	require.True(t, hasService)
 
-	traces, err := j.Traces(ctx, serviceName, 10)
+	traces, err := j.Traces(ctx, evNodeServiceName, 10)
 	require.NoError(t, err)
-	require.Greater(t, len(traces), 0, "jaeger should contain traces for "+serviceName)
+	require.Greater(t, len(traces), 0, "jaeger should contain traces for "+evNodeServiceName)
+
+	/*
+		// TODO: ev-reth does not yet have a tag with OTLP enabled.
+		// Verify reth traces also arrive
+		hasReth, err := j.HasService(ctx, rethServiceName, time.Second*5)
+		require.NoError(t, err)
+		// Log services again before asserting to aid debugging
+		if svcs, err := j.Services(ctx); err == nil {
+			t.Logf("Jaeger services before reth assert: %v", svcs)
+		}
+		require.True(t, hasReth)
+		rethTraces, err := j.Traces(ctx, rethServiceName, 10)
+		require.NoError(t, err)
+		require.Greater(t, len(rethTraces), 0, "jaeger should contain traces for "+rethServiceName)
+	*/
+
 }

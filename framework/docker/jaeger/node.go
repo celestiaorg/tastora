@@ -39,11 +39,12 @@ type Config struct {
 type Node struct {
 	*container.Node
 
-	cfg      Config
-	logger   *zap.Logger
-	started  bool
-	mu       sync.Mutex
-	external types.Ports // RPC->4317, HTTP->4318, Metrics->16686 (we'll use Metrics field to store query port)
+	cfg           Config
+	logger        *zap.Logger
+	started       bool
+	mu            sync.Mutex
+	external      types.Ports // RPC->4317, HTTP->4318
+	queryHostPort string      // host-mapped port for Jaeger query/UI (16686)
 }
 
 // New creates a new Jaeger node (not started)
@@ -91,7 +92,8 @@ func (n *Node) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	n.external = types.Ports{RPC: internal.MustExtractPort(hostPorts[0]), HTTP: internal.MustExtractPort(hostPorts[1]), Metrics: internal.MustExtractPort(hostPorts[2])}
+	n.external = types.Ports{RPC: internal.MustExtractPort(hostPorts[0]), HTTP: internal.MustExtractPort(hostPorts[1])}
+	n.queryHostPort = internal.MustExtractPort(hostPorts[2])
 	n.started = true
 	return nil
 }
@@ -103,9 +105,9 @@ func (n *Node) createContainer(ctx context.Context) error {
 		nat.Port(p.OTLPHTTP + "/tcp"): {},
 		nat.Port(p.Query + "/tcp"):    {},
 	}
-	// all-in-one entrypoint default is fine; no args required for OTLP ingest
-	// Do not override entrypoint; use image defaults by passing nil
-	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, ports, "", n.Bind(), nil, n.HostName(), nil, nil, nil)
+	// Enable OTLP receivers, keep default entrypoint/cmd
+	env := []string{"COLLECTOR_OTLP_ENABLED=true"}
+	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, ports, "", n.Bind(), nil, n.HostName(), nil, env, nil)
 }
 
 // IngestGRPCEndpoint returns the in-network OTLP/gRPC endpoint (host:port)
@@ -119,7 +121,9 @@ func (n *Node) IngestHTTPEndpoint() string {
 }
 
 // QueryHostURL returns the host-mapped Jaeger query base URL (http://127.0.0.1:PORT)
-func (n *Node) QueryHostURL() string { return fmt.Sprintf("http://127.0.0.1:%s", n.external.Metrics) }
+func (n *Node) QueryHostURL() string {
+	return fmt.Sprintf("http://127.0.0.1:%s", n.queryHostPort)
+}
 
 // Services queries Jaeger's /api/services and returns the list of service names.
 func (n *Node) Services(ctx context.Context) ([]string, error) {
