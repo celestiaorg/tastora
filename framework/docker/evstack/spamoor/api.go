@@ -52,7 +52,7 @@ func (api *API) CreateSpammer(name, scenario string, config any, start bool) (in
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return 0, fmt.Errorf("create spammer failed: %s", string(body))
@@ -73,7 +73,7 @@ func (api *API) DeleteSpammer(id int) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("delete spammer failed: %s", string(body))
@@ -89,7 +89,7 @@ func (api *API) StartSpammer(id int) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("start spammer failed: %s", string(body))
@@ -104,7 +104,7 @@ func (api *API) GetMetricsRaw() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("metrics request failed: %s", string(body))
@@ -131,7 +131,7 @@ func (api *API) GetSpammer(id int) (*Spammer, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("get spammer failed: %s", string(body))
@@ -152,7 +152,7 @@ func (api *API) PauseSpammer(id int) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("pause spammer failed: %s", string(body))
@@ -167,7 +167,7 @@ func (api *API) ListSpammers() ([]Spammer, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("list spammers failed: %s", string(body))
@@ -197,7 +197,7 @@ func (api *API) GetClients() ([]Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("get clients failed: %s", string(body))
@@ -222,7 +222,7 @@ func (api *API) UpdateClientGroups(index int, groups []string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("update client groups failed: %s", string(body))
@@ -243,7 +243,7 @@ func (api *API) UpdateClientName(index int, name string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("update client name failed: %s", string(body))
@@ -258,7 +258,7 @@ func (api *API) Export() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("export failed: %s", string(body))
@@ -280,7 +280,7 @@ func (api *API) Import(body string, contentType string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("import failed: %s", string(b))
@@ -310,7 +310,7 @@ func (api *API) GetMetrics() (map[string]*dto.MetricFamily, error) {
 	if err != nil {
 		return nil, err
 	}
-	dec := expfmt.NewDecoder(strings.NewReader(raw), expfmt.FmtText)
+	dec := expfmt.NewDecoder(strings.NewReader(raw), expfmt.NewFormat(expfmt.TypeTextPlain))
 	out := make(map[string]*dto.MetricFamily)
 	for {
 		mf := &dto.MetricFamily{}
