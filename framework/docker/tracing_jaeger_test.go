@@ -48,7 +48,7 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 		_ = j.Remove(testCfg.Ctx)
 	})
 
-	// Start reth using generic OTEL envs, NOTE: won't have any impact until there is a tagged release built with support.
+	// Start reth using generic OTEL envs.
 	rnode, err := testCfg.RethBuilder.
 		WithEnv(
 			// Use OTLP/HTTP with explicit traces path per Rust exporter expectations
