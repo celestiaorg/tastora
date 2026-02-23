@@ -23,7 +23,7 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 
 	const evNodeServiceName = "ev-node"
 	// ev-reth hard codes this, we cannot change it.
-	// const rethServiceName = "ev-reth"
+	const rethServiceName = "ev-reth"
 
 	testCfg := setupDockerTest(t)
 
@@ -53,8 +53,9 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 		WithEnv(
 			// Use OTLP/HTTP with explicit traces path per Rust exporter expectations
 			"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="+j.IngestHTTPEndpoint()+"/v1/traces",
-			"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf",
+			"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http",
 			"RUST_LOG=info",
+			"OTEL_SDK_DISABLED=false",
 		).
 		Build(testCfg.Ctx)
 
@@ -125,19 +126,15 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, len(traces), 0, "jaeger should contain traces for "+evNodeServiceName)
 
-	/*
-		// TODO: ev-reth does not yet have a tag with OTLP enabled.
-		// Verify reth traces also arrive
-		hasReth, err := j.HasService(ctx, rethServiceName, time.Second*5)
-		require.NoError(t, err)
-		// Log services again before asserting to aid debugging
-		if svcs, err := j.Services(ctx); err == nil {
-			t.Logf("Jaeger services before reth assert: %v", svcs)
-		}
-		require.True(t, hasReth)
-		rethTraces, err := j.Traces(ctx, rethServiceName, 10)
-		require.NoError(t, err)
-		require.Greater(t, len(rethTraces), 0, "jaeger should contain traces for "+rethServiceName)
-	*/
-
+	// Verify reth traces also arrive
+	hasReth, err := j.HasService(ctx, rethServiceName, time.Second*5)
+	require.NoError(t, err)
+	// Log services again before asserting to aid debugging
+	if svcs, err := j.Services(ctx); err == nil {
+		t.Logf("Jaeger services before reth assert: %v", svcs)
+	}
+	require.True(t, hasReth)
+	rethTraces, err := j.Traces(ctx, rethServiceName, 10)
+	require.NoError(t, err)
+	require.Greater(t, len(rethTraces), 0, "jaeger should contain traces for "+rethServiceName)
 }

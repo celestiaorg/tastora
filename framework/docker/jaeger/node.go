@@ -133,7 +133,7 @@ func (n *Node) Services(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+    defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("jaeger services http %d", resp.StatusCode)
 	}
@@ -178,7 +178,7 @@ func (n *Node) Traces(ctx context.Context, service string, limit int) ([]any, er
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+    defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("jaeger traces http %d", resp.StatusCode)
 	}
