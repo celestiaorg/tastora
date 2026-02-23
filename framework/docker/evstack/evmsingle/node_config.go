@@ -22,6 +22,12 @@ type NodeConfig struct {
 	AdditionalStartArgs []string
 	// AdditionalInitArgs are appended to the init command for flexibility.
 	AdditionalInitArgs []string
+
+	// Instrumentation (OpenTelemetry tracing) flags for ev-node
+	InstrumentationTracingEnabled     bool
+	InstrumentationTracingEndpoint    string
+	InstrumentationTracingSampleRate  string
+	InstrumentationTracingServiceName string
 }
 
 // NodeConfigBuilder provides a fluent builder for NodeConfig
@@ -82,6 +88,16 @@ func (b *NodeConfigBuilder) WithAdditionalStartArgs(args ...string) *NodeConfigB
 // WithAdditionalInitArgs appends extra flags to the `init` command.
 func (b *NodeConfigBuilder) WithAdditionalInitArgs(args ...string) *NodeConfigBuilder {
 	b.cfg.AdditionalInitArgs = args
+	return b
+}
+
+// WithInstrumentationTracing enables OpenTelemetry tracing for ev-node with the provided endpoint, service name and sample rate.
+// endpoint example: "jaeger-host:4318" (for http).
+func (b *NodeConfigBuilder) WithInstrumentationTracing(endpoint, serviceName, sampleRate string) *NodeConfigBuilder {
+	b.cfg.InstrumentationTracingEnabled = true
+	b.cfg.InstrumentationTracingEndpoint = endpoint
+	b.cfg.InstrumentationTracingServiceName = serviceName
+	b.cfg.InstrumentationTracingSampleRate = sampleRate
 	return b
 }
 

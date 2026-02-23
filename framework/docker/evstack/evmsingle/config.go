@@ -23,12 +23,13 @@ type Config struct {
 	AdditionalInitArgs []string
 }
 
-// DefaultImage returns the default container image for ev-node-evm-single.
+// DefaultImage returns the default container image for ev-node-evm.
 func DefaultImage() container.Image {
-	return container.Image{Repository: "ghcr.io/evstack/ev-node-evm-single", Version: "main"}
+    // Default ev-node tag pinned for reproducibility
+    return container.Image{Repository: "ghcr.io/evstack/ev-node-evm", Version: "v1.0.0-rc.4"}
 }
 
-// DefaultBinary returns the default binary name for ev-node-evm-single.
+// DefaultBinary returns the default binary name for ev-node-evm.
 func DefaultBinary() string {
-	return "evm-single"
+    return "evm"
 }
