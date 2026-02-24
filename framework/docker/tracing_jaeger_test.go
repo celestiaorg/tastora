@@ -52,7 +52,7 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 	rnode, err := testCfg.RethBuilder.
 		WithEnv(
 			// Use OTLP/HTTP with explicit traces path per Rust exporter expectations
-			"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="+j.IngestHTTPEndpoint()+"/v1/traces",
+			"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="+j.Internal.IngestHTTPEndpoint()+"/v1/traces",
 			"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http",
 			"RUST_LOG=info",
 			"OTEL_SDK_DISABLED=false",
@@ -101,7 +101,7 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 		WithEVMSignerPassphrase("secret").
 		WithDAAddress(daAddress).
 		// Send spans directly to Jaeger OTLP/HTTP
-		WithInstrumentationTracing(j.IngestHTTPEndpoint(), evNodeServiceName, "1").
+		WithInstrumentationTracing(j.Internal.IngestHTTPEndpoint(), evNodeServiceName, "1").
 		Build()
 
 	evm, err := evmsingle.NewChainBuilderWithTestName(t, testCfg.TestName).
@@ -118,23 +118,23 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(1*time.Minute))
 	defer cancel()
 
-	hasService, err := j.HasService(ctx, evNodeServiceName, time.Second*5)
+	hasService, err := j.External.HasService(ctx, evNodeServiceName, time.Second*5)
 	require.NoError(t, err)
 	require.True(t, hasService)
 
-	traces, err := j.Traces(ctx, evNodeServiceName, 10)
+	traces, err := j.External.Traces(ctx, evNodeServiceName, 10)
 	require.NoError(t, err)
 	require.Greater(t, len(traces), 0, "jaeger should contain traces for "+evNodeServiceName)
 
 	// Verify reth traces also arrive
-	hasReth, err := j.HasService(ctx, rethServiceName, time.Second*5)
+	hasReth, err := j.External.HasService(ctx, rethServiceName, time.Second*5)
 	require.NoError(t, err)
 	// Log services again before asserting to aid debugging
-	if svcs, err := j.Services(ctx); err == nil {
+	if svcs, err := j.External.Services(ctx); err == nil {
 		t.Logf("Jaeger services before reth assert: %v", svcs)
 	}
 	require.True(t, hasReth)
-	rethTraces, err := j.Traces(ctx, rethServiceName, 10)
+	rethTraces, err := j.External.Traces(ctx, rethServiceName, 10)
 	require.NoError(t, err)
 	require.Greater(t, len(rethTraces), 0, "jaeger should contain traces for "+rethServiceName)
 }

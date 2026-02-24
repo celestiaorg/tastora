@@ -19,14 +19,12 @@ type nodeType int
 
 func (nodeType) String() string { return "jaeger" }
 
-// Ports used by Jaeger all-in-one
-type Ports struct {
-	OTLPGRPC string // 4317
-	OTLPHTTP string // 4318
-	Query    string // 16686
-}
-
-func defaultPorts() Ports { return Ports{OTLPGRPC: "4317", OTLPHTTP: "4318", Query: "16686"} }
+// Default ports for Jaeger all-in-one (without /tcp suffix)
+const (
+	defaultOTLPGRPCPort = "4317"
+	defaultOTLPHTTPPort = "4318"
+	defaultQueryPort    = "16686"
+)
 
 type Config struct {
 	Logger          *zap.Logger
@@ -39,12 +37,16 @@ type Config struct {
 type Node struct {
 	*container.Node
 
-	cfg           Config
-	logger        *zap.Logger
-	started       bool
-	mu            sync.Mutex
-	external      types.Ports // RPC->4317, HTTP->4318
-	queryHostPort string      // host-mapped port for Jaeger query/UI (16686)
+	cfg     Config
+	logger  *zap.Logger
+	started bool
+	mu      sync.Mutex
+
+	internalPorts types.Ports
+	externalPorts types.Ports
+
+	Internal queryScope
+	External queryScope
 }
 
 // New creates a new Jaeger node (not started)
@@ -61,6 +63,8 @@ func New(ctx context.Context, cfg Config, testName string, index int) (*Node, er
 	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
 		return nil, err
 	}
+	n.Internal = queryScope{n: n, hostname: func() string { return n.Name() }, ports: &n.internalPorts}
+	n.External = queryScope{n: n, hostname: func() string { return "0.0.0.0" }, ports: &n.externalPorts}
 	return n, nil
 }
 
@@ -87,53 +91,110 @@ func (n *Node) Start(ctx context.Context) error {
 	if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
 		return err
 	}
-	p := defaultPorts()
-	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, p.OTLPGRPC+"/tcp", p.OTLPHTTP+"/tcp", p.Query+"/tcp")
+	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, n.internalPorts.GRPC+"/tcp", n.internalPorts.HTTP+"/tcp", n.internalPorts.API+"/tcp")
 	if err != nil {
 		return err
 	}
-	n.external = types.Ports{RPC: internal.MustExtractPort(hostPorts[0]), HTTP: internal.MustExtractPort(hostPorts[1])}
-	n.queryHostPort = internal.MustExtractPort(hostPorts[2])
+	n.externalPorts = types.Ports{
+		GRPC: internal.MustExtractPort(hostPorts[0]),
+		HTTP: internal.MustExtractPort(hostPorts[1]),
+		API:  internal.MustExtractPort(hostPorts[2]),
+	}
 	n.started = true
 	return nil
 }
 
 func (n *Node) createContainer(ctx context.Context) error {
-	p := defaultPorts()
+	// Initialize internal ports with defaults if not set
+	if n.internalPorts.GRPC == "" {
+		n.internalPorts.GRPC = defaultOTLPGRPCPort
+	}
+	if n.internalPorts.HTTP == "" {
+		n.internalPorts.HTTP = defaultOTLPHTTPPort
+	}
+	if n.internalPorts.API == "" {
+		n.internalPorts.API = defaultQueryPort
+	}
+
 	ports := nat.PortMap{
-		nat.Port(p.OTLPGRPC + "/tcp"): {},
-		nat.Port(p.OTLPHTTP + "/tcp"): {},
-		nat.Port(p.Query + "/tcp"):    {},
+		nat.Port(n.internalPorts.GRPC + "/tcp"): {},
+		nat.Port(n.internalPorts.HTTP + "/tcp"): {},
+		nat.Port(n.internalPorts.API + "/tcp"):  {},
 	}
 	// Enable OTLP receivers, keep default entrypoint/cmd
 	env := []string{"COLLECTOR_OTLP_ENABLED=true"}
 	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, ports, "", n.Bind(), nil, n.HostName(), nil, env, nil)
 }
 
-// IngestGRPCEndpoint returns the in-network OTLP/gRPC endpoint (host:port)
-func (n *Node) IngestGRPCEndpoint() string {
-	return fmt.Sprintf("%s:%s", n.Name(), defaultPorts().OTLPGRPC)
+// GetNetworkInfo returns internal/external network information in the common format
+func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	internalIP, err := internal.GetContainerInternalIP(ctx, n.DockerClient, n.ContainerLifecycle.ContainerID())
+	if err != nil {
+		return types.NetworkInfo{}, err
+	}
+	return types.NetworkInfo{
+		Internal: types.Network{
+			Hostname: n.HostName(),
+			IP:       internalIP,
+			Ports:    n.internalPorts,
+		},
+		External: types.Network{
+			Hostname: "0.0.0.0",
+			Ports:    n.externalPorts,
+		},
+	}, nil
 }
 
-// IngestHTTPEndpoint returns the in-network OTLP/HTTP endpoint (http://host:port)
-func (n *Node) IngestHTTPEndpoint() string {
-	return fmt.Sprintf("http://%s:%s", n.Name(), defaultPorts().OTLPHTTP)
+// queryScope provides scoped (internal/external) access to Jaeger endpoints.
+// It holds a pointer to the parent Node's ports so values are always current.
+type queryScope struct {
+	n        *Node
+	hostname func() string
+	ports    *types.Ports
 }
 
-// QueryHostURL returns the host-mapped Jaeger query base URL (http://127.0.0.1:PORT)
-func (n *Node) QueryHostURL() string {
-	return fmt.Sprintf("http://127.0.0.1:%s", n.queryHostPort)
+func (s queryScope) QueryURL() string {
+	return fmt.Sprintf("http://%s:%s", s.hostname(), s.ports.API)
 }
 
-// Services queries Jaeger's /api/services and returns the list of service names.
-func (n *Node) Services(ctx context.Context) ([]string, error) {
-	u := n.QueryHostURL() + "/api/services"
+func (s queryScope) IngestGRPCEndpoint() string {
+	return fmt.Sprintf("%s:%s", s.hostname(), s.ports.GRPC)
+}
+
+func (s queryScope) IngestHTTPEndpoint() string {
+	return fmt.Sprintf("http://%s:%s", s.hostname(), s.ports.HTTP)
+}
+
+// HasService polls /api/services until the given service appears or context is done.
+func (s queryScope) HasService(ctx context.Context, service string, interval time.Duration) (bool, error) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-t.C:
+			svcs, err := s.Services(ctx)
+			if err == nil {
+				for _, s := range svcs {
+					if s == service {
+						return true, nil
+					}
+				}
+			}
+		}
+	}
+}
+
+// Services queries Jaeger's /api/services for the scope.
+func (s queryScope) Services(ctx context.Context) ([]string, error) {
+	u := s.QueryURL() + "/api/services"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-    defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("jaeger services http %d", resp.StatusCode)
 	}
@@ -146,39 +207,18 @@ func (n *Node) Services(ctx context.Context) ([]string, error) {
 	return out.Data, nil
 }
 
-// HasService polls /api/services until the given service appears or context is done.
-func (n *Node) HasService(ctx context.Context, service string, interval time.Duration) (bool, error) {
-	t := time.NewTicker(interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return false, ctx.Err()
-		case <-t.C:
-			svcs, err := n.Services(ctx)
-			if err == nil {
-				for _, s := range svcs {
-					if s == service {
-						return true, nil
-					}
-				}
-			}
-		}
-	}
-}
-
-// Traces queries Jaeger for traces for a given service, returning the raw data array.
-func (n *Node) Traces(ctx context.Context, service string, limit int) ([]any, error) {
+// Traces queries Jaeger for traces for the scope.
+func (s queryScope) Traces(ctx context.Context, service string, limit int) ([]any, error) {
 	if limit <= 0 {
 		limit = 5
 	}
-	u := fmt.Sprintf("%s/api/traces?service=%s&limit=%d", n.QueryHostURL(), service, limit)
+	u := fmt.Sprintf("%s/api/traces?service=%s&limit=%d", s.QueryURL(), service, limit)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-    defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("jaeger traces http %d", resp.StatusCode)
 	}
@@ -191,8 +231,8 @@ func (n *Node) Traces(ctx context.Context, service string, limit int) ([]any, er
 	return out.Data, nil
 }
 
-// WaitForTraces polls Jaeger for traces for the service until at least one trace is present or context is done.
-func (n *Node) WaitForTraces(ctx context.Context, service string, min int, interval time.Duration) (bool, error) {
+// WaitForTraces polls Jaeger for traces for the scope until at least min traces are present.
+func (s queryScope) WaitForTraces(ctx context.Context, service string, min int, interval time.Duration) (bool, error) {
 	if min <= 0 {
 		min = 1
 	}
@@ -203,7 +243,7 @@ func (n *Node) WaitForTraces(ctx context.Context, service string, min int, inter
 		case <-ctx.Done():
 			return false, ctx.Err()
 		case <-t.C:
-			data, err := n.Traces(ctx, service, min)
+			data, err := s.Traces(ctx, service, min)
 			if err == nil && len(data) >= min {
 				return true, nil
 			}
