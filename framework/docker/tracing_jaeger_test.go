@@ -9,12 +9,14 @@ import (
 	evmsingle "github.com/celestiaorg/tastora/framework/docker/evstack/evmsingle"
 	"github.com/celestiaorg/tastora/framework/docker/evstack/spamoor"
 	"github.com/celestiaorg/tastora/framework/docker/jaeger"
+	"github.com/celestiaorg/tastora/framework/docker/otelcol"
 	"github.com/celestiaorg/tastora/framework/testutil/deploy"
 	"github.com/stretchr/testify/require"
 )
 
-// TestTracingWithJaegerBackend starts a minimal stack (reth+evmsingle), wires up telemetry
-// and collects with Jaeger.
+// TestTracingWithJaegerBackend starts a minimal stack (reth+evmsingle), routes
+// telemetry through an OpenTelemetry Collector that forwards to Jaeger, and
+// verifies traces arrive in both the collector's file export and in Jaeger.
 func TestTracingWithJaegerBackend(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping due to short mode")
@@ -35,7 +37,7 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 		_ = celestia.Remove(testCfg.Ctx)
 	})
 
-	// Start Jaeger all-in-one as the tracing backend
+	// Start Jaeger all-in-one as the final tracing backend
 	j, err := jaeger.New(testCfg.Ctx, jaeger.Config{
 		Logger:          testCfg.Logger,
 		DockerClient:    testCfg.DockerClient,
@@ -43,16 +45,27 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 	}, testCfg.TestName, 0)
 	require.NoError(t, err)
 	require.NoError(t, j.Start(testCfg.Ctx))
-
 	t.Cleanup(func() {
 		_ = j.Remove(testCfg.Ctx)
 	})
 
-	// Start reth using generic OTEL envs.
+	// Start the OTel Collector, forwarding traces to Jaeger
+	col, err := otelcol.New(testCfg.Ctx, otelcol.Config{
+		Logger:          testCfg.Logger,
+		DockerClient:    testCfg.DockerClient,
+		DockerNetworkID: testCfg.NetworkID,
+		ExportEndpoint:  j.Internal.IngestGRPCEndpoint(),
+	}, testCfg.TestName, 0)
+	require.NoError(t, err)
+	require.NoError(t, col.Start(testCfg.Ctx))
+	t.Cleanup(func() {
+		_ = col.Remove(testCfg.Ctx)
+	})
+
+	// Start reth, pointing OTLP at the collector
 	rnode, err := testCfg.RethBuilder.
 		WithEnv(
-			// Use OTLP/HTTP with explicit traces path per Rust exporter expectations
-			"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="+j.Internal.IngestHTTPEndpoint()+"/v1/traces",
+			"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="+col.Internal.OTLPHTTPEndpoint()+"/v1/traces",
 			"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http",
 			"RUST_LOG=info",
 			"OTEL_SDK_DISABLED=false",
@@ -87,8 +100,7 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 		_ = spamNode.Remove(testCfg.Ctx)
 	})
 
-	// Build evm chain with instrumentation flags (first and only evm)
-	// Wire DA address like WithDefaults does
+	// Build evm chain with instrumentation flags pointing at the collector
 	bni, err := danet.GetBridgeNodes()[0].GetNetworkInfo(testCfg.Ctx)
 	require.NoError(t, err)
 	daAddress := fmt.Sprintf("http://%s:%s", bni.Internal.IP, bni.Internal.Ports.RPC)
@@ -100,8 +112,7 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 		WithEVMBlockTime("1s").
 		WithEVMSignerPassphrase("secret").
 		WithDAAddress(daAddress).
-		// Send spans directly to Jaeger OTLP/HTTP
-		WithInstrumentationTracing(j.Internal.IngestHTTPEndpoint(), evNodeServiceName, "1").
+		WithInstrumentationTracing(col.Internal.OTLPHTTPEndpoint(), evNodeServiceName, "1").
 		Build()
 
 	evm, err := evmsingle.NewChainBuilderWithTestName(t, testCfg.TestName).
@@ -118,6 +129,7 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(1*time.Minute))
 	defer cancel()
 
+	// Verify traces forwarded from the collector arrive in Jaeger
 	hasService, err := j.External.HasService(ctx, evNodeServiceName, time.Second*5)
 	require.NoError(t, err)
 	require.True(t, hasService)
@@ -126,10 +138,9 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, len(traces), 0, "jaeger should contain traces for "+evNodeServiceName)
 
-	// Verify reth traces also arrive
+	// Verify reth traces also arrive via the collector
 	hasReth, err := j.External.HasService(ctx, rethServiceName, time.Second*5)
 	require.NoError(t, err)
-	// Log services again before asserting to aid debugging
 	if svcs, err := j.External.Services(ctx); err == nil {
 		t.Logf("Jaeger services before reth assert: %v", svcs)
 	}
@@ -137,4 +148,9 @@ func TestTracingWithJaegerBackend(t *testing.T) {
 	rethTraces, err := j.External.Traces(ctx, rethServiceName, 10)
 	require.NoError(t, err)
 	require.Greater(t, len(rethTraces), 0, "jaeger should contain traces for "+rethServiceName)
+
+	// Verify the collector's file exporter also captured traces
+	traceData, err := col.ReadTraces(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, traceData, "collector file export should contain trace data")
 }
