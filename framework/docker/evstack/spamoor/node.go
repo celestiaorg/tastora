@@ -31,8 +31,9 @@ type Config struct {
     Logger          *zap.Logger
     Image           container.Image
 
-    RPCHosts   []string
-    PrivateKey string
+    RPCHosts            []string
+    PrivateKey          string
+    AdditionalStartArgs []string
 }
 
 type Node struct {
@@ -123,6 +124,7 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
             cmd = append(cmd, "--rpchost", s)
         }
     }
+    cmd = append(cmd, n.cfg.AdditionalStartArgs...)
 
     port := nat.Port(p.Web + "/tcp")
     ports := nat.PortMap{
