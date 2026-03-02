@@ -33,8 +33,9 @@ type Config struct {
 	Logger          *zap.Logger
 	Image           container.Image
 
-	RPCHosts   []string
-	PrivateKey string
+	RPCHosts            []string
+	PrivateKey          string
+	AdditionalStartArgs []string
 }
 
 type Node struct {
@@ -120,7 +121,6 @@ func (n *Node) API() *API {
 func (n *Node) createNodeContainer(ctx context.Context) error {
 	p := defaultInternalPorts()
 
-	// Daemon flags only; entrypoint will be spamoor-daemon
 	dbPath := fmt.Sprintf("%s/%s", n.HomeDir(), "spamoor.db")
 	binds := n.Bind()
 	cmd := []string{
@@ -133,6 +133,7 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 			cmd = append(cmd, "--rpchost", s)
 		}
 	}
+	cmd = append(cmd, n.cfg.AdditionalStartArgs...)
 
 	port := network.MustParsePort(p.Web + "/tcp")
 	ports := network.PortMap{
