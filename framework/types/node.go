@@ -46,7 +46,6 @@ const (
 	DAUnspecified DANodeType = iota // Unspecified DA node type
 	BridgeNode                      // Bridge node in DA network
 	LightNode                       // Light node in DA network
-	FullNode                        // Full node in DA network
 )
 
 // String returns the string representation of the DANodeType
@@ -61,7 +60,6 @@ var daNodeTypeStrings = [...]string{
 	"unspec", // DAUnspecified
 	"bridge", // BridgeNode
 	"light",  // LightNode
-	"full",   // FullNode
 }
 
 // Interface Compliance Checks

@@ -112,10 +112,6 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 		WithNodeType(types.BridgeNode).
 		Build()
 
-	fullNodeConfig := da.NewNodeBuilder().
-		WithNodeType(types.FullNode).
-		Build()
-
 	lightNodeConfig := da.NewNodeBuilder().
 		WithNodeType(types.LightNode).
 		Build()
@@ -124,7 +120,7 @@ func setupDockerTest(t *testing.T) *TestSetupConfig {
 		WithDockerClient(dockerClient).
 		WithDockerNetworkID(networkID).
 		WithImage(defaultDAImage).
-		WithNodes(bridgeNodeConfig, lightNodeConfig, fullNodeConfig)
+		WithNodes(bridgeNodeConfig, lightNodeConfig)
 
 	// Pre-configured Reth single-node builder with a default evolve genesis
 	rethBuilder := reth.NewNodeBuilderWithTestName(t, uniqueTestName).
