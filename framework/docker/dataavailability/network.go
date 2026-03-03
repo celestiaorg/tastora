@@ -65,11 +65,6 @@ func (n *Network) GetBridgeNodes() []*Node {
 	return n.GetNodesByType(types.BridgeNode)
 }
 
-// GetFullNodes returns only the full nodes in the network.
-func (n *Network) GetFullNodes() []*Node {
-	return n.GetNodesByType(types.FullNode)
-}
-
 // GetLightNodes returns only the light nodes in the network.
 func (n *Network) GetLightNodes() []*Node {
     return n.GetNodesByType(types.LightNode)
