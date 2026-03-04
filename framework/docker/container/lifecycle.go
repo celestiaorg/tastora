@@ -32,6 +32,13 @@ type Lifecycle struct {
 	containerName     string
 	id                string
 	preStartListeners port.Listeners
+	hostNetwork       bool
+}
+
+// SetHostNetwork configures the container to use the host's network stack
+// instead of a bridge network.
+func (c *Lifecycle) SetHostNetwork(enabled bool) {
+	c.hostNetwork = enabled
 }
 
 func NewLifecycle(log *zap.Logger, c types.TastoraDockerClient, containerName string) *Lifecycle {
@@ -73,54 +80,63 @@ func (c *Lifecycle) CreateContainer(
 		pS[k] = struct{}{}
 	}
 
-	pb, listeners, err := port.GenerateBindings(ports)
-	if err != nil {
-		return fmt.Errorf("failed to generate port bindings: %w", err)
+	containerCfg := &container.Config{
+		Image:      imageRef,
+		Entrypoint: entrypoint,
+		Cmd:        cmd,
+		Env:        env,
+		Hostname:   hostName,
+		Labels:     map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
 	}
 
-	c.preStartListeners = listeners
+	hostCfg := &container.HostConfig{
+		Binds:      volumeBinds,
+		AutoRemove: false,
+		DNS:        []string{},
+		Mounts:     mounts,
+	}
 
-	var endpointSettings network.EndpointSettings
-	if ipAddr == "" {
-		endpointSettings = network.EndpointSettings{}
+	var netCfg *network.NetworkingConfig
+
+	if c.hostNetwork {
+		hostCfg.NetworkMode = "host"
 	} else {
-		endpointSettings = network.EndpointSettings{
-			IPAMConfig: &network.EndpointIPAMConfig{
-				IPv4Address: ipAddr,
+		containerCfg.ExposedPorts = pS
+
+		pb, listeners, err := port.GenerateBindings(ports)
+		if err != nil {
+			return fmt.Errorf("failed to generate port bindings: %w", err)
+		}
+		c.preStartListeners = listeners
+
+		hostCfg.PortBindings = pb
+		hostCfg.PublishAllPorts = true
+
+		var endpointSettings network.EndpointSettings
+		if ipAddr != "" {
+			endpointSettings = network.EndpointSettings{
+				IPAMConfig: &network.EndpointIPAMConfig{
+					IPv4Address: ipAddr,
+				},
+			}
+		}
+		netCfg = &network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				networkID: &endpointSettings,
 			},
 		}
 	}
 
 	cc, err := c.client.ContainerCreate(
 		ctx,
-		&container.Config{
-			Image: imageRef,
-
-			Entrypoint:   entrypoint,
-			Cmd:          cmd,
-			Env:          env,
-			Hostname:     hostName,
-			Labels:       map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
-			ExposedPorts: pS,
-		},
-		&container.HostConfig{
-			Binds:           volumeBinds,
-			PortBindings:    pb,
-			PublishAllPorts: true,
-			AutoRemove:      false,
-			DNS:             []string{},
-			Mounts:          mounts,
-		},
-		&network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{
-				networkID: &endpointSettings,
-			},
-		},
+		containerCfg,
+		hostCfg,
+		netCfg,
 		nil,
 		c.containerName,
 	)
 	if err != nil {
-		listeners.CloseAll()
+		c.preStartListeners.CloseAll()
 		c.preStartListeners = port.Listeners{}
 		return err
 	}

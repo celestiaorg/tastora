@@ -19,6 +19,7 @@ type Builder struct {
     privKey             string
     nameSuffix          string
     additionalStartArgs []string
+    hostNetwork         bool
 }
 
 func NewNodeBuilder(testName string) *Builder {
@@ -39,6 +40,7 @@ func (b *Builder) WithAdditionalStartArgs(args ...string) *Builder {
     b.additionalStartArgs = args
     return b
 }
+func (b *Builder) WithHostNetwork() *Builder { b.hostNetwork = true; return b }
 
 func (b *Builder) Build(ctx context.Context) (*Node, error) {
     cfg := Config{
@@ -49,6 +51,7 @@ func (b *Builder) Build(ctx context.Context) (*Node, error) {
         RPCHosts:            b.rpcHosts,
         PrivateKey:          b.privKey,
         AdditionalStartArgs: b.additionalStartArgs,
+        HostNetwork:         b.hostNetwork,
     }
     return newNode(ctx, cfg, b.testName, 0, b.nameSuffix)
 }
