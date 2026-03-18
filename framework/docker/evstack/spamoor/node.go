@@ -48,10 +48,13 @@ type Node struct {
     name     string
 }
 
-func newNode(ctx context.Context, cfg Config, testName string, index int, name string) (*Node, error) {
+func newNode(ctx context.Context, cfg Config, testName string, index int, name string, homeDir string) (*Node, error) {
+    if homeDir == "" {
+        homeDir = "/home/spamoor"
+    }
     log := cfg.Logger.With(zap.String("component", "spamoor-daemon"), zap.Int("i", index))
     n := &Node{cfg: cfg, logger: log, name: name}
-    n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, cfg.Image, "/home/spamoor", index, nodeType(0), log)
+    n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, cfg.Image, homeDir, index, nodeType(0), log)
     n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
     if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
         return nil, err

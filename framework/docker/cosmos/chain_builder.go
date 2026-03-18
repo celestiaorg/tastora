@@ -158,6 +158,8 @@ type ChainBuilder struct {
 	// blockWaitTimeout is the timeout for waiting for blocks after starting the chain.
 	// If zero, defaults to 120 seconds.
 	blockWaitTimeout time.Duration
+	// homeDir overrides the default home directory inside the container
+	homeDir string
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -312,6 +314,12 @@ func (b *ChainBuilder) WithDenom(denom string) *ChainBuilder {
 // WithImage sets the default Docker image for all nodes in the chain
 func (b *ChainBuilder) WithImage(image container.Image) *ChainBuilder {
 	b.dockerImage = &image
+	return b
+}
+
+// WithHomeDir overrides the default home directory inside the container.
+func (b *ChainBuilder) WithHomeDir(homeDir string) *ChainBuilder {
+	b.homeDir = homeDir
 	return b
 }
 
@@ -494,10 +502,12 @@ func (b *ChainBuilder) newChainNode(
 }
 
 func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeConfig, index int) *ChainNode {
-	// use a default home directory if name is not set
-	homeDir := "/var/cosmos-chain"
-	if b.name != "" {
-		homeDir = path.Join("/var/cosmos-chain", b.name)
+	homeDir := b.homeDir
+	if homeDir == "" {
+		homeDir = "/var/cosmos-chain"
+		if b.name != "" {
+			homeDir = path.Join("/var/cosmos-chain", b.name)
+		}
 	}
 
 	chainParams := ChainNodeParams{

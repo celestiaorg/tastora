@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"path"
 	"path/filepath"
 	"sync"
 	"time"
@@ -54,7 +53,10 @@ type Node struct {
 	externalPorts types.Ports
 }
 
-func NewNode(cfg Config, testName string, image container.Image, index int, isAggregator bool, additionalStartArgs []string) *Node {
+func NewNode(cfg Config, testName string, image container.Image, homeDir string, index int, isAggregator bool, additionalStartArgs []string) *Node {
+	if homeDir == "" {
+		homeDir = DefaultHomeDir()
+	}
 	logger := cfg.Logger.With(
 		zap.Int("i", index),
 		zap.Bool("aggregator", isAggregator),
@@ -63,7 +65,7 @@ func NewNode(cfg Config, testName string, image container.Image, index int, isAg
 		cfg:                 cfg,
 		isAggregatorFlag:    isAggregator,
 		additionalStartArgs: additionalStartArgs,
-		Node:                container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, path.Join("/var", "evstack"), index, EvstackType, logger),
+		Node:                container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, EvstackType, logger),
 	}
 
 	node.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, node.Name()))

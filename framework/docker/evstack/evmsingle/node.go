@@ -42,10 +42,8 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCf
 
 	log := cfg.Logger.With(zap.String("component", "evm-single"), zap.Int("i", index))
 
-    homeDir := "/home/ev-node/.evm"
-
 	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports, chainName: chainName}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, NodeType, log)
+	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, cfg.HomeDir, index, NodeType, log)
 	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
 	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
 		return nil, err
