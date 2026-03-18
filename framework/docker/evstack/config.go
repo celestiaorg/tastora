@@ -32,3 +32,8 @@ type Config struct {
 func DefaultHomeDir() string {
 	return "/var/evstack"
 }
+
+// DefaultHomeDir returns the default home directory for evstack containers.
+func DefaultHomeDir() string {
+	return "/var/evstack"
+}

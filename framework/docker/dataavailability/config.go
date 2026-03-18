@@ -32,3 +32,8 @@ type Config struct {
 func DefaultHomeDir() string {
 	return "/home/celestia"
 }
+
+// DefaultHomeDir returns the default home directory for DA node containers.
+func DefaultHomeDir() string {
+	return "/home/celestia"
+}
