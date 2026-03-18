@@ -14,6 +14,7 @@ type Builder struct {
     dockerNetwork string
     logger        *zap.Logger
     image         container.Image
+    homeDir       string
 
     rpcHosts   []string
     privKey    string
@@ -30,8 +31,9 @@ func NewNodeBuilder(testName string) *Builder {
 func (b *Builder) WithDockerClient(c types.TastoraDockerClient) *Builder { b.dockerClient = c; return b }
 func (b *Builder) WithDockerNetworkID(id string) *Builder { b.dockerNetwork = id; return b }
 func (b *Builder) WithLogger(l *zap.Logger) *Builder      { b.logger = l; return b }
-func (b *Builder) WithImage(img container.Image) *Builder { b.image = img; return b }
-func (b *Builder) WithRPCHosts(hosts ...string) *Builder  { b.rpcHosts = hosts; return b }
+func (b *Builder) WithImage(img container.Image) *Builder   { b.image = img; return b }
+func (b *Builder) WithHomeDir(homeDir string) *Builder      { b.homeDir = homeDir; return b }
+func (b *Builder) WithRPCHosts(hosts ...string) *Builder    { b.rpcHosts = hosts; return b }
 func (b *Builder) WithPrivateKey(pk string) *Builder      { b.privKey = pk; return b }
 func (b *Builder) WithNameSuffix(s string) *Builder       { b.nameSuffix = s; return b }
 
@@ -44,6 +46,6 @@ func (b *Builder) Build(ctx context.Context) (*Node, error) {
         RPCHosts:        b.rpcHosts,
         PrivateKey:      b.privKey,
     }
-    return newNode(ctx, cfg, b.testName, 0, b.nameSuffix)
+    return newNode(ctx, cfg, b.testName, 0, b.nameSuffix, b.homeDir)
 }
 
