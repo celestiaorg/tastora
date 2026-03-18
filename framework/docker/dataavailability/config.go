@@ -25,3 +25,8 @@ type Config struct {
 	// AdditionalStartArgs are additional arguments passed to all nodes when starting
 	AdditionalStartArgs []string
 }
+
+// DefaultHomeDir returns the default home directory for DA node containers.
+func DefaultHomeDir() string {
+	return "/home/celestia"
+}

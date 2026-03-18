@@ -15,12 +15,19 @@ type Config struct {
 	Image container.Image
 	// Bin is the executable name (default: evm-single)
 	Bin string
+	// HomeDir is the home directory inside the container. Defaults to DefaultHomeDir().
+	HomeDir string
 	// Env are default environment variables applied to all nodes
 	Env []string
 	// AdditionalStartArgs are default start arguments applied to all nodes
 	AdditionalStartArgs []string
 	// AdditionalInitArgs are appended to the init command for all nodes
 	AdditionalInitArgs []string
+}
+
+// DefaultHomeDir returns the default home directory for ev-node-evm containers.
+func DefaultHomeDir() string {
+	return "/home/ev-node/.evm"
 }
 
 // DefaultImage returns the default container image for ev-node-evm.
