@@ -42,8 +42,7 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCf
 
 	log := cfg.Logger.With(zap.String("component", "evm-single"), zap.Int("i", index))
 
-    // ev-node-evm default home
-    homeDir := "/root/.evm"
+    homeDir := "/home/ev-node/.evm"
 
 	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports, chainName: chainName}
 	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, NodeType, log)
