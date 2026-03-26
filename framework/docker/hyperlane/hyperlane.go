@@ -229,7 +229,9 @@ func (d *Deployer) writeWarpConfig(ctx context.Context) error {
 		return fmt.Errorf("failed to marshal warp config: %w", err)
 	}
 
-	warpConfigPath := path.Join("configs", "warp-config.yaml")
+	// Write to the registry so the Hyperlane CLI can resolve it via --warp-route-id.
+	// The CLI expects deploy configs at: <registry>/deployments/warp_routes/<TOKEN>/<label>-deploy.yaml
+	warpConfigPath := path.Join("registry", "deployments", "warp_routes", "TOKEN", "tastora-deploy.yaml")
 	if err := d.WriteFile(ctx, warpConfigPath, warpConfigBytes); err != nil {
 		return fmt.Errorf("failed to write warp config: %w", err)
 	}
@@ -273,7 +275,7 @@ func (d *Deployer) GetOnDiskSchema(ctx context.Context) (*Schema, error) {
 		}
 	}
 
-	if b, err := d.ReadFile(ctx, filepath.Join("configs", "warp-config.yaml")); err == nil {
+	if b, err := d.ReadFile(ctx, filepath.Join("registry", "deployments", "warp_routes", "TOKEN", "tastora-deploy.yaml")); err == nil {
 		var warp map[string]*WarpConfigEntry
 		if err := yaml.Unmarshal(b, &warp); err == nil {
 			s.WarpConfig = warp

@@ -27,6 +27,11 @@ const (
 	registryPath = "/workspace/registry"
 	configsPath  = "/workspace/configs"
 
+	// warpRouteID is the identifier used by the Hyperlane CLI to resolve the warp
+	// deploy config from the local registry. The config file lives at
+	// <registry>/deployments/warp_routes/TOKEN/tastora-deploy.yaml.
+	warpRouteID = "TOKEN/tastora"
+
 	// ownerAddr is the address corresponding to the HYP_KEY environment variable private key.
 	// it is present in the default evolve genesis as a pre-funded account.
 	ownerAddr = "0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d"
@@ -103,7 +108,7 @@ func (d *Deployer) writeFactoryAddresses(ctx context.Context, chainName string) 
 func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 	cmd := []string{
 		"hyperlane", "warp", "deploy",
-		"--config", path.Join(configsPath, "warp-config.yaml"),
+		"--warp-route-id", warpRouteID,
 		"--registry", registryPath,
 		"--yes",
 	}
