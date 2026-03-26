@@ -20,7 +20,7 @@ type Config struct {
 // DefaultDeployerImage returns the default hyperlane CLI image
 // TODO: replace this with an image that just has the hyperlane cli, not using the hyperlane-init image.
 func DefaultDeployerImage() container.Image {
-	return container.Image{Repository: "ghcr.io/celestiaorg/hyperlane-init", Version: "latest", UIDGID: "1000:1000"}
+	return container.Image{Repository: "ghcr.io/celestiaorg/hyperlane-init@sha256", Version: "04d570e31e8e459a8e7aa90d81bfe28df513201b98d027e37bed1bc861a2bbb1", UIDGID: "1000:1000"}
 }
 
 func DefaultForwardRelayerImage() container.Image {
