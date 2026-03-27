@@ -101,27 +101,34 @@ func (d *Deployer) writeFactoryAddresses(ctx context.Context, chainName string) 
 }
 
 func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
-	cmd := []string{
-		"hyperlane", "warp", "deploy",
-		"--config", path.Join(configsPath, "warp-config.yaml"),
-		"--registry", registryPath,
-		"--yes",
-	}
-
 	if len(d.ChainHypKeys) == 0 {
 		return fmt.Errorf("no hyperlane signer configured for warp deploy")
 	}
 
-	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", d.ChainHypKeys[0].PrivKeyHex),
+	// Deploy warp routes one chain at a time to avoid the CLI's automatic
+	// cross-chain router enrollment which fails with testIsm contracts.
+	// Router enrollment is handled separately by EnrollRemoteRouter.
+	for _, chainName := range d.warpChains {
+		warpRouteID := fmt.Sprintf("TOKEN/%s", chainName)
+		cmd := []string{
+			"hyperlane", "warp", "deploy",
+			"--warp-route-id", warpRouteID,
+			"--registry", registryPath,
+			"--yes",
+		}
+
+		env := []string{
+			fmt.Sprintf("HYP_KEY=%s", d.ChainHypKeys[0].PrivKeyHex),
+		}
+
+		_, _, err := d.Exec(ctx, d.Logger, cmd, env)
+		if err != nil {
+			return fmt.Errorf("warp deploy failed for %s: %w", chainName, err)
+		}
+
+		d.Logger.Info("warp routes deployed", zap.String("chain", chainName))
 	}
 
-	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
-	if err != nil {
-		return fmt.Errorf("warp deploy failed: %w", err)
-	}
-
-	d.Logger.Info("warp routes deployed")
 	return nil
 }
 

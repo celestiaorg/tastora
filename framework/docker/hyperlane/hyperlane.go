@@ -32,6 +32,9 @@ type Deployer struct {
 	deployed   bool
 	hasWarp    bool
 
+	// warpChains tracks chain names that have warp deploy configs written to the registry.
+	warpChains []string
+
 	ChainHypKeys []ChainHypKey
 }
 
@@ -204,34 +207,42 @@ func (d *Deployer) writeRegistry(ctx context.Context) error {
 }
 
 func (d *Deployer) writeWarpConfig(ctx context.Context) error {
-	warpConfig := make(map[string]*WarpConfigEntry)
-
 	for _, chain := range d.chains {
 		entry, err := chain.GetHyperlaneWarpConfigEntry(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get warp config entry: %w", err)
 		}
-		if entry != nil {
-			registryEntry, err := chain.GetHyperlaneRegistryEntry(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to get registry entry: %w", err)
-			}
-			warpConfig[registryEntry.Metadata.Name] = entry
+		if entry == nil {
+			continue
 		}
+
+		registryEntry, err := chain.GetHyperlaneRegistryEntry(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get registry entry: %w", err)
+		}
+
+		chainName := registryEntry.Metadata.Name
+		singleChainConfig := map[string]*WarpConfigEntry{chainName: entry}
+		configBytes, err := yaml.Marshal(singleChainConfig)
+		if err != nil {
+			return fmt.Errorf("failed to marshal warp config for %s: %w", chainName, err)
+		}
+
+		// Write a per-chain deploy config to the registry so the Hyperlane CLI can
+		// resolve it via --warp-route-id. Deploying one chain at a time avoids the
+		// CLI's automatic cross-chain router enrollment (which fails with testIsm).
+		// Router enrollment is handled separately by EnrollRemoteRouter.
+		// The CLI expects: <registry>/deployments/warp_routes/<TOKEN>/<label>-deploy.yaml
+		configPath := path.Join("registry", "deployments", "warp_routes", "TOKEN", chainName+"-deploy.yaml")
+		if err := d.WriteFile(ctx, configPath, configBytes); err != nil {
+			return fmt.Errorf("failed to write warp config for %s: %w", chainName, err)
+		}
+
+		d.warpChains = append(d.warpChains, chainName)
 	}
 
-	if len(warpConfig) == 0 {
+	if len(d.warpChains) == 0 {
 		return fmt.Errorf("no chains with warp config found")
-	}
-
-	warpConfigBytes, err := yaml.Marshal(warpConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal warp config: %w", err)
-	}
-
-	warpConfigPath := path.Join("configs", "warp-config.yaml")
-	if err := d.WriteFile(ctx, warpConfigPath, warpConfigBytes); err != nil {
-		return fmt.Errorf("failed to write warp config: %w", err)
 	}
 
 	d.hasWarp = true
@@ -273,11 +284,21 @@ func (d *Deployer) GetOnDiskSchema(ctx context.Context) (*Schema, error) {
 		}
 	}
 
-	if b, err := d.ReadFile(ctx, filepath.Join("configs", "warp-config.yaml")); err == nil {
-		var warp map[string]*WarpConfigEntry
-		if err := yaml.Unmarshal(b, &warp); err == nil {
-			s.WarpConfig = warp
+	warp := make(map[string]*WarpConfigEntry)
+	for _, chainName := range d.warpChains {
+		b, err := d.ReadFile(ctx, filepath.Join("registry", "deployments", "warp_routes", "TOKEN", chainName+"-deploy.yaml"))
+		if err != nil {
+			continue
 		}
+		var chainWarp map[string]*WarpConfigEntry
+		if err := yaml.Unmarshal(b, &chainWarp); err == nil {
+			for k, v := range chainWarp {
+				warp[k] = v
+			}
+		}
+	}
+	if len(warp) > 0 {
+		s.WarpConfig = warp
 	}
 	return s, nil
 }
