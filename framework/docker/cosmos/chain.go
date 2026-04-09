@@ -338,7 +338,7 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	if blockWaitTimeout == 0 {
 		blockWaitTimeout = 120 * time.Second
 	}
-	blockWaitCtx, cancel := context.WithTimeout(context.Background(), blockWaitTimeout)
+	blockWaitCtx, cancel := context.WithTimeout(ctx, blockWaitTimeout)
 	defer cancel()
 	if err := wait.ForBlocks(blockWaitCtx, 2, c.GetNode()); err != nil {
 		return err
