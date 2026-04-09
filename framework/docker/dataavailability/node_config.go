@@ -10,7 +10,7 @@ import (
 
 // NodeConfig defines the configuration for a single da Node
 type NodeConfig struct {
-	// NodeType specifies the type of DA node (bridge, light, full)
+	// NodeType specifies the type of DA node (bridge, light)
 	NodeType types.DANodeType
 	// Image overrides the network's default image for this specific node (optional)
 	Image *container.Image
@@ -43,7 +43,7 @@ func NewNodeBuilder() *NodeBuilder {
 	}
 }
 
-// WithNodeType sets the node type (bridge, light, full)
+// WithNodeType sets the node type (bridge, light)
 func (b *NodeBuilder) WithNodeType(nodeType types.DANodeType) *NodeBuilder {
 	b.config.NodeType = nodeType
 	return b
