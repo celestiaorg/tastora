@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/types"
@@ -154,6 +155,9 @@ type ChainBuilder struct {
 	additionalExposedPorts []string
 	// skipInit indicates whether to skip node initialization on start (useful when reusing volumes)
 	skipInit bool
+	// blockWaitTimeout is the timeout for waiting for blocks after starting the chain.
+	// If zero, defaults to 120 seconds.
+	blockWaitTimeout time.Duration
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes.
@@ -341,6 +345,14 @@ func (b *ChainBuilder) WithSkipInit(skip bool) *ChainBuilder {
 	return b
 }
 
+// WithBlockWaitTimeout sets the timeout for waiting for blocks after starting
+// the chain. If not set, defaults to 120 seconds. Use a longer timeout for
+// chains that need extra time to start (e.g. state sync nodes).
+func (b *ChainBuilder) WithBlockWaitTimeout(timeout time.Duration) *ChainBuilder {
+	b.blockWaitTimeout = timeout
+	return b
+}
+
 // getImage returns the appropriate Docker image for a node, using node-specific override if available,
 // otherwise falling back to the chain's default image
 func (b *ChainBuilder) getImage(nodeConfig ChainNodeConfig) container.Image {
@@ -434,8 +446,9 @@ func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
 		FullNodes:    fullNodes,
 		cdc:          cdc,
 		log:          b.logger,
-		faucetWallet: b.faucetWallet,
-		skipInit:     b.skipInit,
+		faucetWallet:     b.faucetWallet,
+		skipInit:         b.skipInit,
+		blockWaitTimeout: b.blockWaitTimeout,
 	}
 
 	return chain, nil
