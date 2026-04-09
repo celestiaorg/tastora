@@ -45,6 +45,7 @@ func NewDockerKeyring(dockerClient tastoratypes.TastoraDockerClient, containerID
 
 func (d *dockerKeyring) Backend() string {
 	if err := d.ensureInitialized(); err != nil {
+		fmt.Fprintf(os.Stderr, "dockerKeyring.Backend: initialization failed: %v\n", err)
 		return ""
 	}
 	return d.localKeyring.Backend()
