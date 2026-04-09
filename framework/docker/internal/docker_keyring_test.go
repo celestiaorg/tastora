@@ -67,7 +67,7 @@ func (s *DockerKeyringTestSuite) SetupSuite() {
 	// wait for container to be ready
 	time.Sleep(time.Second)
 
-	// wet up keyring directory in container
+	// set up keyring directory in container
 	s.keyringDir = "/tmp/keyring-test"
 
 	// create keyring directory in container
@@ -80,6 +80,8 @@ func (s *DockerKeyringTestSuite) SetupSuite() {
 	err = s.dockerClient.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{})
 	s.Require().NoError(err)
 
+	s.waitForExec(ctx, exec.ID)
+
 	// create the docker keyring
 	s.kr = NewDockerKeyring(s.dockerClient, s.containerID, s.keyringDir, s.cdc)
 }
@@ -89,6 +91,29 @@ func (s *DockerKeyringTestSuite) TearDownSuite() {
 		ctx := context.Background()
 		_ = s.dockerClient.ContainerStop(ctx, s.containerID, container.StopOptions{})
 		_ = s.dockerClient.ContainerRemove(ctx, s.containerID, container.RemoveOptions{})
+	}
+}
+
+// waitForExec polls ContainerExecInspect until the exec is no longer running
+// or the context times out.
+func (s *DockerKeyringTestSuite) waitForExec(ctx context.Context, execID string) {
+	s.T().Helper()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			s.Require().Fail("timed out waiting for exec to complete")
+			return
+		default:
+			inspect, err := s.dockerClient.ContainerExecInspect(ctx, execID)
+			s.Require().NoError(err)
+			if !inspect.Running {
+				s.Require().Equal(0, inspect.ExitCode, "exec command failed with exit code %d", inspect.ExitCode)
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
 }
 
