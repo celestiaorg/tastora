@@ -31,8 +31,10 @@ type Config struct {
     Logger          *zap.Logger
     Image           container.Image
 
-    RPCHosts   []string
-    PrivateKey string
+    RPCHosts            []string
+    PrivateKey          string
+    AdditionalStartArgs []string
+    HostNetwork         bool
 }
 
 type Node struct {
@@ -50,7 +52,11 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, name s
     log := cfg.Logger.With(zap.String("component", "spamoor-daemon"), zap.Int("i", index))
     n := &Node{cfg: cfg, logger: log, name: name}
     n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, cfg.Image, "/home/spamoor", index, nodeType(0), log)
-    n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
+    lc := container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name())
+    if cfg.HostNetwork {
+        lc.SetHostNetwork(true)
+    }
+    n.SetContainerLifecycle(lc)
     if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
         return nil, err
     }
@@ -89,11 +95,17 @@ func (n *Node) Start(ctx context.Context) error {
     if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
         return err
     }
-    hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, defaultInternalPorts().Web+"/tcp")
-    if err != nil {
-        return err
+
+    var mapped string
+    if n.cfg.HostNetwork {
+        mapped = defaultInternalPorts().Web
+    } else {
+        hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, defaultInternalPorts().Web+"/tcp")
+        if err != nil {
+            return err
+        }
+        mapped = internal.MustExtractPort(hostPorts[0])
     }
-    mapped := internal.MustExtractPort(hostPorts[0])
     n.external = types.Ports{HTTP: mapped}
     n.started = true
     // readiness wait for /metrics endpoint (best-effort)
@@ -123,6 +135,7 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
             cmd = append(cmd, "--rpchost", s)
         }
     }
+    cmd = append(cmd, n.cfg.AdditionalStartArgs...)
 
     port := nat.Port(p.Web + "/tcp")
     ports := nat.PortMap{
