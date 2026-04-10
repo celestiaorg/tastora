@@ -76,7 +76,10 @@ type Node struct {
 	externalPorts types.Ports
 }
 
-func NewNode(cfg Config, testName string, image container.Image, index int, nodeConfig NodeConfig) *Node {
+func NewNode(cfg Config, testName string, image container.Image, homeDir string, index int, nodeConfig NodeConfig) *Node {
+	if homeDir == "" {
+		homeDir = DefaultHomeDir()
+	}
 	logger := cfg.Logger.With(
 		zap.String("node_type", nodeConfig.NodeType.String()),
 	)
@@ -86,7 +89,7 @@ func NewNode(cfg Config, testName string, image container.Image, index int, node
 		additionalStartArgs: nodeConfig.AdditionalStartArgs,
 		configModifications: nodeConfig.ConfigModifications,
 		internalPorts:       initializeDANodePorts(nodeConfig.InternalPorts),
-		Node:                container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, "/home/celestia", index, nodeConfig.NodeType, logger),
+		Node:                container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, homeDir, index, nodeConfig.NodeType, logger),
 	}
 
 	node.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, node.Name()))

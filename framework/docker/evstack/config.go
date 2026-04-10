@@ -25,3 +25,8 @@ type Config struct {
 	// Image specifies the Docker image used for the evstack nodes.
 	Image container.Image
 }
+
+// DefaultHomeDir returns the default home directory for evstack containers.
+func DefaultHomeDir() string {
+	return "/var/evstack"
+}
