@@ -23,28 +23,28 @@ func TestGetHostPort(t *testing.T) {
 			container.InspectResponse{
 				NetworkSettings: &container.NetworkSettings{
 					Ports: network.PortMap{
-						network.MustParsePort("test"): []network.PortBinding{
+						network.MustParsePort("8080/tcp"): []network.PortBinding{
 							{HostIP: netip.MustParseAddr("1.2.3.4"), HostPort: "8080"},
 							{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "9999"},
 						},
 					},
 				},
-			}, "test", "1.2.3.4:8080",
+			}, "8080/tcp", "1.2.3.4:8080",
 		},
 		{
 			container.InspectResponse{
 				NetworkSettings: &container.NetworkSettings{
 					Ports: network.PortMap{
-						network.MustParsePort("test"): []network.PortBinding{
+						network.MustParsePort("3000/tcp"): []network.PortBinding{
 							{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "3000"},
 						},
 					},
 				},
-			}, "test", "0.0.0.0:3000",
+			}, "3000/tcp", "0.0.0.0:3000",
 		},
 
 		{container.InspectResponse{}, "", ""},
-		{container.InspectResponse{NetworkSettings: &container.NetworkSettings{}}, "does-not-matter", ""},
+		{container.InspectResponse{NetworkSettings: &container.NetworkSettings{}}, "9999/tcp", ""},
 	} {
 		require.Equal(t, tt.Want, port.GetForHost(tt.Container, tt.PortID), tt)
 	}

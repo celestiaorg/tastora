@@ -86,7 +86,11 @@ func GetForHost(cont container.InspectResponse, portID string) string {
 		return ""
 	}
 
-	if bindings, exists := ports[network.MustParsePort(portID)]; exists && len(bindings) > 0 {
+	p, err := network.ParsePort(portID)
+	if err != nil {
+		return ""
+	}
+	if bindings, exists := ports[p]; exists && len(bindings) > 0 {
 		return bindings[0].HostIP.String() + ":" + bindings[0].HostPort
 	}
 
