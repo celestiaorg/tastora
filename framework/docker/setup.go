@@ -48,7 +48,7 @@ var KeepVolumesOnFailure = os.Getenv("TASTORA_SKIP_FAILURE_CLEANUP") != ""
 func Setup(t SetupTestingT) (types.TastoraDockerClient, string) {
 	t.Helper()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		panic(fmt.Errorf("failed to create docker client: %v", err))
 	}

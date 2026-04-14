@@ -32,7 +32,7 @@ func TestDockerKeyringTestSuite(t *testing.T) {
 }
 
 func (s *DockerKeyringTestSuite) SetupSuite() {
-	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	dockerClient, err := client.New(client.FromEnv)
 	s.Require().NoError(err)
 
 	s.dockerClient = tastoraclient.NewClient(dockerClient, "docker-keyring-test-suite")
