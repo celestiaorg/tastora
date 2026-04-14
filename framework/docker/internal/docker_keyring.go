@@ -11,7 +11,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/client"
 	"os"
 	"path/filepath"
 	"sync"
@@ -298,16 +298,14 @@ func (d *dockerKeyring) MigrateAll() ([]*keyring.Record, error) {
 
 // execCommand executes a command in the Docker container.
 func (d *dockerKeyring) execCommand(ctx context.Context, cmd []string) error {
-	execConfig := container.ExecOptions{
+	exec, err := d.dockerClient.ExecCreate(ctx, d.containerID, client.ExecCreateOptions{
 		Cmd: cmd,
-	}
-
-	exec, err := d.dockerClient.ContainerExecCreate(ctx, d.containerID, execConfig)
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create exec: %w", err)
 	}
 
-	if err := d.dockerClient.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{}); err != nil {
+	if _, err := d.dockerClient.ExecStart(ctx, exec.ID, client.ExecStartOptions{}); err != nil {
 		return fmt.Errorf("failed to execute command: %w", err)
 	}
 
@@ -404,7 +402,10 @@ func (d *dockerKeyring) persistKeyringToContainer() error {
 	}
 
 	// copy the entire tmp keyring directory to the container.
-	if err := d.dockerClient.CopyToContainer(context.TODO(), d.containerID, d.containerKeyringDir, tarReader, container.CopyToContainerOptions{}); err != nil {
+	if _, err := d.dockerClient.CopyToContainer(context.TODO(), d.containerID, client.CopyToContainerOptions{
+		DestinationPath: d.containerKeyringDir,
+		Content:         tarReader,
+	}); err != nil {
 		return fmt.Errorf("failed to copy keyring directory to container: %w", err)
 	}
 

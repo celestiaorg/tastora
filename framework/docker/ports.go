@@ -6,7 +6,9 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/docker/go-connections/nat"
+	"net/netip"
+
+	"github.com/moby/moby/api/types/network"
 )
 
 var mu sync.RWMutex
@@ -41,15 +43,15 @@ func OpenListener(port int) (*net.TCPListener, error) {
 // The listener will be closed in the case of an error, otherwise it will be left open.
 // This allows multiple GetPort calls to find multiple available ports
 // before closing them so they are available for the PortBinding.
-func GetPort(port int) (nat.PortBinding, *net.TCPListener, error) {
+func GetPort(port int) (network.PortBinding, *net.TCPListener, error) {
 	l, err := OpenListener(port)
 	if err != nil {
 		_ = l.Close()
-		return nat.PortBinding{}, nil, err
+		return network.PortBinding{}, nil, err
 	}
 
-	return nat.PortBinding{
-		HostIP:   "0.0.0.0",
+	return network.PortBinding{
+		HostIP:   netip.MustParseAddr("0.0.0.0"),
 		HostPort: fmt.Sprint(l.Addr().(*net.TCPAddr).Port),
 	}, l, nil
 }
@@ -57,11 +59,11 @@ func GetPort(port int) (nat.PortBinding, *net.TCPListener, error) {
 // GeneratePortBindings will find open ports on the local
 // machine and create a PortBinding for every port in the portSet.
 // If a port is already bound, it will use that port as an override.
-func GeneratePortBindings(pairs nat.PortMap) (nat.PortMap, Listeners, error) {
-	m := make(nat.PortMap)
+func GeneratePortBindings(pairs network.PortMap) (network.PortMap, Listeners, error) {
+	m := make(network.PortMap)
 	listeners := make(Listeners, 0, len(pairs))
 
-	var pb nat.PortBinding
+	var pb network.PortBinding
 	var l *net.TCPListener
 	var err error
 
@@ -72,7 +74,7 @@ func GeneratePortBindings(pairs nat.PortMap) (nat.PortMap, Listeners, error) {
 		} else {
 			var pNum int
 			if pNum, err = strconv.Atoi(bind[0].HostPort); err != nil {
-				return nat.PortMap{}, nil, err
+				return network.PortMap{}, nil, err
 			}
 
 			pb, l, err = GetPort(pNum)
@@ -80,11 +82,11 @@ func GeneratePortBindings(pairs nat.PortMap) (nat.PortMap, Listeners, error) {
 
 		if err != nil {
 			listeners.CloseAll()
-			return nat.PortMap{}, nil, err
+			return network.PortMap{}, nil, err
 		}
 
 		listeners = append(listeners, l)
-		m[p] = []nat.PortBinding{pb}
+		m[p] = []network.PortBinding{pb}
 	}
 
 	return m, listeners, nil

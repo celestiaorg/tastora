@@ -13,8 +13,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/suite"
 )
@@ -44,7 +43,7 @@ func (s *DockerKeyringTestSuite) SetupSuite() {
 
 	// pull a minimal image for testing
 	ctx := context.Background()
-	pullReader, err := s.dockerClient.ImagePull(ctx, "alpine:latest", image.PullOptions{})
+	pullReader, err := s.dockerClient.ImagePull(ctx, "alpine:latest", client.ImagePullOptions{})
 	s.Require().NoError(err)
 
 	_, err = io.Copy(io.Discard, pullReader)
@@ -52,16 +51,16 @@ func (s *DockerKeyringTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 
 	// create a test container
-	containerConfig := &container.Config{
-		Image: "alpine:latest",
-		Cmd:   []string{"sleep", "3600"}, // keep container running
-	}
-
-	resp, err := s.dockerClient.ContainerCreate(ctx, containerConfig, nil, nil, nil, "")
+	resp, err := s.dockerClient.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Config: &container.Config{
+			Image: "alpine:latest",
+			Cmd:   []string{"sleep", "3600"}, // keep container running
+		},
+	})
 	s.Require().NoError(err)
 	s.containerID = resp.ID
 
-	err = s.dockerClient.ContainerStart(ctx, s.containerID, container.StartOptions{})
+	_, err = s.dockerClient.ContainerStart(ctx, s.containerID, client.ContainerStartOptions{})
 	s.Require().NoError(err)
 
 	// wait for container to be ready
@@ -71,13 +70,12 @@ func (s *DockerKeyringTestSuite) SetupSuite() {
 	s.keyringDir = "/tmp/keyring-test"
 
 	// create keyring directory in container
-	execConfig := container.ExecOptions{
+	exec, err := s.dockerClient.ExecCreate(ctx, s.containerID, client.ExecCreateOptions{
 		Cmd: []string{"mkdir", "-p", s.keyringDir},
-	}
-	exec, err := s.dockerClient.ContainerExecCreate(ctx, s.containerID, execConfig)
+	})
 	s.Require().NoError(err)
 
-	err = s.dockerClient.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{})
+	_, err = s.dockerClient.ExecStart(ctx, exec.ID, client.ExecStartOptions{})
 	s.Require().NoError(err)
 
 	s.waitForExec(ctx, exec.ID)
@@ -89,8 +87,8 @@ func (s *DockerKeyringTestSuite) SetupSuite() {
 func (s *DockerKeyringTestSuite) TearDownSuite() {
 	if s.containerID != "" {
 		ctx := context.Background()
-		_ = s.dockerClient.ContainerStop(ctx, s.containerID, container.StopOptions{})
-		_ = s.dockerClient.ContainerRemove(ctx, s.containerID, container.RemoveOptions{})
+		_, _ = s.dockerClient.ContainerStop(ctx, s.containerID, client.ContainerStopOptions{})
+		_, _ = s.dockerClient.ContainerRemove(ctx, s.containerID, client.ContainerRemoveOptions{})
 	}
 }
 
@@ -106,7 +104,7 @@ func (s *DockerKeyringTestSuite) waitForExec(ctx context.Context, execID string)
 			s.Require().Fail("timed out waiting for exec to complete")
 			return
 		default:
-			inspect, err := s.dockerClient.ContainerExecInspect(ctx, execID)
+			inspect, err := s.dockerClient.ExecInspect(ctx, execID, client.ExecInspectOptions{})
 			s.Require().NoError(err)
 			if !inspect.Running {
 				s.Require().Equal(0, inspect.ExitCode, "exec command failed with exit code %d", inspect.ExitCode)

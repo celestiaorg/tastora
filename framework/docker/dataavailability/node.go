@@ -18,7 +18,7 @@ import (
 	dockerutil "github.com/celestiaorg/tastora/framework/testutil/docker"
 	tomlutil "github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"go.uber.org/zap"
 )
 
@@ -299,10 +299,10 @@ func (n *Node) initAuthToken(ctx context.Context) error {
 }
 
 // getPortMap returns the port mapping for the node type.
-func (n *Node) getPortMap() nat.PortMap {
-	return nat.PortMap{
-		nat.Port(n.internalPorts.RPC + "/tcp"): {},
-		nat.Port(n.internalPorts.P2P + "/tcp"): {},
+func (n *Node) getPortMap() network.PortMap {
+	return network.PortMap{
+		network.MustParsePort(n.internalPorts.RPC + "/tcp"): {},
+		network.MustParsePort(n.internalPorts.P2P + "/tcp"): {},
 	}
 }
 

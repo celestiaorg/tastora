@@ -14,13 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	dockerimagetypes "github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/mount"
-	"github.com/docker/docker/api/types/network"
-	"github.com/moby/moby/errdefs"
-	"github.com/moby/moby/pkg/stdcopy"
+	"github.com/containerd/errdefs"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/api/pkg/stdcopy"
+	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -130,9 +129,9 @@ func (job *Job) imageRef() string {
 // EnsurePulled can only pull public images.
 func (job *Job) EnsurePulled(ctx context.Context) error {
 	ref := job.imageRef()
-	_, _, err := job.client.ImageInspectWithRaw(ctx, ref)
+	_, err := job.client.ImageInspect(ctx, ref)
 	if err != nil {
-		rc, err := job.client.ImagePull(ctx, ref, dockerimagetypes.PullOptions{})
+		rc, err := job.client.ImagePull(ctx, ref, client.ImagePullOptions{})
 		if err != nil {
 			return fmt.Errorf("pull image %s: %w", ref, err)
 		}
@@ -146,16 +145,16 @@ func (job *Job) CreateContainer(ctx context.Context, containerName, hostName str
 	// Although this shouldn't happen because the name includes randomness, in reality there seems to intermittent
 	// chances of collisions.
 
-	containers, err := job.client.ContainerList(ctx, container.ListOptions{
+	containerResult, err := job.client.ContainerList(ctx, client.ContainerListOptions{
 		All:     true,
-		Filters: filters.NewArgs(filters.Arg("name", containerName)),
+		Filters: make(client.Filters).Add("name", containerName),
 	})
 	if err != nil {
 		return "", fmt.Errorf("unable to list containers: %w", err)
 	}
 
-	for _, c := range containers {
-		if err := job.client.ContainerRemove(ctx, c.ID, container.RemoveOptions{
+	for _, c := range containerResult.Items {
+		if _, err := job.client.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{
 			RemoveVolumes: true,
 			Force:         true,
 		}); err != nil {
@@ -165,33 +164,34 @@ func (job *Job) CreateContainer(ctx context.Context, containerName, hostName str
 
 	cc, err := job.client.ContainerCreate(
 		ctx,
-		&container.Config{
-			Image: job.imageRef(),
+		client.ContainerCreateOptions{
+			Name: containerName,
+			Config: &container.Config{
+				Image: job.imageRef(),
 
-			Entrypoint: []string{},
-			WorkingDir: opts.WorkingDir,
-			Cmd:        cmd,
+				Entrypoint: []string{},
+				WorkingDir: opts.WorkingDir,
+				Cmd:        cmd,
 
-			Env: opts.Env,
+				Env: opts.Env,
 
-			Hostname: hostName,
-			User:     opts.User,
+				Hostname: hostName,
+				User:     opts.User,
 
-			Labels: map[string]string{consts.CleanupLabel: job.client.CleanupLabel()},
-		},
-		&container.HostConfig{
-			Binds:           opts.Binds,
-			PublishAllPorts: true, // Because we publish all ports, no need to expose specific ports.
-			AutoRemove:      false,
-			Mounts:          opts.Mounts,
-		},
-		&network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{
-				job.networkID: {},
+				Labels: map[string]string{consts.CleanupLabel: job.client.CleanupLabel()},
+			},
+			HostConfig: &container.HostConfig{
+				Binds:           opts.Binds,
+				PublishAllPorts: true, // Because we publish all ports, no need to expose specific ports.
+				AutoRemove:      false,
+				Mounts:          opts.Mounts,
+			},
+			NetworkingConfig: &network.NetworkingConfig{
+				EndpointsConfig: map[string]*network.EndpointSettings{
+					job.networkID: {},
+				},
 			},
 		},
-		nil,
-		containerName,
 	)
 	if err != nil {
 		return "", err
@@ -261,7 +261,9 @@ type Container struct {
 // Wait implicitly calls Stop.
 // If logTail is non-zero, the stdout and stderr logs will be truncated at the end to that number of lines.
 func (c *Container) Wait(ctx context.Context, logTail uint64) ExecResult {
-	waitCh, errCh := c.job.client.ContainerWait(ctx, c.containerID, container.WaitConditionNotRunning)
+	waitResult := c.job.client.ContainerWait(ctx, c.containerID, client.ContainerWaitOptions{
+		Condition: container.WaitConditionNotRunning,
+	})
 	var exitCode int
 	select {
 	case <-ctx.Done():
@@ -271,14 +273,14 @@ func (c *Container) Wait(ctx context.Context, logTail uint64) ExecResult {
 			Stdout:   nil,
 			Stderr:   nil,
 		}
-	case err := <-errCh:
+	case err := <-waitResult.Error:
 		return ExecResult{
 			Err:      err,
 			ExitCode: 1,
 			Stdout:   nil,
 			Stderr:   nil,
 		}
-	case res := <-waitCh:
+	case res := <-waitResult.Result:
 		exitCode = int(res.StatusCode)
 		if res.Error != nil {
 			return ExecResult{
@@ -295,7 +297,7 @@ func (c *Container) Wait(ctx context.Context, logTail uint64) ExecResult {
 		stderrBuf = new(bytes.Buffer)
 	)
 
-	logOpts := container.LogsOptions{
+	logOpts := client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 	}
@@ -355,10 +357,8 @@ func (c *Container) Stop(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout*2)
 	defer cancel()
 
-	var stopOptions container.StopOptions
 	timeoutRound := int(timeout.Round(time.Second))
-	stopOptions.Timeout = &timeoutRound
-	err := c.job.client.ContainerStop(ctx, c.containerID, stopOptions)
+	_, err := c.job.client.ContainerStop(ctx, c.containerID, client.ContainerStopOptions{Timeout: &timeoutRound})
 	if err != nil {
 		// Only return the error if it didn't match an already stopped, or a missing container.
 		if !errdefs.IsNotModified(err) && !errdefs.IsNotFound(err) {
@@ -367,7 +367,7 @@ func (c *Container) Stop(timeout time.Duration) error {
 	}
 
 	// RemoveContainerOptions duplicates (*dockertest.Resource).Prune.
-	err = c.job.client.ContainerRemove(ctx, c.containerID, container.RemoveOptions{
+	_, err = c.job.client.ContainerRemove(ctx, c.containerID, client.ContainerRemoveOptions{
 		Force:         true,
 		RemoveVolumes: true,
 	})

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/types"
-	dockerimagetypes "github.com/docker/docker/api/types/image"
+	dockerclient "github.com/moby/moby/client"
 	"io"
 )
 
@@ -33,9 +33,9 @@ func (i Image) Ref() string {
 
 func (i Image) PullImage(ctx context.Context, client types.TastoraDockerClient) error {
 	ref := i.Ref()
-	_, _, err := client.ImageInspectWithRaw(ctx, ref)
+	_, err := client.ImageInspect(ctx, ref)
 	if err != nil {
-		rc, err := client.ImagePull(ctx, ref, dockerimagetypes.PullOptions{})
+		rc, err := client.ImagePull(ctx, ref, dockerclient.ImagePullOptions{})
 		if err != nil {
 			return fmt.Errorf("pull image %s: %w", ref, err)
 		}

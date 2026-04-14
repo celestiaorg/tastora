@@ -12,7 +12,8 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/celestiaorg/tastora/framework/types"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -39,9 +40,9 @@ func (w *Writer) WriteFile(ctx context.Context, volumeName, relPath string, cont
 
 	containerName := fmt.Sprintf("%s-writefile-%d-%s", consts.CelestiaDockerPrefix, time.Now().UnixNano(), random.LowerCaseLetterString(5))
 
-	cc, err := w.cli.ContainerCreate(
-		ctx,
-		&container.Config{
+	cc, err := w.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Name: containerName,
+		Config: &container.Config{
 			Image:      internaldocker.BusyboxRef,
 			Entrypoint: []string{"sh", "-c"},
 			Cmd: []string{
@@ -56,20 +57,17 @@ func (w *Writer) WriteFile(ctx context.Context, volumeName, relPath string, cont
 			User:   consts.UserRootString,
 			Labels: map[string]string{consts.CleanupLabel: w.cli.CleanupLabel()},
 		},
-		&container.HostConfig{
+		HostConfig: &container.HostConfig{
 			Binds: []string{volumeName + ":" + mountPath},
 		},
-		nil, // No networking necessary.
-		nil,
-		containerName,
-	)
+	})
 	if err != nil {
 		return fmt.Errorf("creating container: %w", err)
 	}
 
 	defer func() {
 		// Always remove the container since we're not using AutoRemove
-		if err := w.cli.ContainerRemove(ctx, cc.ID, container.RemoveOptions{
+		if _, err := w.cli.ContainerRemove(ctx, cc.ID, client.ContainerRemoveOptions{
 			Force: true,
 		}); err != nil {
 			w.log.Warn("Failed to remove file content container", zap.String("container_id", cc.ID), zap.Error(err))
@@ -98,27 +96,24 @@ func (w *Writer) WriteFile(ctx context.Context, volumeName, relPath string, cont
 		return fmt.Errorf("closing tar writer: %w", err)
 	}
 
-	if err := w.cli.CopyToContainer(
-		ctx,
-		cc.ID,
-		mountPath,
-		&buf,
-		container.CopyToContainerOptions{},
-	); err != nil {
+	if _, err = w.cli.CopyToContainer(ctx, cc.ID, client.CopyToContainerOptions{
+		DestinationPath: mountPath,
+		Content:         &buf,
+	}); err != nil {
 		return fmt.Errorf("copying tar to container: %w", err)
 	}
 
-	if err := w.cli.ContainerStart(ctx, cc.ID, container.StartOptions{}); err != nil {
+	if _, err = w.cli.ContainerStart(ctx, cc.ID, client.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("starting write-file container: %w", err)
 	}
 
-	waitCh, errCh := w.cli.ContainerWait(ctx, cc.ID, container.WaitConditionNotRunning)
+	waitResult := w.cli.ContainerWait(ctx, cc.ID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case err := <-errCh:
+	case err := <-waitResult.Error:
 		return err
-	case res := <-waitCh:
+	case res := <-waitResult.Result:
 		if res.Error != nil {
 			return fmt.Errorf("waiting for write-file container: %s", res.Error.Message)
 		}
