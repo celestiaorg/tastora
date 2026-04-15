@@ -445,10 +445,18 @@ func (d *dockerKeyring) deleteKeyFromContainer(uid string) error {
 	return nil
 }
 
-// renameKeyInContainer renames a key file in the Docker container
-func (d *dockerKeyring) renameKeyInContainer(ctx context.Context, from, to string) error {
-	fromPath := filepath.Join(d.containerKeyringDir, from)
-	toPath := filepath.Join(d.containerKeyringDir, to)
-
-	return d.execCommand(ctx, []string{"mv", fromPath, toPath})
+// renameKeyInContainer syncs the renamed key state to the container. The
+// local keyring has already performed the rename (updating {from}.info to
+// {to}.info and the address file contents), so we remove the stale
+// {from}.info file from the container and push the updated local state via
+// persistKeyringToContainer (which only adds or overwrites files).
+func (d *dockerKeyring) renameKeyInContainer(ctx context.Context, from, _ string) error {
+	staleInfoPath := filepath.Join(d.containerKeyringDir, from+".info")
+	if err := d.execCommand(ctx, []string{"rm", "-f", staleInfoPath}); err != nil {
+		return fmt.Errorf("remove stale key file: %w", err)
+	}
+	if err := d.persistKeyringToContainer(); err != nil {
+		return fmt.Errorf("persist renamed keyring: %w", err)
+	}
+	return nil
 }
