@@ -83,9 +83,15 @@ func (c *Lifecycle) CreateContainer(
 	if ipAddr == "" {
 		endpointSettings = network.EndpointSettings{}
 	} else {
+		addr, parseErr := netip.ParseAddr(ipAddr)
+		if parseErr != nil {
+			listeners.CloseAll()
+			c.preStartListeners = port.Listeners{}
+			return fmt.Errorf("invalid container IP %q: %w", ipAddr, parseErr)
+		}
 		endpointSettings = network.EndpointSettings{
 			IPAMConfig: &network.EndpointIPAMConfig{
-				IPv4Address: netip.MustParseAddr(ipAddr),
+				IPv4Address: addr,
 			},
 		}
 	}

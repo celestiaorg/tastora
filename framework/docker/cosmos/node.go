@@ -471,7 +471,11 @@ func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 	}
 
 	for _, port := range cn.AdditionalExposedPorts {
-		usingPorts[network.MustParsePort(port+"/tcp")] = []network.PortBinding{}
+		p, err := network.ParsePort(port + "/tcp")
+		if err != nil {
+			return fmt.Errorf("invalid additional exposed port %q: %w", port, err)
+		}
+		usingPorts[p] = []network.PortBinding{}
 	}
 
 	return cn.CreateContainer(ctx, cn.TestName, cn.NetworkID, cn.Image, usingPorts, "", cn.Bind(), nil, cn.HostName(), cmd, cn.Env, []string{})

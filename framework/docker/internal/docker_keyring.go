@@ -309,6 +309,14 @@ func (d *dockerKeyring) execCommand(ctx context.Context, cmd []string) error {
 		return fmt.Errorf("failed to execute command: %w", err)
 	}
 
+	inspect, err := d.dockerClient.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to inspect exec result: %w", err)
+	}
+	if inspect.ExitCode != 0 {
+		return fmt.Errorf("command %v exited with non-zero status: %d", cmd, inspect.ExitCode)
+	}
+
 	return nil
 }
 

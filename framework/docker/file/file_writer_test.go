@@ -62,7 +62,7 @@ func TestFileWriter(t *testing.T) {
 				User:  consts.UserRootString,
 			},
 		)
-		require.NoError(t, err)
+		require.NoError(t, res.Err)
 
 		require.Equal(t, ":D", string(res.Stdout))
 	})

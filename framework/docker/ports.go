@@ -46,7 +46,9 @@ func OpenListener(port int) (*net.TCPListener, error) {
 func GetPort(port int) (network.PortBinding, *net.TCPListener, error) {
 	l, err := OpenListener(port)
 	if err != nil {
-		_ = l.Close()
+		if l != nil {
+			_ = l.Close()
+		}
 		return network.PortBinding{}, nil, err
 	}
 
@@ -74,6 +76,7 @@ func GeneratePortBindings(pairs network.PortMap) (network.PortMap, Listeners, er
 		} else {
 			var pNum int
 			if pNum, err = strconv.Atoi(bind[0].HostPort); err != nil {
+				listeners.CloseAll()
 				return network.PortMap{}, nil, err
 			}
 

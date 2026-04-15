@@ -169,8 +169,12 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 	case BackendMode:
 		cmd = append(cmd, "backend")
 
+		p, err := network.ParsePort(settings.PortValue() + "/tcp")
+		if err != nil {
+			return fmt.Errorf("invalid backend port %q: %w", settings.PortValue(), err)
+		}
 		ports = network.PortMap{
-			network.MustParsePort(settings.PortValue() + "/tcp"): {},
+			p: {},
 		}
 
 	case RelayerMode:

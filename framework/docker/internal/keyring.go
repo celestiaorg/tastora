@@ -31,6 +31,9 @@ func NewLocalKeyringFromDockerContainer(ctx context.Context, dc types.TastoraDoc
 		return nil, err
 	}
 	reader := copyResult.Content
+	defer func() {
+		_ = reader.Close()
+	}()
 	tr := tar.NewReader(reader)
 	for {
 		hdr, err := tr.Next()

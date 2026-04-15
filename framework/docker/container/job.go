@@ -9,7 +9,6 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/celestiaorg/tastora/framework/types"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -135,8 +134,10 @@ func (job *Job) EnsurePulled(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("pull image %s: %w", ref, err)
 		}
-		_, _ = io.Copy(io.Discard, rc)
-		_ = rc.Close()
+		defer func() { _ = rc.Close() }()
+		if err := rc.Wait(ctx); err != nil {
+			return fmt.Errorf("pull image %s: %w", ref, err)
+		}
 	}
 	return nil
 }

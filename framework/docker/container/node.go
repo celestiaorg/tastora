@@ -9,6 +9,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	"github.com/celestiaorg/tastora/framework/docker/volume"
 	"github.com/celestiaorg/tastora/framework/types"
+	"github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
@@ -193,6 +194,9 @@ func (n *Node) ensureVolume(ctx context.Context, nodeName, volName string) error
 	// check if volume already exists
 	_, err := n.DockerClient.VolumeInspect(ctx, volName, client.VolumeInspectOptions{})
 	if err != nil {
+		if !errdefs.IsNotFound(err) {
+			return fmt.Errorf("inspecting volume %s: %w", volName, err)
+		}
 		// volume doesn't exist, create it
 		v, createErr := n.DockerClient.VolumeCreate(ctx, client.VolumeCreateOptions{
 			Name: volName,
