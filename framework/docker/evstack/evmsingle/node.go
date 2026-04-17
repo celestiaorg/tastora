@@ -13,7 +13,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/types"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"go.uber.org/zap"
 )
 
@@ -215,9 +215,9 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 
 	cmd = append(cmd, additionalStartArgs...)
 
-	usingPorts := nat.PortMap{
-		nat.Port(n.internal.RPC + "/tcp"): {},
-		nat.Port(n.internal.P2P + "/tcp"): {},
+	usingPorts := network.PortMap{
+		network.MustParsePort(n.internal.RPC + "/tcp"): {},
+		network.MustParsePort(n.internal.P2P + "/tcp"): {},
 	}
 
 	return n.CreateContainer(ctx, n.TestName, n.NetworkID, n.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, n.cfg.Env, []string{})

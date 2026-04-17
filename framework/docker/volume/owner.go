@@ -10,7 +10,8 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 	"github.com/celestiaorg/tastora/framework/types"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -41,9 +42,9 @@ func SetOwner(ctx context.Context, opts OwnerOptions) error {
 
 	const mountPath = "/mnt/dockervolume"
 
-	cc, err := opts.Client.ContainerCreate(
-		ctx,
-		&container.Config{
+	cc, err := opts.Client.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Name: containerName,
+		Config: &container.Config{
 			Image:      dockerinternal.BusyboxRef, // Using busybox image which has chown and chmod.
 			Entrypoint: []string{"sh", "-c"},
 			Cmd: []string{
@@ -56,37 +57,34 @@ func SetOwner(ctx context.Context, opts OwnerOptions) error {
 			User:   consts.UserRootString,
 			Labels: map[string]string{consts.CleanupLabel: opts.Client.CleanupLabel()},
 		},
-		&container.HostConfig{
+		HostConfig: &container.HostConfig{
 			Binds: []string{opts.VolumeName + ":" + mountPath},
 		},
-		nil, // No networking necessary.
-		nil,
-		containerName,
-	)
+	})
 	if err != nil {
 		return fmt.Errorf("creating container: %w", err)
 	}
 
 	defer func() {
 		// Always remove the container since we're not using AutoRemove
-		if err := opts.Client.ContainerRemove(ctx, cc.ID, container.RemoveOptions{
+		if _, err := opts.Client.ContainerRemove(ctx, cc.ID, client.ContainerRemoveOptions{
 			Force: true,
 		}); err != nil {
 			opts.Log.Warn("Failed to remove volume-owner container", zap.String("container_id", cc.ID), zap.Error(err))
 		}
 	}()
 
-	if err := opts.Client.ContainerStart(ctx, cc.ID, container.StartOptions{}); err != nil {
+	if _, err := opts.Client.ContainerStart(ctx, cc.ID, client.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("starting volume-owner container: %w", err)
 	}
 
-	waitCh, errCh := opts.Client.ContainerWait(ctx, cc.ID, container.WaitConditionNotRunning)
+	waitResult := opts.Client.ContainerWait(ctx, cc.ID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case err := <-errCh:
+	case err := <-waitResult.Error:
 		return err
-	case res := <-waitCh:
+	case res := <-waitResult.Result:
 		if res.Error != nil {
 			return fmt.Errorf("waiting for volume-owner container: %s", res.Error.Message)
 		}

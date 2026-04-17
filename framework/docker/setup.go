@@ -14,12 +14,10 @@ import (
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 
 	"github.com/avast/retry-go/v4"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/volume"
+	"github.com/containerd/errdefs"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
-	"github.com/moby/moby/errdefs"
 )
 
 // SetupTestingT is a subset of testing.T required for Setup.
@@ -50,7 +48,7 @@ var KeepVolumesOnFailure = os.Getenv("TASTORA_SKIP_FAILURE_CLEANUP") != ""
 func Setup(t SetupTestingT) (types.TastoraDockerClient, string) {
 	t.Helper()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		panic(fmt.Errorf("failed to create docker client: %v", err))
 	}
@@ -59,7 +57,7 @@ func Setup(t SetupTestingT) (types.TastoraDockerClient, string) {
 	dockerClient := tastoraclient.NewClient(cli, cleanupLabel)
 
 	name := fmt.Sprintf("%s-%s", consts.CelestiaDockerPrefix, random.LowerCaseLetterString(8))
-	network, err := dockerClient.NetworkCreate(context.TODO(), name, network.CreateOptions{
+	network, err := dockerClient.NetworkCreate(context.TODO(), name, client.NetworkCreateOptions{
 		Driver: "bridge",
 		IPAM:   &network.IPAM{},
 		Labels: map[string]string{consts.CleanupLabel: cleanupLabel},
@@ -86,41 +84,38 @@ func CleanupWithLabel(t SetupTestingT, cli types.TastoraDockerClient, cleanupLab
 		keepContainers := os.Getenv("KEEP_CONTAINERS") != ""
 
 		ctx := context.TODO()
-		cli.NegotiateAPIVersion(ctx)
-		cs, err := cli.ContainerList(ctx, container.ListOptions{
-			All: true,
-			Filters: filters.NewArgs(
-				filters.Arg("label", consts.CleanupLabel+"="+cleanupLabel),
-			),
+		cs, err := cli.ContainerList(ctx, client.ContainerListOptions{
+			All:     true,
+			Filters: make(client.Filters).Add("label", consts.CleanupLabel+"="+cleanupLabel),
 		})
 		if err != nil {
 			t.Logf("Failed to list containers during docker cleanup: %v", err)
 			return
 		}
 
-		for _, c := range cs {
+		for _, c := range cs.Items {
 			if shouldShowContainerLogs(t.Failed(), showContainerLogs) {
 				logOptions := configureLogOptions(t.Failed(), containerLogTail)
 				displayContainerLogs(ctx, t, cli, c.ID, c.Names, logOptions)
 			}
 			if !keepContainers {
-				var stopTimeout container.StopOptions
+				var stopTimeout client.ContainerStopOptions
 				timeout := 10
 				timeoutDur := time.Duration(timeout * int(time.Second))
 				deadline := time.Now().Add(timeoutDur)
 				stopTimeout.Timeout = &timeout
-				if err := cli.ContainerStop(ctx, c.ID, stopTimeout); IsLoggableStopError(err) {
+				if _, err := cli.ContainerStop(ctx, c.ID, stopTimeout); IsLoggableStopError(err) {
 					t.Logf("Failed to stop container %s during docker cleanup: %v", c.ID, err)
 				}
 
 				waitCtx, cancel := context.WithDeadline(ctx, deadline.Add(500*time.Millisecond))
-				waitCh, errCh := cli.ContainerWait(waitCtx, c.ID, container.WaitConditionNotRunning)
+				waitResult := cli.ContainerWait(waitCtx, c.ID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 				select {
 				case <-waitCtx.Done():
 					t.Logf("Timed out waiting for container %s", c.ID)
-				case err := <-errCh:
+				case err := <-waitResult.Error:
 					t.Logf("Failed to wait for container %s during docker cleanup: %v", c.ID, err)
-				case res := <-waitCh:
+				case res := <-waitResult.Result:
 					if res.Error != nil {
 						t.Logf("Error while waiting for container %s during docker cleanup: %s", c.ID, res.Error.Message)
 					}
@@ -128,7 +123,7 @@ func CleanupWithLabel(t SetupTestingT, cli types.TastoraDockerClient, cleanupLab
 				}
 				cancel()
 
-				if err := cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{
+				if _, err := cli.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{
 					// Not removing volumes with the container, because we separately handle them conditionally.
 					Force: true,
 				}); err != nil {
@@ -160,21 +155,22 @@ func PruneVolumesWithRetryAndCleanupLabel(ctx context.Context, t SetupTestingT, 
 	err := retry.Do(
 		func() error {
 			// List volumes with the cleanup label
-			filterArgs := filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+cleanupLabel))
-			volumeList, err := cli.VolumeList(ctx, volume.ListOptions{Filters: filterArgs})
+			volumeList, err := cli.VolumeList(ctx, client.VolumeListOptions{
+				Filters: make(client.Filters).Add("label", consts.CleanupLabel+"="+cleanupLabel),
+			})
 			if err != nil {
 				return retry.Unrecoverable(fmt.Errorf("listing volumes: %w", err))
 			}
 
 			// explicitly remove each volume.
-			for _, vol := range volumeList.Volumes {
+			for _, vol := range volumeList.Items {
 				var spaceReclaimed uint64
 				// try to get volume size before removal
 				if vol.UsageData != nil {
 					spaceReclaimed = uint64(vol.UsageData.Size)
 				}
 
-				err := cli.VolumeRemove(ctx, vol.Name, true)
+				_, err := cli.VolumeRemove(ctx, vol.Name, client.VolumeRemoveOptions{Force: true})
 				if err != nil {
 					if errdefs.IsConflict(err) {
 						return err
@@ -211,7 +207,9 @@ func PruneNetworksWithRetryAndCleanupLabel(ctx context.Context, t SetupTestingT,
 	var deleted []string
 	err := retry.Do(
 		func() error {
-			res, err := cli.NetworksPrune(ctx, filters.NewArgs(filters.Arg("label", consts.CleanupLabel+"="+cleanupLabel)))
+			res, err := cli.NetworkPrune(ctx, client.NetworkPruneOptions{
+				Filters: make(client.Filters).Add("label", consts.CleanupLabel+"="+cleanupLabel),
+			})
 			if err != nil {
 				if errdefs.IsConflict(err) {
 					// Prune is already in progress; try again.
@@ -222,7 +220,7 @@ func PruneNetworksWithRetryAndCleanupLabel(ctx context.Context, t SetupTestingT,
 				return retry.Unrecoverable(err)
 			}
 
-			deleted = res.NetworksDeleted
+			deleted = res.Report.NetworksDeleted
 			return nil
 		},
 		retry.Context(ctx),
@@ -251,8 +249,8 @@ func shouldShowContainerLogs(testFailed bool, showContainerLogs string) bool {
 }
 
 // configureLogOptions creates container log options based on test status and environment variables
-func configureLogOptions(testFailed bool, containerLogTail string) container.LogsOptions {
-	logOptions := container.LogsOptions{
+func configureLogOptions(testFailed bool, containerLogTail string) client.ContainerLogsOptions {
+	logOptions := client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 	}
@@ -277,7 +275,7 @@ func displayContainerLogs(
 	cli types.TastoraDockerClient,
 	containerID string,
 	containerNames []string,
-	logOptions container.LogsOptions,
+	logOptions client.ContainerLogsOptions,
 ) {
 	rc, err := cli.ContainerLogs(ctx, containerID, logOptions)
 	if err != nil {

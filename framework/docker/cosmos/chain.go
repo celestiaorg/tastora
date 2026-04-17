@@ -24,7 +24,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	dockerimagetypes "github.com/docker/docker/api/types/image"
+	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -524,7 +524,7 @@ func (c *Chain) pullImages(ctx context.Context) {
 		rc, err := c.Config.DockerClient.ImagePull(
 			ctx,
 			image.Ref(),
-			dockerimagetypes.PullOptions{},
+			client.ImagePullOptions{},
 		)
 		if err != nil {
 			c.log.Error("Failed to pull image",

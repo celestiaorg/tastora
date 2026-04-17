@@ -3,17 +3,20 @@ package internal
 import (
 	"context"
 	"fmt"
-	"github.com/celestiaorg/tastora/framework/types"
 	"net"
+
+	"github.com/celestiaorg/tastora/framework/types"
+	dockerclient "github.com/moby/moby/client"
 )
 
 // GetContainerInternalIP returns the internal IP address of a container within the docker network.
 // Returns empty string if container is not yet networked (no error).
 func GetContainerInternalIP(ctx context.Context, client types.TastoraDockerClient, containerID string) (string, error) {
-	inspect, err := client.ContainerInspect(ctx, containerID)
+	inspectResult, err := client.ContainerInspect(ctx, containerID, dockerclient.ContainerInspectOptions{})
 	if err != nil {
 		return "", fmt.Errorf("inspecting container: %w", err)
 	}
+	inspect := inspectResult.Container
 	if inspect.NetworkSettings == nil {
 		return "", nil
 	}
@@ -23,8 +26,8 @@ func GetContainerInternalIP(ctx context.Context, client types.TastoraDockerClien
 	}
 
 	for _, network := range networks {
-		if network.IPAddress != "" {
-			return network.IPAddress, nil
+		if network.IPAddress.IsValid() {
+			return network.IPAddress.String(), nil
 		}
 	}
 	return "", nil

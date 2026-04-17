@@ -31,7 +31,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -462,16 +462,20 @@ func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 
 	// get internal ports from configuration and create port map
 	internalPorts := cn.getInternalPorts()
-	usingPorts := nat.PortMap{
-		nat.Port(internalPorts.P2P + "/tcp"):  {},
-		nat.Port(internalPorts.RPC + "/tcp"):  {},
-		nat.Port(internalPorts.GRPC + "/tcp"): {},
-		nat.Port(internalPorts.API + "/tcp"):  {},
-		nat.Port(privValPort):                 {},
+	usingPorts := network.PortMap{
+		network.MustParsePort(internalPorts.P2P + "/tcp"):  {},
+		network.MustParsePort(internalPorts.RPC + "/tcp"):  {},
+		network.MustParsePort(internalPorts.GRPC + "/tcp"): {},
+		network.MustParsePort(internalPorts.API + "/tcp"):  {},
+		network.MustParsePort(privValPort):                 {},
 	}
 
 	for _, port := range cn.AdditionalExposedPorts {
-		usingPorts[nat.Port(port+"/tcp")] = []nat.PortBinding{}
+		p, err := network.ParsePort(port + "/tcp")
+		if err != nil {
+			return fmt.Errorf("invalid additional exposed port %q: %w", port, err)
+		}
+		usingPorts[p] = []network.PortBinding{}
 	}
 
 	return cn.CreateContainer(ctx, cn.TestName, cn.NetworkID, cn.Image, usingPorts, "", cn.Bind(), nil, cn.HostName(), cmd, cn.Env, []string{})

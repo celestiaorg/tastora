@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/moby/moby/client"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
@@ -19,7 +20,9 @@ import (
 // NewLocalKeyringFromDockerContainer copies the contents of the given container directory into a specified local directory.
 // This allows test hosts to sign transactions on behalf of test users.
 func NewLocalKeyringFromDockerContainer(ctx context.Context, dc types.TastoraDockerClient, localDirectory, containerKeyringDir, containerID string) (keyring.Keyring, error) {
-	reader, _, err := dc.CopyFromContainer(ctx, containerID, containerKeyringDir)
+	copyResult, err := dc.CopyFromContainer(ctx, containerID, client.CopyFromContainerOptions{
+		SourcePath: containerKeyringDir,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -27,6 +30,10 @@ func NewLocalKeyringFromDockerContainer(ctx context.Context, dc types.TastoraDoc
 	if err := os.MkdirAll(filepath.Join(localDirectory, "keyring-test"), os.ModePerm); err != nil {
 		return nil, err
 	}
+	reader := copyResult.Content
+	defer func() {
+		_ = reader.Close()
+	}()
 	tr := tar.NewReader(reader)
 	for {
 		hdr, err := tr.Next()

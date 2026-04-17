@@ -11,7 +11,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/types"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"go.uber.org/zap"
 )
 
@@ -116,10 +116,10 @@ func (n *Node) createContainer(ctx context.Context) error {
 		n.internalPorts.API = defaultQueryPort
 	}
 
-	ports := nat.PortMap{
-		nat.Port(n.internalPorts.GRPC + "/tcp"): {},
-		nat.Port(n.internalPorts.HTTP + "/tcp"): {},
-		nat.Port(n.internalPorts.API + "/tcp"):  {},
+	ports := network.PortMap{
+		network.MustParsePort(n.internalPorts.GRPC + "/tcp"): {},
+		network.MustParsePort(n.internalPorts.HTTP + "/tcp"): {},
+		network.MustParsePort(n.internalPorts.API + "/tcp"):  {},
 	}
 	// Enable OTLP receivers, keep default entrypoint/cmd
 	env := []string{"COLLECTOR_OTLP_ENABLED=true"}

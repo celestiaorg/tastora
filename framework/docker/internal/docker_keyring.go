@@ -11,7 +11,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/client"
 	"os"
 	"path/filepath"
 	"sync"
@@ -298,17 +298,23 @@ func (d *dockerKeyring) MigrateAll() ([]*keyring.Record, error) {
 
 // execCommand executes a command in the Docker container.
 func (d *dockerKeyring) execCommand(ctx context.Context, cmd []string) error {
-	execConfig := container.ExecOptions{
+	exec, err := d.dockerClient.ExecCreate(ctx, d.containerID, client.ExecCreateOptions{
 		Cmd: cmd,
-	}
-
-	exec, err := d.dockerClient.ContainerExecCreate(ctx, d.containerID, execConfig)
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create exec: %w", err)
 	}
 
-	if err := d.dockerClient.ContainerExecStart(ctx, exec.ID, container.ExecStartOptions{}); err != nil {
+	if _, err := d.dockerClient.ExecStart(ctx, exec.ID, client.ExecStartOptions{}); err != nil {
 		return fmt.Errorf("failed to execute command: %w", err)
+	}
+
+	inspect, err := d.dockerClient.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to inspect exec result: %w", err)
+	}
+	if inspect.ExitCode != 0 {
+		return fmt.Errorf("command %v exited with non-zero status: %d", cmd, inspect.ExitCode)
 	}
 
 	return nil
@@ -404,7 +410,10 @@ func (d *dockerKeyring) persistKeyringToContainer() error {
 	}
 
 	// copy the entire tmp keyring directory to the container.
-	if err := d.dockerClient.CopyToContainer(context.TODO(), d.containerID, d.containerKeyringDir, tarReader, container.CopyToContainerOptions{}); err != nil {
+	if _, err := d.dockerClient.CopyToContainer(context.TODO(), d.containerID, client.CopyToContainerOptions{
+		DestinationPath: d.containerKeyringDir,
+		Content:         tarReader,
+	}); err != nil {
 		return fmt.Errorf("failed to copy keyring directory to container: %w", err)
 	}
 
@@ -436,10 +445,18 @@ func (d *dockerKeyring) deleteKeyFromContainer(uid string) error {
 	return nil
 }
 
-// renameKeyInContainer renames a key file in the Docker container
-func (d *dockerKeyring) renameKeyInContainer(ctx context.Context, from, to string) error {
-	fromPath := filepath.Join(d.containerKeyringDir, from)
-	toPath := filepath.Join(d.containerKeyringDir, to)
-
-	return d.execCommand(ctx, []string{"mv", fromPath, toPath})
+// renameKeyInContainer syncs the renamed key state to the container. The
+// local keyring has already performed the rename (updating {from}.info to
+// {to}.info and the address file contents), so we remove the stale
+// {from}.info file from the container and push the updated local state via
+// persistKeyringToContainer (which only adds or overwrites files).
+func (d *dockerKeyring) renameKeyInContainer(ctx context.Context, from, _ string) error {
+	staleInfoPath := filepath.Join(d.containerKeyringDir, from+".info")
+	if err := d.execCommand(ctx, []string{"rm", "-f", staleInfoPath}); err != nil {
+		return fmt.Errorf("remove stale key file: %w", err)
+	}
+	if err := d.persistKeyringToContainer(); err != nil {
+		return fmt.Errorf("persist renamed keyring: %w", err)
+	}
+	return nil
 }

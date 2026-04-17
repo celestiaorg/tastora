@@ -13,7 +13,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/types"
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -28,13 +28,13 @@ const (
 	evstackHttpPort = "8080/tcp"
 )
 
-var evstackSentryPorts = nat.PortMap{
-	nat.Port(p2pPort):         {},
-	nat.Port(evstackRpcPort):  {}, // evstack uses a different rpc port
-	nat.Port(grpcPort):        {},
-	nat.Port(apiPort):         {},
-	nat.Port(privValPort):     {},
-	nat.Port(evstackHttpPort): {},
+var evstackSentryPorts = network.PortMap{
+	network.MustParsePort(p2pPort):         {},
+	network.MustParsePort(evstackRpcPort):  {}, // evstack uses a different rpc port
+	network.MustParsePort(grpcPort):        {},
+	network.MustParsePort(apiPort):         {},
+	network.MustParsePort(privValPort):     {},
+	network.MustParsePort(evstackHttpPort): {},
 }
 
 type Node struct {
@@ -141,7 +141,7 @@ func (n *Node) Start(ctx context.Context, startArguments ...string) error {
 // createEvstackContainer initializes but does not start a container for the Node with the specified configuration and context.
 func (n *Node) createEvstackContainer(ctx context.Context, additionalStartArgs ...string) error {
 
-	usingPorts := nat.PortMap{}
+	usingPorts := network.PortMap{}
 	for k, v := range evstackSentryPorts {
 		usingPorts[k] = v
 	}

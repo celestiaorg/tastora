@@ -13,7 +13,8 @@ import (
 	internaldocker "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -40,37 +41,37 @@ func (r *Retriever) SingleFileContent(ctx context.Context, volumeName, relPath s
 
 	containerName := fmt.Sprintf("%s-getfile-%d-%s", consts.CelestiaDockerPrefix, time.Now().UnixNano(), random.LowerCaseLetterString(5))
 
-	cc, err := r.cli.ContainerCreate(
-		ctx,
-		&container.Config{
+	cc, err := r.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Name: containerName,
+		Config: &container.Config{
 			Image: internaldocker.BusyboxRef,
 			// Use root user to avoid permission issues when reading files from the volume.
 			User:   consts.UserRootString,
 			Labels: map[string]string{consts.CleanupLabel: r.cli.CleanupLabel()},
 		},
-		&container.HostConfig{
+		HostConfig: &container.HostConfig{
 			Binds: []string{volumeName + ":" + mountPath},
 		},
-		nil, // No networking necessary.
-		nil,
-		containerName,
-	)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("creating container: %w", err)
 	}
 
 	defer func() {
-		if err := r.cli.ContainerRemove(ctx, cc.ID, container.RemoveOptions{
+		if _, err := r.cli.ContainerRemove(ctx, cc.ID, client.ContainerRemoveOptions{
 			Force: true,
 		}); err != nil {
 			r.log.Warn("Failed to remove file content container", zap.String("container_id", cc.ID), zap.Error(err))
 		}
 	}()
 
-	rc, _, err := r.cli.CopyFromContainer(ctx, cc.ID, path.Join(mountPath, relPath))
+	copyResult, err := r.cli.CopyFromContainer(ctx, cc.ID, client.CopyFromContainerOptions{
+		SourcePath: path.Join(mountPath, relPath),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("copying from container: %w", err)
 	}
+	rc := copyResult.Content
 	defer func() {
 		_ = rc.Close()
 	}()

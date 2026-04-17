@@ -11,7 +11,9 @@ import (
     "github.com/celestiaorg/tastora/framework/docker/container"
     "github.com/celestiaorg/tastora/framework/docker/internal"
     "github.com/celestiaorg/tastora/framework/types"
-    "github.com/docker/go-connections/nat"
+    "net/netip"
+
+    "github.com/moby/moby/api/types/network"
     "go.uber.org/zap"
 )
 
@@ -124,9 +126,9 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
         }
     }
 
-    port := nat.Port(p.Web + "/tcp")
-    ports := nat.PortMap{
-        port: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: ""}},
+    port := network.MustParsePort(p.Web + "/tcp")
+    ports := network.PortMap{
+        port: []network.PortBinding{{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: ""}},
     }
 
     // IMPORTANT: override entrypoint to the daemon (absolute path inside image)

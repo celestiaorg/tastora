@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/types"
-	dockerimagetypes "github.com/docker/docker/api/types/image"
-	"io"
+	dockerclient "github.com/moby/moby/client"
 )
 
 type Image struct {
@@ -33,14 +32,16 @@ func (i Image) Ref() string {
 
 func (i Image) PullImage(ctx context.Context, client types.TastoraDockerClient) error {
 	ref := i.Ref()
-	_, _, err := client.ImageInspectWithRaw(ctx, ref)
+	_, err := client.ImageInspect(ctx, ref)
 	if err != nil {
-		rc, err := client.ImagePull(ctx, ref, dockerimagetypes.PullOptions{})
+		rc, err := client.ImagePull(ctx, ref, dockerclient.ImagePullOptions{})
 		if err != nil {
 			return fmt.Errorf("pull image %s: %w", ref, err)
 		}
-		_, _ = io.Copy(io.Discard, rc)
-		_ = rc.Close()
+		defer func() { _ = rc.Close() }()
+		if err := rc.Wait(ctx); err != nil {
+			return fmt.Errorf("pull image %s: %w", ref, err)
+		}
 	}
 	return nil
 }

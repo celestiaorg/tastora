@@ -9,9 +9,10 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/file"
 	"github.com/celestiaorg/tastora/framework/docker/volume"
 	"github.com/celestiaorg/tastora/framework/types"
-	"github.com/docker/docker/api/types/mount"
-	volumetypes "github.com/docker/docker/api/types/volume"
-	"github.com/docker/go-connections/nat"
+	"github.com/containerd/errdefs"
+	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -129,7 +130,7 @@ func (n *Node) CreateContainer(ctx context.Context,
 	testName string,
 	networkID string,
 	image Image,
-	ports nat.PortMap,
+	ports network.PortMap,
 	ipAddr string,
 	volumeBinds []string,
 	mounts []mount.Mount,
@@ -191,10 +192,13 @@ func (n *Node) CreateAndSetupVolume(ctx context.Context, nodeName string) error 
 // ensureVolume checks if a volume with the given name exists, and creates it if it doesn't.
 func (n *Node) ensureVolume(ctx context.Context, nodeName, volName string) error {
 	// check if volume already exists
-	_, err := n.DockerClient.VolumeInspect(ctx, volName)
+	_, err := n.DockerClient.VolumeInspect(ctx, volName, client.VolumeInspectOptions{})
 	if err != nil {
+		if !errdefs.IsNotFound(err) {
+			return fmt.Errorf("inspecting volume %s: %w", volName, err)
+		}
 		// volume doesn't exist, create it
-		v, createErr := n.DockerClient.VolumeCreate(ctx, volumetypes.CreateOptions{
+		v, createErr := n.DockerClient.VolumeCreate(ctx, client.VolumeCreateOptions{
 			Name: volName,
 			Labels: map[string]string{
 				consts.CleanupLabel:   n.DockerClient.CleanupLabel(),
@@ -204,7 +208,7 @@ func (n *Node) ensureVolume(ctx context.Context, nodeName, volName string) error
 		if createErr != nil {
 			return fmt.Errorf("creating volume for %s: %w", n.nodeType.String(), createErr)
 		}
-		volName = v.Name
+		volName = v.Volume.Name
 	}
 
 	n.VolumeName = volName
