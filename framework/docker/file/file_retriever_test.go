@@ -6,7 +6,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/consts"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/file"
-	volumetypes "github.com/docker/docker/api/types/volume"
+	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"testing"
@@ -22,7 +22,7 @@ func TestFileRetriever(t *testing.T) {
 	cli, network := docker.Setup(t)
 
 	ctx := context.Background()
-	v, err := cli.VolumeCreate(ctx, volumetypes.CreateOptions{
+	v, err := cli.VolumeCreate(ctx, client.VolumeCreateOptions{
 		Labels: map[string]string{consts.CleanupLabel: t.Name()},
 	})
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestFileRetriever(t *testing.T) {
 		ctx,
 		[]string{"sh", "-c", "chmod 0700 /mnt/test && printf 'hello world' > /mnt/test/hello.txt"},
 		container.Options{
-			Binds: []string{v.Name + ":/mnt/test"},
+			Binds: []string{v.Volume.Name + ":/mnt/test"},
 			User:  consts.UserRootString,
 		},
 	)
@@ -48,7 +48,7 @@ func TestFileRetriever(t *testing.T) {
 		ctx,
 		[]string{"sh", "-c", "mkdir -p /mnt/test/foo/bar/ && printf 'test' > /mnt/test/foo/bar/baz.txt"},
 		container.Options{
-			Binds: []string{v.Name + ":/mnt/test"},
+			Binds: []string{v.Volume.Name + ":/mnt/test"},
 			User:  consts.UserRootString,
 		},
 	)
@@ -57,13 +57,13 @@ func TestFileRetriever(t *testing.T) {
 	fr := file.NewRetriever(zaptest.NewLogger(t), cli, t.Name())
 
 	t.Run("top-level file", func(t *testing.T) {
-		b, err := fr.SingleFileContent(ctx, v.Name, "hello.txt")
+		b, err := fr.SingleFileContent(ctx, v.Volume.Name, "hello.txt")
 		require.NoError(t, err)
 		require.Equal(t, "hello world", string(b))
 	})
 
 	t.Run("nested file", func(t *testing.T) {
-		b, err := fr.SingleFileContent(ctx, v.Name, "foo/bar/baz.txt")
+		b, err := fr.SingleFileContent(ctx, v.Volume.Name, "foo/bar/baz.txt")
 		require.NoError(t, err)
 		require.Equal(t, "test", string(b))
 	})

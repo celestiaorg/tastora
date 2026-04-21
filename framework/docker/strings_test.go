@@ -1,14 +1,14 @@
 package docker
 
 import (
+	"net/netip"
 	"testing"
 
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/docker/port"
 	"github.com/celestiaorg/tastora/framework/testutil/random"
-	"github.com/docker/docker/api/types/container"
-
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,33 +22,29 @@ func TestGetHostPort(t *testing.T) {
 		{
 			container.InspectResponse{
 				NetworkSettings: &container.NetworkSettings{
-					NetworkSettingsBase: container.NetworkSettingsBase{
-						Ports: nat.PortMap{
-							nat.Port("test"): []nat.PortBinding{
-								{HostIP: "1.2.3.4", HostPort: "8080"},
-								{HostIP: "0.0.0.0", HostPort: "9999"},
-							},
+					Ports: network.PortMap{
+						network.MustParsePort("8080/tcp"): []network.PortBinding{
+							{HostIP: netip.MustParseAddr("1.2.3.4"), HostPort: "8080"},
+							{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "9999"},
 						},
 					},
 				},
-			}, "test", "1.2.3.4:8080",
+			}, "8080/tcp", "1.2.3.4:8080",
 		},
 		{
 			container.InspectResponse{
 				NetworkSettings: &container.NetworkSettings{
-					NetworkSettingsBase: container.NetworkSettingsBase{
-						Ports: nat.PortMap{
-							nat.Port("test"): []nat.PortBinding{
-								{HostIP: "0.0.0.0", HostPort: "3000"},
-							},
+					Ports: network.PortMap{
+						network.MustParsePort("3000/tcp"): []network.PortBinding{
+							{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: "3000"},
 						},
 					},
 				},
-			}, "test", "0.0.0.0:3000",
+			}, "3000/tcp", "0.0.0.0:3000",
 		},
 
 		{container.InspectResponse{}, "", ""},
-		{container.InspectResponse{NetworkSettings: &container.NetworkSettings{}}, "does-not-matter", ""},
+		{container.InspectResponse{NetworkSettings: &container.NetworkSettings{}}, "9999/tcp", ""},
 	} {
 		require.Equal(t, tt.Want, port.GetForHost(tt.Container, tt.PortID), tt)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/netip"
 	"regexp"
 	"strings"
 	"time"
@@ -13,13 +14,11 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/port"
 	"github.com/celestiaorg/tastora/framework/types"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/mount"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/volume"
-	"github.com/docker/go-connections/nat"
-	"github.com/moby/moby/errdefs"
+	"github.com/containerd/errdefs"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 )
 
@@ -47,7 +46,7 @@ func (c *Lifecycle) CreateContainer(
 	testName string,
 	networkID string,
 	image Image,
-	ports nat.PortMap,
+	ports network.PortMap,
 	ipAddr string,
 	volumeBinds []string,
 	mounts []mount.Mount,
@@ -68,7 +67,7 @@ func (c *Lifecycle) CreateContainer(
 		return err
 	}
 
-	pS := nat.PortSet{}
+	pS := network.PortSet{}
 	for k := range ports {
 		pS[k] = struct{}{}
 	}
@@ -84,40 +83,47 @@ func (c *Lifecycle) CreateContainer(
 	if ipAddr == "" {
 		endpointSettings = network.EndpointSettings{}
 	} else {
+		addr, parseErr := netip.ParseAddr(ipAddr)
+		if parseErr != nil {
+			listeners.CloseAll()
+			c.preStartListeners = port.Listeners{}
+			return fmt.Errorf("invalid container IP %q: %w", ipAddr, parseErr)
+		}
 		endpointSettings = network.EndpointSettings{
 			IPAMConfig: &network.EndpointIPAMConfig{
-				IPv4Address: ipAddr,
+				IPv4Address: addr,
 			},
 		}
 	}
 
 	cc, err := c.client.ContainerCreate(
 		ctx,
-		&container.Config{
-			Image: imageRef,
+		client.ContainerCreateOptions{
+			Name: c.containerName,
+			Config: &container.Config{
+				Image: imageRef,
 
-			Entrypoint:   entrypoint,
-			Cmd:          cmd,
-			Env:          env,
-			Hostname:     hostName,
-			Labels:       map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
-			ExposedPorts: pS,
-		},
-		&container.HostConfig{
-			Binds:           volumeBinds,
-			PortBindings:    pb,
-			PublishAllPorts: true,
-			AutoRemove:      false,
-			DNS:             []string{},
-			Mounts:          mounts,
-		},
-		&network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{
-				networkID: &endpointSettings,
+				Entrypoint:   entrypoint,
+				Cmd:          cmd,
+				Env:          env,
+				Hostname:     hostName,
+				Labels:       map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
+				ExposedPorts: pS,
+			},
+			HostConfig: &container.HostConfig{
+				Binds:           volumeBinds,
+				PortBindings:    pb,
+				PublishAllPorts: true,
+				AutoRemove:      false,
+				DNS:             []netip.Addr{},
+				Mounts:          mounts,
+			},
+			NetworkingConfig: &network.NetworkingConfig{
+				EndpointsConfig: map[string]*network.EndpointSettings{
+					networkID: &endpointSettings,
+				},
 			},
 		},
-		nil,
-		c.containerName,
 	)
 	if err != nil {
 		listeners.CloseAll()
@@ -153,7 +159,7 @@ func (c *Lifecycle) StartContainer(ctx context.Context) error {
 func (c *Lifecycle) checkForFailedStart(ctx context.Context, wait time.Duration) error {
 	time.Sleep(wait)
 
-	containerLogs, err := c.client.ContainerLogs(ctx, c.id, container.LogsOptions{
+	containerLogs, err := c.client.ContainerLogs(ctx, c.id, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 	})
@@ -174,10 +180,11 @@ func (c *Lifecycle) checkForFailedStart(ctx context.Context, wait time.Duration)
 		return fmt.Errorf("container %s failed to start: %w", c.containerName, err)
 	}
 
-	inspect, err := c.client.ContainerInspect(ctx, c.id)
+	inspectResult, err := c.client.ContainerInspect(ctx, c.id, client.ContainerInspectOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to inspect container %s: %w", c.containerName, err)
 	}
+	inspect := inspectResult.Container
 
 	if !inspect.State.Running {
 		return fmt.Errorf("container %s exited early (status: %s, exit code: %d)\nlogs:\n %s", c.containerName, inspect.State.Status, inspect.State.ExitCode, logs)
@@ -204,19 +211,18 @@ func parseSDKPanicFromText(text string) error {
 }
 
 func (c *Lifecycle) PauseContainer(ctx context.Context) error {
-	return c.client.ContainerPause(ctx, c.id)
+	_, err := c.client.ContainerPause(ctx, c.id, client.ContainerPauseOptions{})
+	return err
 }
 
 func (c *Lifecycle) UnpauseContainer(ctx context.Context) error {
-	return c.client.ContainerUnpause(ctx, c.id)
+	_, err := c.client.ContainerUnpause(ctx, c.id, client.ContainerUnpauseOptions{})
+	return err
 }
 
 func (c *Lifecycle) StopContainer(ctx context.Context) error {
-	var timeout container.StopOptions
 	timeoutSec := 30
-	timeout.Timeout = &timeoutSec
-
-	err := c.client.ContainerStop(ctx, c.id, timeout)
+	_, err := c.client.ContainerStop(ctx, c.id, client.ContainerStopOptions{Timeout: &timeoutSec})
 	if err != nil && errdefs.IsNotModified(err) {
 		// container is already stopped, this is not an error
 		return nil
@@ -229,7 +235,7 @@ func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOpt
 	// Note: RemoveVolumes only removes anonymous volumes attached to the container.
 	// Named volumes created with VolumeCreate() must be removed separately.
 	// Reference: https://github.com/docker/cli/issues/4028 - Docker API behavior for volume removal
-	err := c.client.ContainerRemove(ctx, c.id, ApplyRemoveOptions(opts...))
+	_, err := c.client.ContainerRemove(ctx, c.id, ApplyRemoveOptions(opts...))
 	if err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("remove container %s: %w", c.containerName, err)
 	}
@@ -237,14 +243,15 @@ func (c *Lifecycle) RemoveContainer(ctx context.Context, opts ...types.RemoveOpt
 }
 
 func (c *Lifecycle) RemoveVolumes(ctx context.Context) error {
-	filterArgs := filters.NewArgs(filters.Arg("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, c.client.CleanupLabel())))
-	volumeList, err := c.client.VolumeList(ctx, volume.ListOptions{Filters: filterArgs})
+	volumeList, err := c.client.VolumeList(ctx, client.VolumeListOptions{
+		Filters: make(client.Filters).Add("label", fmt.Sprintf("%s=%s", consts.CleanupLabel, c.client.CleanupLabel())),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to list volumes: %w", err)
 	}
 
-	for _, vol := range volumeList.Volumes {
-		err := c.client.VolumeRemove(ctx, vol.Name, true)
+	for _, vol := range volumeList.Items {
+		_, err := c.client.VolumeRemove(ctx, vol.Name, client.VolumeRemoveOptions{Force: true})
 		if err != nil {
 			c.log.Warn("Failed to force remove volume", zap.String("volume", vol.Name), zap.Error(err))
 		}
@@ -257,13 +264,13 @@ func (c *Lifecycle) ContainerID() string {
 }
 
 func (c *Lifecycle) GetHostPorts(ctx context.Context, portIDs ...string) ([]string, error) {
-	cjson, err := c.client.ContainerInspect(ctx, c.id)
+	cjsonResult, err := c.client.ContainerInspect(ctx, c.id, client.ContainerInspectOptions{})
 	if err != nil {
 		return nil, err
 	}
 	ports := make([]string, len(portIDs))
 	for i, p := range portIDs {
-		ports[i] = port.GetForHost(cjson, p)
+		ports[i] = port.GetForHost(cjsonResult.Container, p)
 	}
 	return ports, nil
 }
@@ -271,18 +278,18 @@ func (c *Lifecycle) GetHostPorts(ctx context.Context, portIDs ...string) ([]stri
 // Running will inspect the container and check its state to determine if it is currently running.
 // If the container is running nil will be returned, otherwise an error is returned.
 func (c *Lifecycle) Running(ctx context.Context) error {
-	cjson, err := c.client.ContainerInspect(ctx, c.id)
+	cjsonResult, err := c.client.ContainerInspect(ctx, c.id, client.ContainerInspectOptions{})
 	if err != nil {
 		return err
 	}
-	if cjson.State.Running {
+	if cjsonResult.Container.State.Running {
 		return nil
 	}
 	return fmt.Errorf("container with name %s and id %s is not running", c.containerName, c.id)
 }
 
-func ApplyRemoveOptions(opts ...types.RemoveOption) container.RemoveOptions {
-	removeOpts := container.RemoveOptions{
+func ApplyRemoveOptions(opts ...types.RemoveOption) client.ContainerRemoveOptions {
+	removeOpts := client.ContainerRemoveOptions{
 		Force:         true,
 		RemoveVolumes: true,
 	}

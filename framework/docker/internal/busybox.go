@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
-	"github.com/docker/docker/api/types/filters"
-	dockerimagetypes "github.com/docker/docker/api/types/image"
+	"github.com/moby/moby/client"
 )
 
 // Allow multiple goroutines to check for busybox
@@ -33,21 +32,21 @@ func EnsureBusybox(ctx context.Context, cli types.TastoraDockerClient) error {
 		return nil
 	}
 
-	images, err := cli.ImageList(ctx, dockerimagetypes.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("reference", BusyboxRef)),
+	images, err := cli.ImageList(ctx, client.ImageListOptions{
+		Filters: make(client.Filters).Add("reference", BusyboxRef),
 	})
 	if err != nil {
 		return fmt.Errorf("listing images to check busybox presence: %w", err)
 	}
 
-	if len(images) > 0 {
+	if len(images.Items) > 0 {
 		hasBusybox = true
 		return nil
 	}
 
 	// Use wait.ForCondition to retry pulling the busybox image
 	err = wait.ForCondition(ctx, 60*time.Second, 5*time.Second, func() (bool, error) {
-		rc, err := cli.ImagePull(ctx, BusyboxRef, dockerimagetypes.PullOptions{})
+		rc, err := cli.ImagePull(ctx, BusyboxRef, client.ImagePullOptions{})
 		if err != nil {
 			return false, nil
 		}

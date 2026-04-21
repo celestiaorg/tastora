@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
+	"github.com/moby/moby/client"
 )
 
 // portAssignmentMu prevents race conditions during the critical window between
@@ -23,7 +23,7 @@ func StartContainer(ctx context.Context, cli types.TastoraDockerClient, id strin
 		defer cancel()
 	}
 
-	err := cli.ContainerStart(ctx, id, container.StartOptions{})
+	_, err := cli.ContainerStart(ctx, id, client.ContainerStartOptions{})
 	if err != nil {
 		return err
 	}

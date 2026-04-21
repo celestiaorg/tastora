@@ -18,7 +18,7 @@ import (
 	dockerutil "github.com/celestiaorg/tastora/framework/testutil/docker"
 	tomlutil "github.com/celestiaorg/tastora/framework/testutil/toml"
 	"github.com/celestiaorg/tastora/framework/types"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"go.uber.org/zap"
 )
 
@@ -279,7 +279,10 @@ func (n *Node) startNode(ctx context.Context, additionalStartArgs []string, conf
 func (n *Node) createNodeContainer(ctx context.Context, additionalStartArgs []string, env []string) error {
 	cmd := []string{n.cfg.Bin, n.nodeType.String(), "start", "--node.store", n.HomeDir()}
 	cmd = append(cmd, additionalStartArgs...)
-	usingPorts := n.getPortMap()
+	usingPorts, err := n.getPortMap()
+	if err != nil {
+		return err
+	}
 	return n.ContainerLifecycle.CreateContainer(ctx, n.TestName, n.NetworkID, n.cfg.Image, usingPorts, "", n.Bind(), nil, n.HostName(), cmd, env, []string{})
 }
 
@@ -299,11 +302,19 @@ func (n *Node) initAuthToken(ctx context.Context) error {
 }
 
 // getPortMap returns the port mapping for the node type.
-func (n *Node) getPortMap() nat.PortMap {
-	return nat.PortMap{
-		nat.Port(n.internalPorts.RPC + "/tcp"): {},
-		nat.Port(n.internalPorts.P2P + "/tcp"): {},
+func (n *Node) getPortMap() (network.PortMap, error) {
+	rpcPort, err := network.ParsePort(n.internalPorts.RPC + "/tcp")
+	if err != nil {
+		return nil, fmt.Errorf("invalid RPC port %q: %w", n.internalPorts.RPC, err)
 	}
+	p2pPort, err := network.ParsePort(n.internalPorts.P2P + "/tcp")
+	if err != nil {
+		return nil, fmt.Errorf("invalid P2P port %q: %w", n.internalPorts.P2P, err)
+	}
+	return network.PortMap{
+		rpcPort: {},
+		p2pPort: {},
+	}, nil
 }
 
 // ModifyConfigFiles modifies the specified config files with the provided TOML modifications.

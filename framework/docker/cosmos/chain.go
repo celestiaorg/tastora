@@ -24,7 +24,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	dockerimagetypes "github.com/docker/docker/api/types/image"
+	"github.com/moby/moby/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -50,6 +50,9 @@ type Chain struct {
 	started bool
 	// skipInit indicates whether to skip initialization when starting
 	skipInit bool
+	// blockWaitTimeout is the timeout for waiting for blocks after starting the chain.
+	// If zero, defaults to 120 seconds.
+	blockWaitTimeout time.Duration
 }
 
 func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
@@ -331,8 +334,11 @@ func (c *Chain) startAndInitializeNodes(ctx context.Context) error {
 	}
 
 	// Wait for blocks before considering the chains "started"
-	// Use a longer timeout for block waiting to handle slow chain startup
-	blockWaitCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	blockWaitTimeout := c.blockWaitTimeout
+	if blockWaitTimeout == 0 {
+		blockWaitTimeout = 120 * time.Second
+	}
+	blockWaitCtx, cancel := context.WithTimeout(ctx, blockWaitTimeout)
 	defer cancel()
 	if err := wait.ForBlocks(blockWaitCtx, 2, c.GetNode()); err != nil {
 		return err
@@ -518,7 +524,7 @@ func (c *Chain) pullImages(ctx context.Context) {
 		rc, err := c.Config.DockerClient.ImagePull(
 			ctx,
 			image.Ref(),
-			dockerimagetypes.PullOptions{},
+			client.ImagePullOptions{},
 		)
 		if err != nil {
 			c.log.Error("Failed to pull image",

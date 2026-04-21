@@ -6,8 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/go-connections/nat"
+	"net/netip"
+
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 )
 
 var mu sync.RWMutex
@@ -41,9 +43,9 @@ func OpenListener(port int) (*net.TCPListener, error) {
 // GenerateBindings will find open ports on the local
 // host and bind them to the container ports.
 // This is useful for cases where you want to find a random open port.
-func GenerateBindings(pairs nat.PortMap) (nat.PortMap, Listeners, error) {
+func GenerateBindings(pairs network.PortMap) (network.PortMap, Listeners, error) {
 	listeners := make(Listeners, 0)
-	bindings := make(nat.PortMap)
+	bindings := make(network.PortMap)
 
 	for port := range pairs {
 		// Listen on a random port
@@ -62,9 +64,9 @@ func GenerateBindings(pairs nat.PortMap) (nat.PortMap, Listeners, error) {
 		}
 		portStr := parts[len(parts)-1]
 
-		bindings[port] = []nat.PortBinding{
+		bindings[port] = []network.PortBinding{
 			{
-				HostIP:   "127.0.0.1",
+				HostIP:   netip.MustParseAddr("127.0.0.1"),
 				HostPort: portStr,
 			},
 		}
@@ -84,8 +86,12 @@ func GetForHost(cont container.InspectResponse, portID string) string {
 		return ""
 	}
 
-	if bindings, exists := ports[nat.Port(portID)]; exists && len(bindings) > 0 {
-		return bindings[0].HostIP + ":" + bindings[0].HostPort
+	p, err := network.ParsePort(portID)
+	if err != nil {
+		return ""
+	}
+	if bindings, exists := ports[p]; exists && len(bindings) > 0 {
+		return bindings[0].HostIP.String() + ":" + bindings[0].HostPort
 	}
 
 	return ""

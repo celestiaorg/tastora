@@ -9,7 +9,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/types"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"go.uber.org/zap"
 )
 
@@ -162,15 +162,19 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 
 	var (
 		cmd   []string
-		ports nat.PortMap
+		ports network.PortMap
 	)
 
 	switch rly.Mode {
 	case BackendMode:
 		cmd = append(cmd, "backend")
 
-		ports = nat.PortMap{
-			nat.Port(settings.PortValue() + "/tcp"): {},
+		p, err := network.ParsePort(settings.PortValue() + "/tcp")
+		if err != nil {
+			return fmt.Errorf("invalid backend port %q: %w", settings.PortValue(), err)
+		}
+		ports = network.PortMap{
+			p: {},
 		}
 
 	case RelayerMode:
