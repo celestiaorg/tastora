@@ -162,7 +162,7 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 // by broadcasting a MsgEnrollRemoteRouter via the provided broadcaster and wallet.
 // tokenID is the Cosmos bytes32 identifier for the router/token (hyputil.HexAddress),
 // remoteDomain is the EVM domain ID, and receiverContract is the EVM router contract (0x-prefixed hex).
-func (d *Deployer) EnrollRemoteRouterOnCosmos(ctx context.Context, b types.Broadcaster, wallet *types.Wallet, tokenID hyputil.HexAddress, remoteDomain uint32, receiverContract string) error {
+func (d *Deployer) EnrollRemoteRouterOnCosmos(ctx context.Context, b types.Broadcaster, wallet *types.Wallet, tokenID hyputil.HexAddress, remoteDomain uint32, receiverContract hyputil.HexAddress) error {
 	msg := &warptypes.MsgEnrollRemoteRouter{
 		Owner:   wallet.GetFormattedAddress(),
 		TokenId: tokenID,
@@ -175,7 +175,7 @@ func (d *Deployer) EnrollRemoteRouterOnCosmos(ctx context.Context, b types.Broad
 	if _, err := b.BroadcastMessages(ctx, wallet, msg); err != nil {
 		return fmt.Errorf("broadcast MsgEnrollRemoteRouter failed: %w", err)
 	}
-	d.Logger.Info("enrolled remote router on cosmos", zap.Uint32("remote_domain", remoteDomain), zap.String("receiver_contract", receiverContract))
+	d.Logger.Info("enrolled remote router on cosmos", zap.Uint32("remote_domain", remoteDomain), zap.String("receiver_contract", receiverContract.String()))
 	return nil
 }
 

@@ -127,7 +127,7 @@ func TestHyperlaneDeployer_MultiEVMChains(t *testing.T) {
 		evmDomain := entry.Metadata.DomainID
 
 		remoteTokenRouter := evm.PadAddress(tokenRouter) // leftpad to bytes32
-		require.NoError(t, d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucet, config.TokenID, evmDomain, remoteTokenRouter.String()))
+		require.NoError(t, d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucet, config.TokenID, evmDomain, remoteTokenRouter))
 	}
 
 	enrollRemote(reth0ChainName, reth0)
