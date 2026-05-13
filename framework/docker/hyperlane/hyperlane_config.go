@@ -24,7 +24,8 @@ func DefaultDeployerImage() container.Image {
 }
 
 func DefaultForwardRelayerImage() container.Image {
-	return container.NewImage("ghcr.io/celestiaorg/forwarding-relayer", "v0.1.0", "1000:1000")
+	// binary writes to /app/storage/ which is outside the volume, requires root
+	return container.NewImage("ghcr.io/celestiaorg/forwarding-relayer", "v0.1.0", "0:0")
 }
 
 // CosmosConfig contains the IDs of all deployed cosmos-native hyperlane components
