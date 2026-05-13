@@ -96,21 +96,25 @@ func (c *Lifecycle) CreateContainer(
 		}
 	}
 
+	containerCfg := &container.Config{
+		Image: imageRef,
+
+		Entrypoint:   entrypoint,
+		Cmd:          cmd,
+		Env:          env,
+		Hostname:     hostName,
+		Labels:       map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
+		ExposedPorts: pS,
+	}
+	if image.UIDGID != "" {
+		containerCfg.User = image.UIDGID
+	}
+
 	cc, err := c.client.ContainerCreate(
 		ctx,
 		client.ContainerCreateOptions{
-			Name: c.containerName,
-			Config: &container.Config{
-				Image: imageRef,
-				User:  image.UIDGID,
-
-				Entrypoint:   entrypoint,
-				Cmd:          cmd,
-				Env:          env,
-				Hostname:     hostName,
-				Labels:       map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
-				ExposedPorts: pS,
-			},
+			Name:   c.containerName,
+			Config: containerCfg,
 			HostConfig: &container.HostConfig{
 				Binds:           volumeBinds,
 				PortBindings:    pb,
