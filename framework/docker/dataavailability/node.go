@@ -76,7 +76,8 @@ type Node struct {
 	externalPorts types.Ports
 }
 
-func NewNode(cfg Config, testName string, image container.Image, homeDir string, index int, nodeConfig NodeConfig) *Node {
+func NewNode(cfg Config, testName string, image container.Image, index int, nodeConfig NodeConfig) *Node {
+	homeDir := cfg.HomeDir
 	if homeDir == "" {
 		homeDir = DefaultHomeDir()
 	}

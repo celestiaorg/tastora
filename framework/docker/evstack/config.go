@@ -24,6 +24,8 @@ type Config struct {
 	AggregatorPassphrase string
 	// Image specifies the Docker image used for the evstack nodes.
 	Image container.Image
+	// HomeDir is the home directory inside the container. Defaults to DefaultHomeDir().
+	HomeDir string
 }
 
 // DefaultHomeDir returns the default home directory for evstack containers.

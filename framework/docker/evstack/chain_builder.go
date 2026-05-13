@@ -193,9 +193,10 @@ func (b *ChainBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, index
 		Bin:                  b.binaryName,
 		AggregatorPassphrase: b.aggregatorPassphrase,
 		Image:                imageToUse,
+		HomeDir:              b.homeDir,
 	}
 
-	node := NewNode(cfg, b.testName, imageToUse, b.homeDir, index, nodeConfig.IsAggregator, b.getAdditionalStartArgs(nodeConfig))
+	node := NewNode(cfg, b.testName, imageToUse, index, nodeConfig.IsAggregator, b.getAdditionalStartArgs(nodeConfig))
 
 	// Create and setup volume using shared logic
 	if err := node.CreateAndSetupVolume(ctx, node.Name()); err != nil {

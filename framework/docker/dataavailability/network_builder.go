@@ -222,6 +222,7 @@ func (b *NetworkBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, ind
 		ChainID:         b.chainID,
 		Bin:             b.binaryName,
 		Image:           imageToUse,
+		HomeDir:         b.homeDir,
 		// Env and AdditionalStartArgs provide default set of values for all nodes, but can
 		// be individually overridden by nodeConfig.
 		Env:                 b.env,
@@ -236,7 +237,7 @@ func (b *NetworkBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, ind
 		nodeConfig.Env = b.env
 	}
 
-	node := NewNode(cfg, b.testName, imageToUse, b.homeDir, index, nodeConfig)
+	node := NewNode(cfg, b.testName, imageToUse, index, nodeConfig)
 
 	// Create and setup volume using shared logic
 	if err := node.CreateAndSetupVolume(ctx, node.Name()); err != nil {

@@ -32,10 +32,10 @@ func DefaultHomeDir() string {
 
 // DefaultImage returns the default container image for ev-node-evm.
 func DefaultImage() container.Image {
-    return container.Image{Repository: "ghcr.io/evstack/ev-node-evm", Version: "v1.0.0-rc.4", UIDGID: "10001:10001"}
+	return container.Image{Repository: "ghcr.io/evstack/ev-node-evm", Version: "v1.0.0-rc.4", UIDGID: "10001:10001"}
 }
 
 // DefaultBinary returns the default binary name for ev-node-evm.
 func DefaultBinary() string {
-    return "evm"
+	return "evm"
 }

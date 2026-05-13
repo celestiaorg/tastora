@@ -53,7 +53,8 @@ type Node struct {
 	externalPorts types.Ports
 }
 
-func NewNode(cfg Config, testName string, image container.Image, homeDir string, index int, isAggregator bool, additionalStartArgs []string) *Node {
+func NewNode(cfg Config, testName string, image container.Image, index int, isAggregator bool, additionalStartArgs []string) *Node {
+	homeDir := cfg.HomeDir
 	if homeDir == "" {
 		homeDir = DefaultHomeDir()
 	}
