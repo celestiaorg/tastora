@@ -102,6 +102,7 @@ func (c *Lifecycle) CreateContainer(
 			Name: c.containerName,
 			Config: &container.Config{
 				Image: imageRef,
+				User:  image.UIDGID,
 
 				Entrypoint:   entrypoint,
 				Cmd:          cmd,
