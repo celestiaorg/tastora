@@ -34,8 +34,6 @@ type Lifecycle struct {
 	hostNetwork       bool
 }
 
-// SetHostNetwork configures the container to use the host's network stack
-// instead of a bridge network.
 func (c *Lifecycle) SetHostNetwork(enabled bool) {
 	c.hostNetwork = enabled
 }
@@ -89,7 +87,7 @@ func (c *Lifecycle) CreateContainer(
 	hostCfg := &container.HostConfig{
 		Binds:      volumeBinds,
 		AutoRemove: false,
-		DNS:        []netip.Addr{},
+		DNS:        nil,
 		Mounts:     mounts,
 	}
 

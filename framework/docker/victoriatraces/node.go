@@ -26,6 +26,7 @@ type Config struct {
 	DockerClient    types.TastoraDockerClient
 	DockerNetworkID string
 	Image           container.Image
+	HomeDir         string
 }
 
 type Node struct {
@@ -49,15 +50,19 @@ func New(ctx context.Context, cfg Config, testName string, index int) (*Node, er
 		img = container.NewImage("victoriametrics/victoria-traces", "latest", "")
 	}
 	log := cfg.Logger.With(zap.String("component", "victoriatraces"), zap.Int("i", index))
-	home := "/home/victoriatraces"
-	n := &Node{cfg: cfg, logger: log}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, img, home, index, nodeType(0), log)
+	homeDir := cfg.HomeDir
+	if homeDir == "" {
+		homeDir = DefaultHomeDir()
+	}
+	n := &Node{cfg: cfg, logger: log, internalHTTPPort: defaultHTTPPort}
+	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, img, homeDir, index, nodeType(0), log)
 	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
 	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
 		return nil, err
 	}
-	n.Internal = scope{hostname: func() string { return n.Name() }, port: &n.internalHTTPPort}
-	n.External = scope{hostname: func() string { return "0.0.0.0" }, port: &n.externalHTTPPort}
+	name := n.Name()
+	n.Internal = scope{hostname: name, port: &n.internalHTTPPort}
+	n.External = scope{hostname: "0.0.0.0", port: &n.externalHTTPPort}
 	return n, nil
 }
 
@@ -90,11 +95,12 @@ func (n *Node) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *Node) createContainer(ctx context.Context) error {
-	if n.internalHTTPPort == "" {
-		n.internalHTTPPort = defaultHTTPPort
-	}
+// DefaultHomeDir returns the default home directory for victoriatraces containers.
+func DefaultHomeDir() string {
+	return "/home/victoriatraces"
+}
 
+func (n *Node) createContainer(ctx context.Context) error {
 	port := network.MustParsePort(n.internalHTTPPort + "/tcp")
 	ports := network.PortMap{
 		port: []network.PortBinding{{HostIP: netip.MustParseAddr("0.0.0.0"), HostPort: ""}},
@@ -123,7 +129,7 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 
 // scope provides scoped (internal/external) access to VictoriaTraces endpoints.
 type scope struct {
-	hostname func() string
+	hostname string
 	port     *string
 }
 
@@ -131,15 +137,15 @@ type scope struct {
 // Use this for exporters (like Go's otlptracehttp with WithEndpointURL) that send to the
 // URL as-is without appending any path.
 func (s scope) IngestHTTPEndpoint() string {
-	return fmt.Sprintf("http://%s:%s/insert/opentelemetry/v1/traces", s.hostname(), *s.port)
+	return fmt.Sprintf("http://%s:%s/insert/opentelemetry/v1/traces", s.hostname, *s.port)
 }
 
 // OTLPBaseEndpoint returns the OTLP base URL without the /v1/traces suffix.
 // Use this for exporters (like Rust's opentelemetry-otlp) that auto-append /v1/traces.
 func (s scope) OTLPBaseEndpoint() string {
-	return fmt.Sprintf("http://%s:%s/insert/opentelemetry", s.hostname(), *s.port)
+	return fmt.Sprintf("http://%s:%s/insert/opentelemetry", s.hostname, *s.port)
 }
 
 func (s scope) QueryURL() string {
-	return fmt.Sprintf("http://%s:%s", s.hostname(), *s.port)
+	return fmt.Sprintf("http://%s:%s", s.hostname, *s.port)
 }
