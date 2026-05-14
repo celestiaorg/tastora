@@ -33,8 +33,10 @@ type Config struct {
 	Logger          *zap.Logger
 	Image           container.Image
 
-	RPCHosts   []string
-	PrivateKey string
+	RPCHosts            []string
+	PrivateKey          string
+	AdditionalStartArgs []string
+	HostNetwork         bool
 }
 
 type Node struct {
@@ -60,7 +62,9 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, name s
 	log := cfg.Logger.With(zap.String("component", "spamoor-daemon"), zap.Int("i", index))
 	n := &Node{cfg: cfg, logger: log, name: name}
 	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, cfg.Image, homeDir, index, nodeType(0), log)
-	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
+	lc := container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name())
+	lc.SetHostNetwork(cfg.HostNetwork)
+	n.SetContainerLifecycle(lc)
 	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
 		return nil, err
 	}
@@ -77,6 +81,13 @@ func (n *Node) Name() string {
 func (n *Node) HostName() string { return internal.CondenseHostName(n.Name()) }
 
 func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	if n.cfg.HostNetwork {
+		p := types.Ports{HTTP: defaultInternalPorts().Web}
+		return types.NetworkInfo{
+			Internal: types.Network{Hostname: "127.0.0.1", IP: "127.0.0.1", Ports: p},
+			External: types.Network{Hostname: "127.0.0.1", Ports: p},
+		}, nil
+	}
 	internalIP, err := internal.GetContainerInternalIP(ctx, n.DockerClient, n.ContainerLifecycle.ContainerID())
 	if err != nil {
 		return types.NetworkInfo{}, err
@@ -99,14 +110,19 @@ func (n *Node) Start(ctx context.Context) error {
 	if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
 		return err
 	}
-	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, defaultInternalPorts().Web+"/tcp")
-	if err != nil {
-		return err
+
+	var mapped string
+	if n.cfg.HostNetwork {
+		mapped = defaultInternalPorts().Web
+	} else {
+		hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, defaultInternalPorts().Web+"/tcp")
+		if err != nil {
+			return err
+		}
+		mapped = internal.MustExtractPort(hostPorts[0])
 	}
-	mapped := internal.MustExtractPort(hostPorts[0])
 	n.external = types.Ports{HTTP: mapped}
 	n.started = true
-	// readiness wait for /metrics endpoint (best-effort)
 	waitHTTP(fmt.Sprintf("http://127.0.0.1:%s/metrics", n.external.HTTP), 20*time.Second)
 	return nil
 }
@@ -120,7 +136,6 @@ func (n *Node) API() *API {
 func (n *Node) createNodeContainer(ctx context.Context) error {
 	p := defaultInternalPorts()
 
-	// Daemon flags only; entrypoint will be spamoor-daemon
 	dbPath := fmt.Sprintf("%s/%s", n.HomeDir(), "spamoor.db")
 	binds := n.Bind()
 	cmd := []string{
@@ -133,6 +148,12 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 			cmd = append(cmd, "--rpchost", s)
 		}
 	}
+	for _, arg := range n.cfg.AdditionalStartArgs {
+		if arg == "--port" || strings.HasPrefix(arg, "--port=") {
+			return fmt.Errorf("additional start args must not override --port; it is managed internally")
+		}
+	}
+	cmd = append(cmd, n.cfg.AdditionalStartArgs...)
 
 	port := network.MustParsePort(p.Web + "/tcp")
 	ports := network.PortMap{

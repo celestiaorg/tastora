@@ -31,6 +31,11 @@ type Lifecycle struct {
 	containerName     string
 	id                string
 	preStartListeners port.Listeners
+	hostNetwork       bool
+}
+
+func (c *Lifecycle) SetHostNetwork(enabled bool) {
+	c.hostNetwork = enabled
 }
 
 func NewLifecycle(log *zap.Logger, c types.TastoraDockerClient, containerName string) *Lifecycle {
@@ -67,71 +72,75 @@ func (c *Lifecycle) CreateContainer(
 		return err
 	}
 
-	pS := network.PortSet{}
-	for k := range ports {
-		pS[k] = struct{}{}
-	}
-
-	pb, listeners, err := port.GenerateBindings(ports)
-	if err != nil {
-		return fmt.Errorf("failed to generate port bindings: %w", err)
-	}
-
-	c.preStartListeners = listeners
-
-	var endpointSettings network.EndpointSettings
-	if ipAddr == "" {
-		endpointSettings = network.EndpointSettings{}
-	} else {
-		addr, parseErr := netip.ParseAddr(ipAddr)
-		if parseErr != nil {
-			listeners.CloseAll()
-			c.preStartListeners = port.Listeners{}
-			return fmt.Errorf("invalid container IP %q: %w", ipAddr, parseErr)
-		}
-		endpointSettings = network.EndpointSettings{
-			IPAMConfig: &network.EndpointIPAMConfig{
-				IPv4Address: addr,
-			},
-		}
-	}
-
 	containerCfg := &container.Config{
-		Image: imageRef,
-
-		Entrypoint:   entrypoint,
-		Cmd:          cmd,
-		Env:          env,
-		Hostname:     hostName,
-		Labels:       map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
-		ExposedPorts: pS,
+		Image:      imageRef,
+		Entrypoint: entrypoint,
+		Cmd:        cmd,
+		Env:        env,
+		Hostname:   hostName,
+		Labels:     map[string]string{consts.CleanupLabel: c.client.CleanupLabel()},
 	}
 	if image.UIDGID != "" {
 		containerCfg.User = image.UIDGID
 	}
 
+	hostCfg := &container.HostConfig{
+		Binds:  volumeBinds,
+		Mounts: mounts,
+	}
+
+	var netCfg *network.NetworkingConfig
+
+	if c.hostNetwork {
+		hostCfg.NetworkMode = "host"
+	} else {
+		pS := network.PortSet{}
+		for k := range ports {
+			pS[k] = struct{}{}
+		}
+		containerCfg.ExposedPorts = pS
+
+		pb, listeners, err := port.GenerateBindings(ports)
+		if err != nil {
+			return fmt.Errorf("failed to generate port bindings: %w", err)
+		}
+		c.preStartListeners = listeners
+
+		hostCfg.PortBindings = pb
+		hostCfg.PublishAllPorts = true
+
+		var endpointSettings network.EndpointSettings
+		if ipAddr != "" {
+			addr, parseErr := netip.ParseAddr(ipAddr)
+			if parseErr != nil {
+				listeners.CloseAll()
+				c.preStartListeners = port.Listeners{}
+				return fmt.Errorf("invalid container IP %q: %w", ipAddr, parseErr)
+			}
+			endpointSettings = network.EndpointSettings{
+				IPAMConfig: &network.EndpointIPAMConfig{
+					IPv4Address: addr,
+				},
+			}
+		}
+		netCfg = &network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				networkID: &endpointSettings,
+			},
+		}
+	}
+
 	cc, err := c.client.ContainerCreate(
 		ctx,
 		client.ContainerCreateOptions{
-			Name:   c.containerName,
-			Config: containerCfg,
-			HostConfig: &container.HostConfig{
-				Binds:           volumeBinds,
-				PortBindings:    pb,
-				PublishAllPorts: true,
-				AutoRemove:      false,
-				DNS:             []netip.Addr{},
-				Mounts:          mounts,
-			},
-			NetworkingConfig: &network.NetworkingConfig{
-				EndpointsConfig: map[string]*network.EndpointSettings{
-					networkID: &endpointSettings,
-				},
-			},
+			Name:             c.containerName,
+			Config:           containerCfg,
+			HostConfig:       hostCfg,
+			NetworkingConfig: netCfg,
 		},
 	)
 	if err != nil {
-		listeners.CloseAll()
+		c.preStartListeners.CloseAll()
 		c.preStartListeners = port.Listeners{}
 		return err
 	}

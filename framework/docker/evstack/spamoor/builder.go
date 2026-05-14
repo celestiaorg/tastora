@@ -16,9 +16,11 @@ type Builder struct {
 	image         container.Image
 	homeDir       string
 
-	rpcHosts   []string
-	privKey    string
-	nameSuffix string
+	rpcHosts            []string
+	privKey             string
+	nameSuffix          string
+	additionalStartArgs []string
+	hostNetwork         bool
 }
 
 func NewNodeBuilder(testName string) *Builder {
@@ -39,15 +41,22 @@ func (b *Builder) WithHomeDir(homeDir string) *Builder    { b.homeDir = homeDir;
 func (b *Builder) WithRPCHosts(hosts ...string) *Builder  { b.rpcHosts = hosts; return b }
 func (b *Builder) WithPrivateKey(pk string) *Builder      { b.privKey = pk; return b }
 func (b *Builder) WithNameSuffix(s string) *Builder       { b.nameSuffix = s; return b }
+func (b *Builder) WithAdditionalStartArgs(args ...string) *Builder {
+	b.additionalStartArgs = args
+	return b
+}
+func (b *Builder) WithHostNetwork() *Builder { b.hostNetwork = true; return b }
 
 func (b *Builder) Build(ctx context.Context) (*Node, error) {
 	cfg := Config{
-		DockerClient:    b.dockerClient,
-		DockerNetworkID: b.dockerNetwork,
-		Logger:          b.logger,
-		Image:           b.image,
-		RPCHosts:        b.rpcHosts,
-		PrivateKey:      b.privKey,
+		DockerClient:        b.dockerClient,
+		DockerNetworkID:     b.dockerNetwork,
+		Logger:              b.logger,
+		Image:               b.image,
+		RPCHosts:            b.rpcHosts,
+		PrivateKey:          b.privKey,
+		AdditionalStartArgs: b.additionalStartArgs,
+		HostNetwork:         b.hostNetwork,
 	}
 	return newNode(ctx, cfg, b.testName, 0, b.nameSuffix, b.homeDir)
 }
