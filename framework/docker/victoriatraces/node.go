@@ -56,11 +56,11 @@ func New(ctx context.Context, cfg Config, testName string, index int) (*Node, er
 	}
 	n := &Node{cfg: cfg, logger: log, internalHTTPPort: defaultHTTPPort}
 	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, img, homeDir, index, nodeType(0), log)
-	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
-	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
+	name := n.Name()
+	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, name))
+	if err := n.CreateAndSetupVolume(ctx, name); err != nil {
 		return nil, err
 	}
-	name := n.Name()
 	n.Internal = scope{hostname: name, port: &n.internalHTTPPort}
 	n.External = scope{hostname: "0.0.0.0", port: &n.externalHTTPPort}
 	return n, nil

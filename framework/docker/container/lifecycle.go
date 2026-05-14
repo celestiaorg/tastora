@@ -85,10 +85,8 @@ func (c *Lifecycle) CreateContainer(
 	}
 
 	hostCfg := &container.HostConfig{
-		Binds:      volumeBinds,
-		AutoRemove: false,
-		DNS:        nil,
-		Mounts:     mounts,
+		Binds:  volumeBinds,
+		Mounts: mounts,
 	}
 
 	var netCfg *network.NetworkingConfig
