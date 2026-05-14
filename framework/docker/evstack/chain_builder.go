@@ -37,6 +37,8 @@ type ChainBuilder struct {
 	binaryName string
 	// aggregatorPassphrase is the passphrase used for aggregator nodes
 	aggregatorPassphrase string
+	// homeDir overrides the default home directory inside the container
+	homeDir string
 }
 
 // NewChainBuilder initializes and returns a new ChainBuilder with default values for testing purposes
@@ -98,6 +100,12 @@ func (b *ChainBuilder) WithDockerClient(client types.TastoraDockerClient) *Chain
 // WithDockerNetworkID sets the Docker network ID
 func (b *ChainBuilder) WithDockerNetworkID(networkID string) *ChainBuilder {
 	b.dockerNetworkID = networkID
+	return b
+}
+
+// WithHomeDir overrides the default home directory inside the container.
+func (b *ChainBuilder) WithHomeDir(homeDir string) *ChainBuilder {
+	b.homeDir = homeDir
 	return b
 }
 
@@ -185,6 +193,7 @@ func (b *ChainBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, index
 		Bin:                  b.binaryName,
 		AggregatorPassphrase: b.aggregatorPassphrase,
 		Image:                imageToUse,
+		HomeDir:              b.homeDir,
 	}
 
 	node := NewNode(cfg, b.testName, imageToUse, index, nodeConfig.IsAggregator, b.getAdditionalStartArgs(nodeConfig))

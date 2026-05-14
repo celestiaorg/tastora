@@ -1,12 +1,12 @@
 package docker
 
 import (
-    "math/big"
-    "strings"
-    "testing"
-    "time"
+	"math/big"
+	"strings"
+	"testing"
+	"time"
 
-    "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRethNode_LivenessAndGenesis verifies the first-class reth resource by
@@ -20,8 +20,8 @@ func TestRethNode_LivenessAndGenesis(t *testing.T) {
 
 	testCfg := setupDockerTest(t)
 
-    // Build a single Reth node from pre-configured builder
-    node, err := testCfg.RethBuilder.Build(testCfg.Ctx)
+	// Build a single Reth node from pre-configured builder
+	node, err := testCfg.RethBuilder.Build(testCfg.Ctx)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

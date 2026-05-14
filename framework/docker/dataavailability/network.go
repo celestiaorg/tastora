@@ -67,7 +67,7 @@ func (n *Network) GetBridgeNodes() []*Node {
 
 // GetLightNodes returns only the light nodes in the network.
 func (n *Network) GetLightNodes() []*Node {
-    return n.GetNodesByType(types.LightNode)
+	return n.GetNodesByType(types.LightNode)
 }
 
 // AddNodes adds one or more nodes to the DA network with the given configurations.
@@ -151,41 +151,41 @@ func (n *Network) RemoveNodes(ctx context.Context, nodeNames ...string) error {
 
 // Stop stops all nodes in the data availability network without removing them.
 func (n *Network) Stop(ctx context.Context) error {
-    nodes := n.GetNodes()
-    var eg errgroup.Group
-    for _, nd := range nodes {
-        nd := nd
-        eg.Go(func() error {
-            return nd.Stop(ctx)
-        })
-    }
-    return eg.Wait()
+	nodes := n.GetNodes()
+	var eg errgroup.Group
+	for _, nd := range nodes {
+		nd := nd
+		eg.Go(func() error {
+			return nd.Stop(ctx)
+		})
+	}
+	return eg.Wait()
 }
 
 // Remove stops and removes all nodes in the data availability network.
 // Matches the semantics of cosmos.Chain.Remove by operating on all components concurrently.
 func (n *Network) Remove(ctx context.Context, opts ...types.RemoveOption) error {
-    nodes := n.GetNodes()
-    var eg errgroup.Group
-    for _, nd := range nodes {
-        nd := nd
-        eg.Go(func() error {
-            return nd.Remove(ctx, opts...)
-        })
-    }
-    return eg.Wait()
+	nodes := n.GetNodes()
+	var eg errgroup.Group
+	for _, nd := range nodes {
+		nd := nd
+		eg.Go(func() error {
+			return nd.Remove(ctx, opts...)
+		})
+	}
+	return eg.Wait()
 }
 
 // Start starts all nodes in the data availability network.
 // If nodes were previously initialized and only stopped, this will only start their containers.
 func (n *Network) Start(ctx context.Context) error {
-    nodes := n.GetNodes()
-    var eg errgroup.Group
-    for _, nd := range nodes {
-        nd := nd
-        eg.Go(func() error {
-            return nd.Start(ctx)
-        })
-    }
-    return eg.Wait()
+	nodes := n.GetNodes()
+	var eg errgroup.Group
+	for _, nd := range nodes {
+		nd := nd
+		eg.Go(func() error {
+			return nd.Start(ctx)
+		})
+	}
+	return eg.Wait()
 }

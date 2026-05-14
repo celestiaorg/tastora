@@ -25,6 +25,7 @@ type ChainBuilder struct {
 	addlArgs     []string
 	nodes        []NodeConfig
 	name         string
+	homeDir      string
 }
 
 func NewChainBuilder(t *testing.T) *ChainBuilder {
@@ -100,6 +101,11 @@ func (b *ChainBuilder) WithNodes(cfgs ...NodeConfig) *ChainBuilder {
 	return b
 }
 
+func (b *ChainBuilder) WithHomeDir(homeDir string) *ChainBuilder {
+	b.homeDir = homeDir
+	return b
+}
+
 func (b *ChainBuilder) WithName(name string) *ChainBuilder {
 	if err := internal.ValidateDockerHostnamePart(name); err != nil {
 		panic(fmt.Sprintf("invalid evmsingle chain name: %v", err))
@@ -110,12 +116,18 @@ func (b *ChainBuilder) WithName(name string) *ChainBuilder {
 
 // Build constructs a Chain with nodes created and volumes initialized (not isInitialized)
 func (b *ChainBuilder) Build(ctx context.Context) (*Chain, error) {
+	homeDir := b.homeDir
+	if homeDir == "" {
+		homeDir = DefaultHomeDir()
+	}
+
 	cfg := Config{
 		Logger:              b.logger,
 		DockerClient:        b.dockerClient,
 		DockerNetworkID:     b.networkID,
 		Image:               b.image,
 		Bin:                 b.bin,
+		HomeDir:             homeDir,
 		Env:                 b.env,
 		AdditionalStartArgs: b.addlArgs,
 	}

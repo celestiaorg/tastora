@@ -24,4 +24,11 @@ type Config struct {
 	Image container.Image
 	// AdditionalStartArgs are additional arguments passed to all nodes when starting
 	AdditionalStartArgs []string
+	// HomeDir is the home directory inside the container. Defaults to DefaultHomeDir().
+	HomeDir string
+}
+
+// DefaultHomeDir returns the default home directory for DA node containers.
+func DefaultHomeDir() string {
+	return "/home/celestia"
 }

@@ -35,6 +35,8 @@ type NetworkBuilder struct {
 	chainID string
 	// binaryName is the name of the Node binary executable (e.g., "celestia")
 	binaryName string
+	// homeDir overrides the default home directory inside the container
+	homeDir string
 }
 
 // NewNetworkBuilder initializes and returns a new NetworkBuilder with default values for testing purposes
@@ -105,6 +107,12 @@ func (b *NetworkBuilder) WithDockerClient(c types.TastoraDockerClient) *NetworkB
 // WithDockerNetworkID sets the Docker network ID
 func (b *NetworkBuilder) WithDockerNetworkID(networkID string) *NetworkBuilder {
 	b.dockerNetworkID = networkID
+	return b
+}
+
+// WithHomeDir overrides the default home directory inside the container.
+func (b *NetworkBuilder) WithHomeDir(homeDir string) *NetworkBuilder {
+	b.homeDir = homeDir
 	return b
 }
 
@@ -214,6 +222,7 @@ func (b *NetworkBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, ind
 		ChainID:         b.chainID,
 		Bin:             b.binaryName,
 		Image:           imageToUse,
+		HomeDir:         b.homeDir,
 		// Env and AdditionalStartArgs provide default set of values for all nodes, but can
 		// be individually overridden by nodeConfig.
 		Env:                 b.env,

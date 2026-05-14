@@ -56,7 +56,8 @@ func createSimappChain(t *testing.T, ctx context.Context, client types.TastoraDo
 		// use the simapp from ibc-go as a simple app with basic wiring and no token filters.
 		// TODO: this is a custom built simapp that has the bech32prefix as "celestia" as a workaround for the global
 		// SDK config not being usable when 2 chains have a different beck32 preix (e.g. "celestia" and "cosmos" ) if it is sealed.
-		WithImage(container.NewImage("ghcr.io/chatton/ibc-go-simd", "v8.5.0", "1000:1000")).
+		// simd writes to $HOME/.simapp on startup, requires root
+		WithImage(container.NewImage("ghcr.io/chatton/ibc-go-simd", "v8.5.0", "0:0")).
 		WithBinaryName("simd").
 		WithBech32Prefix("celestia").
 		WithDenom("stake").

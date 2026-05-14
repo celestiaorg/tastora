@@ -15,6 +15,8 @@ type Config struct {
 	Image container.Image
 	// Bin is the executable name (default: evm-single)
 	Bin string
+	// HomeDir is the home directory inside the container. Defaults to DefaultHomeDir().
+	HomeDir string
 	// Env are default environment variables applied to all nodes
 	Env []string
 	// AdditionalStartArgs are default start arguments applied to all nodes
@@ -23,13 +25,17 @@ type Config struct {
 	AdditionalInitArgs []string
 }
 
+// DefaultHomeDir returns the default home directory for ev-node-evm containers.
+func DefaultHomeDir() string {
+	return "/home/ev-node/.evm"
+}
+
 // DefaultImage returns the default container image for ev-node-evm.
 func DefaultImage() container.Image {
-    // Default ev-node tag pinned for reproducibility
-    return container.Image{Repository: "ghcr.io/evstack/ev-node-evm", Version: "v1.0.0-rc.4"}
+	return container.Image{Repository: "ghcr.io/evstack/ev-node-evm", Version: "v1.0.0-rc.4", UIDGID: "10001:10001"}
 }
 
 // DefaultBinary returns the default binary name for ev-node-evm.
 func DefaultBinary() string {
-    return "evm"
+	return "evm"
 }

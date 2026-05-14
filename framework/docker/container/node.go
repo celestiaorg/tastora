@@ -69,6 +69,7 @@ func (n *Node) Exec(ctx context.Context, logger *zap.Logger, cmd []string, env [
 	opts := Options{
 		Env:   env,
 		Binds: n.Bind(),
+		User:  n.Image.UIDGID,
 	}
 	res := job.Run(ctx, cmd, opts)
 	if res.Err != nil {

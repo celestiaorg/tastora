@@ -26,6 +26,7 @@ type NodeBuilder struct {
 	genesis             []byte
 	jwtSecretHex        string
 	name                string
+	homeDir             string
 	hyperlaneChainName  string
 	hyperlaneChainID    uint64
 	hyperlaneDomainID   uint32
@@ -104,6 +105,11 @@ func (b *NodeBuilder) WithName(name string) *NodeBuilder {
 	return b
 }
 
+func (b *NodeBuilder) WithHomeDir(homeDir string) *NodeBuilder {
+	b.homeDir = homeDir
+	return b
+}
+
 func (b *NodeBuilder) WithHyperlaneChainName(name string) *NodeBuilder {
 	b.hyperlaneChainName = name
 	return b
@@ -121,12 +127,18 @@ func (b *NodeBuilder) WithHyperlaneDomainID(domainID uint32) *NodeBuilder {
 
 // Build constructs the Node and initializes its Docker volume but does not start the container.
 func (b *NodeBuilder) Build(ctx context.Context) (*Node, error) {
+	homeDir := b.homeDir
+	if homeDir == "" {
+		homeDir = DefaultHomeDir()
+	}
+
 	cfg := Config{
 		Logger:              b.logger,
 		DockerClient:        b.dockerClient,
 		DockerNetworkID:     b.networkID,
 		Image:               b.image,
 		Bin:                 b.bin,
+		HomeDir:             homeDir,
 		Env:                 b.env,
 		AdditionalStartArgs: b.additionalStartArgs,
 		JWTSecretHex:        b.jwtSecretHex,

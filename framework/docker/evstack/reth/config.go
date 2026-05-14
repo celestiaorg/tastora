@@ -21,6 +21,8 @@ type Config struct {
 	Image container.Image
 	// Bin is the executable name (default: ev-reth)
 	Bin string
+	// HomeDir is the home directory inside the container. Defaults to DefaultHomeDir().
+	HomeDir string
 
 	// Env are default environment variables applied to all nodes
 	Env []string
@@ -51,8 +53,13 @@ func (c Config) Validate() error {
 	return nil
 }
 
+// DefaultHomeDir returns the default home directory for Reth containers.
+func DefaultHomeDir() string {
+	return "/home/ev-reth"
+}
+
 // DefaultImage returns the default container image for Reth nodes.
 func DefaultImage() container.Image {
-    // Pin default to a known stable release for local/E2E reproducibility
-    return container.Image{Repository: "ghcr.io/evstack/ev-reth", Version: "v0.2.2"}
+	// Pin default to a known stable release for local/E2E reproducibility
+	return container.Image{Repository: "ghcr.io/evstack/ev-reth", Version: "v0.2.2"}
 }

@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 
 	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/moby/moby/client"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	"github.com/moby/moby/client"
 )
 
 // NewLocalKeyringFromDockerContainer copies the contents of the given container directory into a specified local directory.
