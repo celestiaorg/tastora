@@ -81,6 +81,13 @@ func (n *Node) Name() string {
 func (n *Node) HostName() string { return internal.CondenseHostName(n.Name()) }
 
 func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
+	if n.cfg.HostNetwork {
+		p := types.Ports{HTTP: defaultInternalPorts().Web}
+		return types.NetworkInfo{
+			Internal: types.Network{Hostname: "127.0.0.1", IP: "127.0.0.1", Ports: p},
+			External: types.Network{Hostname: "127.0.0.1", Ports: p},
+		}, nil
+	}
 	internalIP, err := internal.GetContainerInternalIP(ctx, n.DockerClient, n.ContainerLifecycle.ContainerID())
 	if err != nil {
 		return types.NetworkInfo{}, err

@@ -61,7 +61,7 @@ func New(ctx context.Context, cfg Config, testName string, index int) (*Node, er
 	if err := n.CreateAndSetupVolume(ctx, name); err != nil {
 		return nil, err
 	}
-	n.Internal = scope{hostname: name, port: &n.internalHTTPPort}
+	n.Internal = scope{hostname: n.HostName(), port: &n.internalHTTPPort}
 	n.External = scope{hostname: "0.0.0.0", port: &n.externalHTTPPort}
 	return n, nil
 }
