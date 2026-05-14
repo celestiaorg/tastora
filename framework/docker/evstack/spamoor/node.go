@@ -148,6 +148,11 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 			cmd = append(cmd, "--rpchost", s)
 		}
 	}
+	for _, arg := range n.cfg.AdditionalStartArgs {
+		if arg == "--port" || strings.HasPrefix(arg, "--port=") {
+			return fmt.Errorf("additional start args must not override --port; it is managed internally")
+		}
+	}
 	cmd = append(cmd, n.cfg.AdditionalStartArgs...)
 
 	port := network.MustParsePort(p.Web + "/tcp")
