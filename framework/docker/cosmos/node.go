@@ -112,6 +112,7 @@ type ChainNodeParams struct {
 	AdditionalExposedPorts []string
 }
 
+// Deprecated: use container.NewNodeBuilder instead.
 // NewChainNode creates a new ChainNode with injected dependencies
 func NewChainNode(
 	logger *zap.Logger,
@@ -241,9 +242,13 @@ func (cn *ChainNode) GetKeyring() (keyring.Keyring, error) {
 	return internal.NewDockerKeyring(cn.DockerClient, cn.ContainerLifecycle.ContainerID(), containerKeyringDir, cn.EncodingConfig.Codec), nil
 }
 
+func chainNodeName(testName string, index int, chainID string, nodeType types.ConsensusNodeType) string {
+	return fmt.Sprintf("%s-%s-%d-%s", chainID, nodeType.String(), index, internal.SanitizeDockerResourceName(testName))
+}
+
 // Name of the test node container.
 func (cn *ChainNode) Name() string {
-	return fmt.Sprintf("%s-%s-%d-%s", cn.ChainID, cn.NodeType(), cn.Index, internal.SanitizeDockerResourceName(cn.TestName))
+	return chainNodeName(cn.TestName, cn.Index, cn.ChainID, cn.ChainNodeParams.NodeType)
 }
 
 // NodeType returns the type of the ChainNode as a string.

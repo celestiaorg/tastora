@@ -42,21 +42,31 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, nodeCf
 
 	log := cfg.Logger.With(zap.String("component", "evm-single"), zap.Int("i", index))
 
-	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports, chainName: chainName}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, cfg.HomeDir, index, NodeType, log)
-	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
-	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
+	containerName := evmSingleNodeName(testName, index, chainName)
+	node, err := container.NewNodeBuilder(cfg.DockerClient, testName, image, log).
+		WithNetworkID(cfg.DockerNetworkID).
+		WithHomeDir(cfg.HomeDir).
+		WithIndex(index).
+		WithNodeType(NodeType).
+		Build(ctx, containerName)
+	if err != nil {
 		return nil, err
 	}
+	n := &Node{cfg: cfg, nodeCfg: nodeCfg, logger: log, internal: ports, chainName: chainName}
+	n.Node = node
 	return n, nil
+}
+
+func evmSingleNodeName(testName string, index int, chainName string) string {
+	if chainName != "" {
+		return fmt.Sprintf("evm-single-%s-%d-%s", chainName, index, internal.SanitizeDockerResourceName(testName))
+	}
+	return fmt.Sprintf("evm-single-%d-%s", index, internal.SanitizeDockerResourceName(testName))
 }
 
 // Name returns a stable container name
 func (n *Node) Name() string {
-	if n.chainName != "" {
-		return fmt.Sprintf("evm-single-%s-%d-%s", n.chainName, n.Index, internal.SanitizeDockerResourceName(n.TestName))
-	}
-	return fmt.Sprintf("evm-single-%d-%s", n.Index, internal.SanitizeDockerResourceName(n.TestName))
+	return evmSingleNodeName(n.TestName, n.Index, n.chainName)
 }
 
 // HostName returns a condensed hostname

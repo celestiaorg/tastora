@@ -25,6 +25,7 @@ func TestNode_VolumeRebinding(t *testing.T) {
 	}
 
 	createNode := func() *container.Node {
+		//nolint:staticcheck // testing deprecated API for volume rebinding
 		node := container.NewNode(
 			testCfg.NetworkID,
 			testCfg.DockerClient,
@@ -35,11 +36,11 @@ func TestNode_VolumeRebinding(t *testing.T) {
 			types.NodeTypeValidator,
 			logger,
 		)
-		node.SetContainerLifecycle(container.NewLifecycle(logger, testCfg.DockerClient, testCfg.TestName))
+		node.SetContainerLifecycle(container.NewLifecycle(logger, testCfg.DockerClient, testCfg.TestName)) //nolint:staticcheck
 
 		nodeName := testCfg.TestName + "-test-node-0"
 
-		err := node.CreateAndSetupVolume(testCfg.Ctx, nodeName)
+		err := node.CreateAndSetupVolume(testCfg.Ctx, nodeName) //nolint:staticcheck
 		require.NoError(t, err)
 		require.NotEmpty(t, node.VolumeName)
 

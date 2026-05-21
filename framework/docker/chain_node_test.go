@@ -30,7 +30,7 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:      &testutil.TestEncodingConfig{},
 	}
-	node1 := cosmos.NewChainNode(logger, &tastoraclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 0, chainParams1)
+	node1 := cosmos.NewChainNode(logger, &tastoraclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 0, chainParams1) //nolint:staticcheck // testing deprecated API
 
 	chainParams2 := cosmos.ChainNodeParams{
 		Validator:           true,
@@ -43,7 +43,7 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:      &testutil.TestEncodingConfig{},
 	}
-	node2 := cosmos.NewChainNode(logger, &tastoraclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 1, chainParams2)
+	node2 := cosmos.NewChainNode(logger, &tastoraclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 1, chainParams2) //nolint:staticcheck // testing deprecated API
 
 	chainParams3 := cosmos.ChainNodeParams{
 		Validator:           false,
@@ -56,7 +56,7 @@ func TestChainNodeHostName(t *testing.T) {
 		AdditionalStartArgs: []string{},
 		EncodingConfig:      &testutil.TestEncodingConfig{},
 	}
-	node3 := cosmos.NewChainNode(logger, &tastoraclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 2, chainParams3)
+	node3 := cosmos.NewChainNode(logger, &tastoraclient.Client{}, "test-network", testName, container.Image{}, "/test/home", 2, chainParams3) //nolint:staticcheck // testing deprecated API
 
 	// get hostnames
 	hostname1 := node1.HostName()

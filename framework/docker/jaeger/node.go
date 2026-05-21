@@ -57,20 +57,30 @@ func New(ctx context.Context, cfg Config, testName string, index int) (*Node, er
 	}
 	log := cfg.Logger.With(zap.String("component", "jaeger"), zap.Int("i", index))
 	home := "/home/jaeger"
-	n := &Node{cfg: cfg, logger: log}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, img, home, index, nodeType(0), log)
-	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
-	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
+	name := nodeName(testName, index)
+	node, err := container.NewNodeBuilder(cfg.DockerClient, testName, img, log).
+		WithNetworkID(cfg.DockerNetworkID).
+		WithHomeDir(home).
+		WithIndex(index).
+		WithNodeType(nodeType(0)).
+		Build(ctx, name)
+	if err != nil {
 		return nil, err
 	}
+	n := &Node{cfg: cfg, logger: log}
+	n.Node = node
 	n.Internal = queryScope{n: n, hostname: func() string { return n.Name() }, ports: &n.internalPorts}
 	n.External = queryScope{n: n, hostname: func() string { return "0.0.0.0" }, ports: &n.externalPorts}
 	return n, nil
 }
 
+func nodeName(testName string, index int) string {
+	return fmt.Sprintf("jaeger-%d-%s", index, internal.SanitizeDockerResourceName(testName))
+}
+
 // Name returns a stable container name
 func (n *Node) Name() string {
-	return fmt.Sprintf("jaeger-%d-%s", n.Index, internal.SanitizeDockerResourceName(n.TestName))
+	return nodeName(n.TestName, n.Index)
 }
 
 // HostName returns a condensed hostname

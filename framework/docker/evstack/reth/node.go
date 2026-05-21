@@ -43,22 +43,31 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, name s
 		logger: log,
 		name:   name,
 	}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, image, cfg.HomeDir, index, NodeType, log)
-	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name()))
-
-	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
+	containerName := rethNodeName(testName, index, name)
+	node, err := container.NewNodeBuilder(cfg.DockerClient, testName, image, log).
+		WithNetworkID(cfg.DockerNetworkID).
+		WithHomeDir(cfg.HomeDir).
+		WithIndex(index).
+		WithNodeType(NodeType).
+		Build(ctx, containerName)
+	if err != nil {
 		return nil, err
 	}
+	n.Node = node
 
 	return n, nil
 }
 
+func rethNodeName(testName string, index int, name string) string {
+	if name != "" {
+		return fmt.Sprintf("reth-%s-%d-%s", name, index, internal.SanitizeDockerResourceName(testName))
+	}
+	return fmt.Sprintf("reth-%d-%s", index, internal.SanitizeDockerResourceName(testName))
+}
+
 // Name returns a stable container name
 func (n *Node) Name() string {
-	if n.name != "" {
-		return fmt.Sprintf("reth-%s-%d-%s", n.name, n.Index, internal.SanitizeDockerResourceName(n.TestName))
-	}
-	return fmt.Sprintf("reth-%d-%s", n.Index, internal.SanitizeDockerResourceName(n.TestName))
+	return rethNodeName(n.TestName, n.Index, n.name)
 }
 
 // HostName returns a condensed hostname

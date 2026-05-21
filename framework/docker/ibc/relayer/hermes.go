@@ -43,35 +43,27 @@ func NewHermes(ctx context.Context, dockerClient types.TastoraDockerClient, test
 		UIDGID:     hermesDefaultUIDGID,
 	}
 
-	node := container.NewNode(
-		networkID,
-		dockerClient,
-		testName,
-		image,
-		hermesHomeDir,
-		index,
-		HermesRelayer,
-		logger,
-	)
-
-	hermes := &Hermes{
-		Node: node,
-	}
-
-	lifecycle := container.NewLifecycle(logger, dockerClient, hermes.Name())
-	hermes.SetContainerLifecycle(lifecycle)
-
-	// Create and setup volume for Hermes
-	if err := hermes.CreateAndSetupVolume(ctx, hermes.Name()); err != nil {
+	name := hermesNodeName(testName, index)
+	node, err := container.NewNodeBuilder(dockerClient, testName, image, logger).
+		WithNetworkID(networkID).
+		WithHomeDir(hermesHomeDir).
+		WithIndex(index).
+		WithNodeType(HermesRelayer).
+		Build(ctx, name)
+	if err != nil {
 		return nil, err
 	}
 
-	return hermes, nil
+	return &Hermes{Node: node}, nil
+}
+
+func hermesNodeName(testName string, index int) string {
+	return fmt.Sprintf("%s-%d-hermes", internal.SanitizeDockerResourceName(testName), index)
 }
 
 // Name returns the hostname of the docker container.
 func (h *Hermes) Name() string {
-	return fmt.Sprintf("%s-%d-hermes", internal.SanitizeDockerResourceName(h.TestName), h.Index)
+	return hermesNodeName(h.TestName, h.Index)
 }
 
 // Start starts the Hermes relayer.

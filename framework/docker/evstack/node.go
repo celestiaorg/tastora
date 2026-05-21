@@ -53,6 +53,7 @@ type Node struct {
 	externalPorts types.Ports
 }
 
+// Deprecated: use container.NewNodeBuilder instead.
 func NewNode(cfg Config, testName string, image container.Image, index int, isAggregator bool, additionalStartArgs []string) *Node {
 	homeDir := cfg.HomeDir
 	if homeDir == "" {
@@ -73,9 +74,13 @@ func NewNode(cfg Config, testName string, image container.Image, index int, isAg
 	return node
 }
 
+func evstackNodeName(testName string, index int, chainID string) string {
+	return fmt.Sprintf("%s-evstack-%d-%s", chainID, index, internal.SanitizeDockerResourceName(testName))
+}
+
 // Name of the test node container.
 func (n *Node) Name() string {
-	return fmt.Sprintf("%s-evstack-%d-%s", n.cfg.ChainID, n.Index, internal.SanitizeDockerResourceName(n.TestName))
+	return evstackNodeName(n.TestName, n.Index, n.cfg.ChainID)
 }
 
 // HostName returns the condensed hostname for the Node.

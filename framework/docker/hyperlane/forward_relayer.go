@@ -126,31 +126,21 @@ func NewForwardRelayer(ctx context.Context, cfg ForwardRelayerConfig, testName s
 		image.UIDGID = hyperlaneDefaultUIDGID
 	}
 
-	node := container.NewNode(
-		cfg.DockerNetworkID,
-		cfg.DockerClient,
-		testName,
-		image,
-		"/app",
-		0, // should not be a need to ever have more than 1
-		ForwardRelayerNodeType,
-		cfg.Logger,
-	)
-
-	rly := &ForwardRelayer{
-		Node:   node,
-		Config: cfg,
-		Mode:   mode,
-	}
-
-	lifecycle := container.NewLifecycle(cfg.Logger, cfg.DockerClient, rly.Name())
-	rly.SetContainerLifecycle(lifecycle)
-
-	if err := rly.CreateAndSetupVolume(ctx, rly.Name()); err != nil {
+	name := forwardRelayerNodeName(testName, mode)
+	node, err := container.NewNodeBuilder(cfg.DockerClient, testName, image, cfg.Logger).
+		WithNetworkID(cfg.DockerNetworkID).
+		WithHomeDir("/app").
+		WithNodeType(ForwardRelayerNodeType).
+		Build(ctx, name)
+	if err != nil {
 		return nil, err
 	}
 
-	return rly, nil
+	return &ForwardRelayer{
+		Node:   node,
+		Config: cfg,
+		Mode:   mode,
+	}, nil
 }
 
 // Start creates and starts the forward relayer container in the configured mode.
@@ -229,8 +219,12 @@ func (rly *ForwardRelayer) Start(ctx context.Context) error {
 }
 
 // Name returns the hostname/container name for the agent container
+func forwardRelayerNodeName(testName string, mode Mode) string {
+	return fmt.Sprintf("hyperlane-forward-%s-0-%s", mode, internal.SanitizeDockerResourceName(testName))
+}
+
 func (rly *ForwardRelayer) Name() string {
-	return fmt.Sprintf("hyperlane-forward-%s-%d-%s", rly.Mode, rly.Index, internal.SanitizeDockerResourceName(rly.TestName))
+	return forwardRelayerNodeName(rly.TestName, rly.Mode)
 }
 
 // HostName returns the condensed hostname used for in-network container communication.

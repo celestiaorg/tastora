@@ -196,11 +196,32 @@ func (b *ChainBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, index
 		HomeDir:              b.homeDir,
 	}
 
-	node := NewNode(cfg, b.testName, imageToUse, index, nodeConfig.IsAggregator, b.getAdditionalStartArgs(nodeConfig))
+	homeDir := cfg.HomeDir
+	if homeDir == "" {
+		homeDir = DefaultHomeDir()
+	}
 
-	// Create and setup volume using shared logic
-	if err := node.CreateAndSetupVolume(ctx, node.Name()); err != nil {
+	log := b.logger.With(
+		zap.Int("i", index),
+		zap.Bool("aggregator", nodeConfig.IsAggregator),
+	)
+
+	name := evstackNodeName(b.testName, index, b.chainID)
+	baseNode, err := container.NewNodeBuilder(b.dockerClient, b.testName, imageToUse, log).
+		WithNetworkID(b.dockerNetworkID).
+		WithHomeDir(homeDir).
+		WithIndex(index).
+		WithNodeType(EvstackType).
+		Build(ctx, name)
+	if err != nil {
 		return nil, err
+	}
+
+	node := &Node{
+		cfg:                 cfg,
+		isAggregatorFlag:    nodeConfig.IsAggregator,
+		additionalStartArgs: b.getAdditionalStartArgs(nodeConfig),
+		Node:                baseNode,
 	}
 
 	// Run post-init functions if any

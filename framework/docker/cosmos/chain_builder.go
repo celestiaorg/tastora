@@ -482,26 +482,6 @@ func (b *ChainBuilder) newChainNode(
 	nodeConfig ChainNodeConfig,
 	index int,
 ) (*ChainNode, error) {
-	// Construct the ChainNode first so we can access its name.
-	// The ChainNode's VolumeName cannot be set until after we create the volume.
-	tn := b.newDockerChainNode(b.logger, nodeConfig, index)
-
-	// create and setup volume using shared logic
-	if err := tn.CreateAndSetupVolume(ctx, tn.Name()); err != nil {
-		return nil, err
-	}
-
-	// if this is a validator and we have a genesis keyring, preload the keys using a one-shot container
-	if nodeConfig.nodeType == types.NodeTypeValidator && tn.GenesisKeyring != nil {
-		if err := preloadKeyringToVolume(ctx, tn, nodeConfig); err != nil {
-			return nil, fmt.Errorf("failed to preload keyring to volume: %w", err)
-		}
-	}
-
-	return tn, nil
-}
-
-func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeConfig, index int) *ChainNode {
 	homeDir := b.homeDir
 	if homeDir == "" {
 		homeDir = "/var/cosmos-chain"
@@ -510,9 +490,19 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 		}
 	}
 
+	// derive NodeType from Validator field if not explicitly set
+	nodeType := nodeConfig.nodeType
+	if nodeType == 0 {
+		if nodeConfig.nodeType == types.NodeTypeValidator {
+			nodeType = types.NodeTypeValidator
+		} else {
+			nodeType = types.NodeTypeConsensusFull
+		}
+	}
+
 	chainParams := ChainNodeParams{
 		Validator:              nodeConfig.nodeType == types.NodeTypeValidator,
-		NodeType:               nodeConfig.nodeType,
+		NodeType:               nodeType,
 		ChainID:                b.chainID,
 		BinaryName:             b.binaryName,
 		CoinType:               b.coinType,
@@ -528,10 +518,37 @@ func (b *ChainBuilder) newDockerChainNode(log *zap.Logger, nodeConfig ChainNodeC
 		AdditionalExposedPorts: b.additionalExposedPorts,
 	}
 
-	// Get the appropriate image using fallback logic
 	imageToUse := b.getImage(nodeConfig)
 
-	return NewChainNode(log, b.dockerClient, b.dockerNetworkID, b.testName, imageToUse, homeDir, index, chainParams)
+	log := b.logger.With(
+		zap.Bool("validator", chainParams.Validator),
+		zap.Int("i", index),
+	)
+
+	name := chainNodeName(b.testName, index, b.chainID, nodeType)
+	baseNode, err := container.NewNodeBuilder(b.dockerClient, b.testName, imageToUse, log).
+		WithNetworkID(b.dockerNetworkID).
+		WithHomeDir(homeDir).
+		WithIndex(index).
+		WithNodeType(nodeType).
+		Build(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	tn := &ChainNode{
+		ChainNodeParams: chainParams,
+		Node:            baseNode,
+	}
+
+	// if this is a validator and we have a genesis keyring, preload the keys using a one-shot container
+	if nodeConfig.nodeType == types.NodeTypeValidator && tn.GenesisKeyring != nil {
+		if err := preloadKeyringToVolume(ctx, tn, nodeConfig); err != nil {
+			return nil, fmt.Errorf("failed to preload keyring to volume: %w", err)
+		}
+	}
+
+	return tn, nil
 }
 
 // preloadKeyringToVolume copies validator keys from genesis keyring to the node's volume

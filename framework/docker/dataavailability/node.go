@@ -76,6 +76,7 @@ type Node struct {
 	externalPorts types.Ports
 }
 
+// Deprecated: use container.NewNodeBuilder instead.
 func NewNode(cfg Config, testName string, image container.Image, index int, nodeConfig NodeConfig) *Node {
 	homeDir := cfg.HomeDir
 	if homeDir == "" {
@@ -97,9 +98,13 @@ func NewNode(cfg Config, testName string, image container.Image, index int, node
 	return node
 }
 
+func daNodeName(testName string, index int, nodeType types.DANodeType) string {
+	return fmt.Sprintf("da-%s-%d-%s", nodeType.String(), index, internal.SanitizeDockerResourceName(testName))
+}
+
 // Name returns the container name for the Node.
 func (n *Node) Name() string {
-	return fmt.Sprintf("da-%s-%d-%s", n.nodeType.String(), n.Index, internal.SanitizeDockerResourceName(n.TestName))
+	return daNodeName(n.TestName, n.Index, n.nodeType)
 }
 
 // HostName returns the condensed hostname for the Node.

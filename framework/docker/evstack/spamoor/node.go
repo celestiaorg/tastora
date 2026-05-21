@@ -60,22 +60,31 @@ func newNode(ctx context.Context, cfg Config, testName string, index int, name s
 		homeDir = DefaultHomeDir()
 	}
 	log := cfg.Logger.With(zap.String("component", "spamoor-daemon"), zap.Int("i", index))
-	n := &Node{cfg: cfg, logger: log, name: name}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, cfg.Image, homeDir, index, nodeType(0), log)
-	lc := container.NewLifecycle(cfg.Logger, cfg.DockerClient, n.Name())
-	lc.SetHostNetwork(cfg.HostNetwork)
-	n.SetContainerLifecycle(lc)
-	if err := n.CreateAndSetupVolume(ctx, n.Name()); err != nil {
+	containerName := spamoorNodeName(testName, index, name)
+	node, err := container.NewNodeBuilder(cfg.DockerClient, testName, cfg.Image, log).
+		WithNetworkID(cfg.DockerNetworkID).
+		WithHomeDir(homeDir).
+		WithIndex(index).
+		WithNodeType(nodeType(0)).
+		WithHostNetwork(cfg.HostNetwork).
+		Build(ctx, containerName)
+	if err != nil {
 		return nil, err
 	}
+	n := &Node{cfg: cfg, logger: log, name: name}
+	n.Node = node
 	return n, nil
 }
 
-func (n *Node) Name() string {
-	if n.name != "" {
-		return fmt.Sprintf("spamoor-%s-%d-%s", n.name, n.Index, internal.SanitizeDockerResourceName(n.TestName))
+func spamoorNodeName(testName string, index int, name string) string {
+	if name != "" {
+		return fmt.Sprintf("spamoor-%s-%d-%s", name, index, internal.SanitizeDockerResourceName(testName))
 	}
-	return fmt.Sprintf("spamoor-%d-%s", n.Index, internal.SanitizeDockerResourceName(n.TestName))
+	return fmt.Sprintf("spamoor-%d-%s", index, internal.SanitizeDockerResourceName(testName))
+}
+
+func (n *Node) Name() string {
+	return spamoorNodeName(n.TestName, n.Index, n.name)
 }
 
 func (n *Node) HostName() string { return internal.CondenseHostName(n.Name()) }

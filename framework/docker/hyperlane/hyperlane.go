@@ -54,28 +54,20 @@ func NewDeployer(ctx context.Context, cfg Config, testName string, chains []Chai
 		image.UIDGID = hyperlaneDefaultUIDGID
 	}
 
-	node := container.NewNode(
-		cfg.DockerNetworkID,
-		cfg.DockerClient,
-		testName,
-		image,
-		hyperlaneHomeDir,
-		0, // should not be a need to ever have more than 1
-		DeployerNodeType,
-		cfg.Logger,
-	)
+	name := deployerNodeName(testName)
+	node, err := container.NewNodeBuilder(cfg.DockerClient, testName, image, cfg.Logger).
+		WithNetworkID(cfg.DockerNetworkID).
+		WithHomeDir(hyperlaneHomeDir).
+		WithNodeType(DeployerNodeType).
+		Build(ctx, name)
+	if err != nil {
+		return nil, err
+	}
 
 	d := &Deployer{
 		Node:   node,
 		cfg:    cfg,
 		chains: chains,
-	}
-
-	lifecycle := container.NewLifecycle(cfg.Logger, cfg.DockerClient, d.Name())
-	d.SetContainerLifecycle(lifecycle)
-
-	if err := d.CreateAndSetupVolume(ctx, d.Name()); err != nil {
-		return nil, err
 	}
 
 	if err := d.init(ctx); err != nil {
@@ -86,8 +78,12 @@ func NewDeployer(ctx context.Context, cfg Config, testName string, chains []Chai
 }
 
 // Name returns the hostname of the docker container
+func deployerNodeName(testName string) string {
+	return fmt.Sprintf("hyperlane-deploy-0-%s", internal.SanitizeDockerResourceName(testName))
+}
+
 func (d *Deployer) Name() string {
-	return fmt.Sprintf("hyperlane-deploy-%d-%s", d.Index, internal.SanitizeDockerResourceName(d.TestName))
+	return deployerNodeName(d.TestName)
 }
 
 // Init generates configs and prepares the deployment
