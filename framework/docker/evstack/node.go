@@ -19,20 +19,29 @@ import (
 )
 
 const (
-	p2pPort         = "26656/tcp"
-	grpcPort        = "9090/tcp"
-	apiPort         = "1317/tcp"
-	privValPort     = "1234/tcp"
-	evstackRpcPort  = "7331/tcp"
-	evstackHttpPort = "8080/tcp"
+	defaultP2PPort     = "26656"
+	defaultGRPCPort    = "9090"
+	defaultAPIPort     = "1317"
+	defaultPrivValPort = "1234"
+
+	p2pPortID     = defaultP2PPort + "/tcp"
+	grpcPortID    = defaultGRPCPort + "/tcp"
+	apiPortID     = defaultAPIPort + "/tcp"
+	privValPortID = defaultPrivValPort + "/tcp"
+
+	defaultEvstackRPCPort  = "7331"
+	defaultEvstackHTTPPort = "8080"
+
+	evstackRpcPort  = defaultEvstackRPCPort + "/tcp"
+	evstackHttpPort = defaultEvstackHTTPPort + "/tcp"
 )
 
 var evstackSentryPorts = network.PortMap{
-	network.MustParsePort(p2pPort):         {},
+	network.MustParsePort(p2pPortID):       {},
 	network.MustParsePort(evstackRpcPort):  {}, // evstack uses a different rpc port
-	network.MustParsePort(grpcPort):        {},
-	network.MustParsePort(apiPort):         {},
-	network.MustParsePort(privValPort):     {},
+	network.MustParsePort(grpcPortID):      {},
+	network.MustParsePort(apiPortID):       {},
+	network.MustParsePort(privValPortID):   {},
 	network.MustParsePort(evstackHttpPort): {},
 }
 
@@ -178,7 +187,7 @@ func (n *Node) startContainer(ctx context.Context) error {
 	}
 
 	// Set the host ports once since they will not change after the container has started.
-	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, evstackRpcPort, grpcPort, apiPort, p2pPort, evstackHttpPort)
+	hostPorts, err := n.ContainerLifecycle.GetHostPorts(ctx, evstackRpcPort, grpcPortID, apiPortID, p2pPortID, evstackHttpPort)
 	if err != nil {
 		return err
 	}
@@ -244,11 +253,11 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 			Hostname: n.HostName(),
 			IP:       internalIP,
 			Ports: types.Ports{
-				RPC:  "7331",
-				GRPC: "9090",
-				API:  "1317",
-				P2P:  "26656",
-				HTTP: "8080",
+				RPC:  defaultEvstackRPCPort,
+				GRPC: defaultGRPCPort,
+				API:  defaultAPIPort,
+				P2P:  defaultP2PPort,
+				HTTP: defaultEvstackHTTPPort,
 			},
 		},
 		External: types.Network{
