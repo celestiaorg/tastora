@@ -61,8 +61,8 @@ func (c *Chain) GetRelayerConfig() types.ChainRelayerConfig {
 		Denom:        c.Config.Denom,
 		GasPrices:    c.Config.GasPrices,
 		Bech32Prefix: c.Config.Bech32Prefix,
-		RPCAddress:   "http://" + c.GetNode().Name() + ":26657",
-		GRPCAddress:  "http://" + c.GetNode().Name() + ":9090",
+		RPCAddress:   "http://" + c.GetNode().Name() + ":" + defaultRPCPort,
+		GRPCAddress:  "http://" + c.GetNode().Name() + ":" + defaultGRPCPort,
 	}
 }
 

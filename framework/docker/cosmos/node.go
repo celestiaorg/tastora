@@ -40,13 +40,20 @@ import (
 var _ types.ChainNode = &ChainNode{}
 
 const (
-	valKey      = "validator"
-	blockTime   = 2 // seconds
-	p2pPort     = "26656/tcp"
-	rpcPort     = "26657/tcp"
-	grpcPort    = "9090/tcp"
-	apiPort     = "1317/tcp"
-	privValPort = "1234/tcp"
+	valKey    = "validator"
+	blockTime = 2 // seconds
+
+	defaultP2PPort     = "26656"
+	defaultRPCPort     = "26657"
+	defaultGRPCPort    = "9090"
+	defaultAPIPort     = "1317"
+	defaultPrivValPort = "1234"
+
+	p2pPortID     = defaultP2PPort + "/tcp"
+	rpcPortID     = defaultRPCPort + "/tcp"
+	grpcPortID    = defaultGRPCPort + "/tcp"
+	apiPortID     = defaultAPIPort + "/tcp"
+	privValPortID = defaultPrivValPort + "/tcp"
 )
 
 func (cn *ChainNode) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
@@ -167,7 +174,7 @@ func (cn *ChainNode) getRPCLaddr() string {
 	if addr, exists := argMap["rpc.laddr"]; exists {
 		return addr
 	}
-	return "tcp://0.0.0.0:26657" // default
+	return "tcp://0.0.0.0:" + defaultRPCPort
 }
 
 // getGRPCAddress returns the GRPC address from AdditionalStartArgs or the default.
@@ -176,7 +183,7 @@ func (cn *ChainNode) getGRPCAddress() string {
 	if addr, exists := argMap["grpc.address"]; exists {
 		return addr
 	}
-	return "0.0.0.0:9090" // default
+	return "0.0.0.0:" + defaultGRPCPort
 }
 
 // getAPIAddress returns the API address from AdditionalStartArgs or the default.
@@ -189,7 +196,7 @@ func (cn *ChainNode) getAPIAddress() string {
 		}
 		return addr
 	}
-	return "tcp://0.0.0.0:1317" // default
+	return "tcp://0.0.0.0:" + defaultAPIPort
 }
 
 // getP2PLaddr returns the P2P listen address from AdditionalStartArgs or the default.
@@ -198,31 +205,31 @@ func (cn *ChainNode) getP2PLaddr() string {
 	if addr, exists := argMap["p2p.laddr"]; exists {
 		return addr
 	}
-	return "tcp://0.0.0.0:26656" // default
+	return "tcp://0.0.0.0:" + defaultP2PPort
 }
 
 // getInternalPorts returns all internal ports extracted from configuration.
 func (cn *ChainNode) getInternalPorts() types.Ports {
 	// extract RPC port
-	rpcPort := "26657" // default
+	rpcPort := defaultRPCPort
 	if _, port, err := net.SplitHostPort(strings.TrimPrefix(cn.getRPCLaddr(), "tcp://")); err == nil {
 		rpcPort = port
 	}
 
 	// extract GRPC port
-	grpcPort := "9090" // default
+	grpcPort := defaultGRPCPort
 	if _, port, err := net.SplitHostPort(cn.getGRPCAddress()); err == nil {
 		grpcPort = port
 	}
 
 	// extract API port
-	apiPort := "1317" // default
+	apiPort := defaultAPIPort
 	if _, port, err := net.SplitHostPort(strings.TrimPrefix(cn.getAPIAddress(), "tcp://")); err == nil {
 		apiPort = port
 	}
 
 	// extract P2P port
-	p2pPort := "26656" // default
+	p2pPort := defaultP2PPort
 	if _, port, err := net.SplitHostPort(strings.TrimPrefix(cn.getP2PLaddr(), "tcp://")); err == nil {
 		p2pPort = port
 	}
@@ -472,7 +479,7 @@ func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 		network.MustParsePort(internalPorts.RPC + "/tcp"):  {},
 		network.MustParsePort(internalPorts.GRPC + "/tcp"): {},
 		network.MustParsePort(internalPorts.API + "/tcp"):  {},
-		network.MustParsePort(privValPort):                 {},
+		network.MustParsePort(privValPortID):                 {},
 	}
 
 	for _, port := range cn.AdditionalExposedPorts {
