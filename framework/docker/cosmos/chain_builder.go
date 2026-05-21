@@ -490,18 +490,14 @@ func (b *ChainBuilder) newChainNode(
 		}
 	}
 
-	// derive NodeType from Validator field if not explicitly set
+	// default unspecified node type to full node
 	nodeType := nodeConfig.nodeType
 	if nodeType == 0 {
-		if nodeConfig.nodeType == types.NodeTypeValidator {
-			nodeType = types.NodeTypeValidator
-		} else {
-			nodeType = types.NodeTypeConsensusFull
-		}
+		nodeType = types.NodeTypeConsensusFull
 	}
 
 	chainParams := ChainNodeParams{
-		Validator:              nodeConfig.nodeType == types.NodeTypeValidator,
+		Validator:              nodeType == types.NodeTypeValidator,
 		NodeType:               nodeType,
 		ChainID:                b.chainID,
 		BinaryName:             b.binaryName,
