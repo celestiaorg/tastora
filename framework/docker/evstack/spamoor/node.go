@@ -25,7 +25,9 @@ type Ports struct {
 	Web string // web UI + /metrics
 }
 
-func defaultInternalPorts() Ports { return Ports{Web: "8080"} }
+const defaultWebPort = "8080"
+
+func defaultInternalPorts() Ports { return Ports{Web: defaultWebPort} }
 
 type Config struct {
 	DockerClient    types.TastoraDockerClient
