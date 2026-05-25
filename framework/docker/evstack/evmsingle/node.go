@@ -89,6 +89,14 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 	}, nil
 }
 
+// Restart stops, removes, and recreates the node container while preserving volumes.
+func (n *Node) Restart(ctx context.Context) error {
+	if err := n.Remove(ctx, types.WithPreserveVolumes()); err != nil {
+		return fmt.Errorf("failed to remove container for restart: %w", err)
+	}
+	return n.Start(ctx)
+}
+
 // Start creates and starts the container
 func (n *Node) Start(ctx context.Context) error {
 	n.mu.Lock()

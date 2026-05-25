@@ -117,6 +117,16 @@ func (b *NodeBuilder) WithVolumeName(volumeName string) *NodeBuilder {
 // for the volume. Callers should pass the name that the embedding type will use
 // as its container name.
 func (b *NodeBuilder) Build(ctx context.Context, containerName string) (*Node, error) {
+	if containerName == "" {
+		return nil, fmt.Errorf("containerName cannot be empty")
+	}
+	if b.homeDir == "" {
+		return nil, fmt.Errorf("homeDir cannot be empty")
+	}
+	if !b.hostNetwork && b.networkID == "" {
+		return nil, fmt.Errorf("networkID cannot be empty when host network is disabled")
+	}
+
 	n := NewNode(b.networkID, b.dockerClient, b.testName, b.image, b.homeDir, b.index, b.nodeType, b.logger)
 	lc := NewLifecycle(b.logger, b.dockerClient, containerName)
 	if b.hostNetwork {

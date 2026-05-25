@@ -109,6 +109,14 @@ func (n *Node) GetNetworkInfo(ctx context.Context) (types.NetworkInfo, error) {
 	}, nil
 }
 
+// Restart stops and restarts the node container, preserving its existing state.
+func (n *Node) Restart(ctx context.Context) error {
+	if err := n.StopContainer(ctx); err != nil {
+		return fmt.Errorf("failed to stop container for restart: %w", err)
+	}
+	return n.StartContainer(ctx)
+}
+
 func (n *Node) Start(ctx context.Context) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()

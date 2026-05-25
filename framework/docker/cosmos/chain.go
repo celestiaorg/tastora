@@ -460,6 +460,23 @@ func (c *Chain) startAllNodes(ctx context.Context) error {
 	return eg.Wait()
 }
 
+// Restart stops, removes, and recreates all node containers while preserving volumes.
+func (c *Chain) Restart(ctx context.Context) error {
+	if err := c.Remove(ctx, types.WithPreserveVolumes()); err != nil {
+		return fmt.Errorf("failed to remove containers for restart: %w", err)
+	}
+	return c.startAllNodes(ctx)
+}
+
+// RestartNode restarts a single node by index without affecting other nodes.
+func (c *Chain) RestartNode(ctx context.Context, index int) error {
+	nodes := c.Nodes()
+	if index < 0 || index >= len(nodes) {
+		return fmt.Errorf("node index %d out of range [0, %d)", index, len(nodes))
+	}
+	return nodes[index].Restart(ctx)
+}
+
 // Stop stops all nodes in the chain without removing them.
 func (c *Chain) Stop(ctx context.Context) error {
 	var eg errgroup.Group

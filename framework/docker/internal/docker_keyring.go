@@ -313,7 +313,21 @@ func (d *dockerKeyring) execCommand(ctx context.Context, cmd []string) error {
 		return fmt.Errorf("failed to execute command: %w", err)
 	}
 
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+	}
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
 	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("exec command %v timed out: %w", cmd, ctx.Err())
+		case <-ticker.C:
+		}
+
 		inspect, err := d.dockerClient.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to inspect exec result: %w", err)
@@ -324,7 +338,6 @@ func (d *dockerKeyring) execCommand(ctx context.Context, cmd []string) error {
 			}
 			return nil
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
 }
 
@@ -441,7 +454,9 @@ func (d *dockerKeyring) deleteKeyFromContainer(uid string, record *keyring.Recor
 		addr, err := record.GetAddress()
 		if err == nil {
 			addrFilePath := filepath.Join(d.containerKeyringDir, addr.String()+".address")
-			_ = d.execCommand(context.TODO(), []string{"rm", "-f", addrFilePath})
+			if err := d.execCommand(context.TODO(), []string{"rm", "-f", addrFilePath}); err != nil {
+				return fmt.Errorf("failed to delete address file %s: %w", addrFilePath, err)
+			}
 		}
 	}
 

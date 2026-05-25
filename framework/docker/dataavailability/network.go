@@ -149,6 +149,19 @@ func (n *Network) RemoveNodes(ctx context.Context, nodeNames ...string) error {
 	return nil
 }
 
+// Restart stops and restarts all nodes in the data availability network.
+func (n *Network) Restart(ctx context.Context) error {
+	nodes := n.GetNodes()
+	var eg errgroup.Group
+	for _, nd := range nodes {
+		nd := nd
+		eg.Go(func() error {
+			return nd.Restart(ctx)
+		})
+	}
+	return eg.Wait()
+}
+
 // Stop stops all nodes in the data availability network without removing them.
 func (n *Network) Stop(ctx context.Context) error {
 	nodes := n.GetNodes()

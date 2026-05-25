@@ -465,6 +465,18 @@ func (cn *ChainNode) setPeers(ctx context.Context, peers string) error {
 	})
 }
 
+// Restart stops, removes, and recreates the node container while preserving volumes.
+// The node rejoins the network with its existing state.
+func (cn *ChainNode) Restart(ctx context.Context) error {
+	if err := cn.Remove(ctx, types.WithPreserveVolumes()); err != nil {
+		return fmt.Errorf("failed to remove container for restart: %w", err)
+	}
+	if err := cn.createNodeContainer(ctx); err != nil {
+		return fmt.Errorf("failed to create container for restart: %w", err)
+	}
+	return cn.startContainer(ctx)
+}
+
 // createNodeContainer initializes but does not start a container for the ChainNode with the specified configuration and context.
 func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 	cmd := []string{cn.BinaryName, "start", "--home", cn.HomeDir()}

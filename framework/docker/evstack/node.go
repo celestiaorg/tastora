@@ -155,6 +155,14 @@ func (n *Node) Start(ctx context.Context, startArguments ...string) error {
 	return nil
 }
 
+// Restart stops, removes, and recreates the node container while preserving volumes.
+func (n *Node) Restart(ctx context.Context) error {
+	if err := n.Remove(ctx, types.WithPreserveVolumes()); err != nil {
+		return fmt.Errorf("failed to remove container for restart: %w", err)
+	}
+	return n.Start(ctx)
+}
+
 // createEvstackContainer initializes but does not start a container for the Node with the specified configuration and context.
 func (n *Node) createEvstackContainer(ctx context.Context, additionalStartArgs ...string) error {
 
