@@ -30,6 +30,7 @@ type Node struct {
 	Logger             *zap.Logger
 }
 
+// Deprecated: use NewNodeBuilder instead.
 // NewNode creates a new Node instance with the required parameters.
 func NewNode(
 	networkID string,
@@ -53,6 +54,96 @@ func NewNode(
 	}
 }
 
+// NodeBuilder provides a fluent API for constructing and initializing a Node.
+type NodeBuilder struct {
+	networkID    string
+	dockerClient types.TastoraDockerClient
+	testName     string
+	image        Image
+	homeDir      string
+	index        int
+	nodeType     types.NodeType
+	logger       *zap.Logger
+	volumeName  string
+	hostNetwork bool
+}
+
+// NewNodeBuilder creates a NodeBuilder with the minimum required fields.
+func NewNodeBuilder(dockerClient types.TastoraDockerClient, testName string, image Image, logger *zap.Logger) *NodeBuilder {
+	return &NodeBuilder{
+		dockerClient: dockerClient,
+		testName:     testName,
+		image:        image,
+		logger:       logger,
+	}
+}
+
+func (b *NodeBuilder) WithNetworkID(networkID string) *NodeBuilder {
+	b.networkID = networkID
+	return b
+}
+
+func (b *NodeBuilder) WithHomeDir(homeDir string) *NodeBuilder {
+	b.homeDir = homeDir
+	return b
+}
+
+func (b *NodeBuilder) WithIndex(index int) *NodeBuilder {
+	b.index = index
+	return b
+}
+
+func (b *NodeBuilder) WithNodeType(nodeType types.NodeType) *NodeBuilder {
+	b.nodeType = nodeType
+	return b
+}
+
+// WithHostNetwork enables host network mode on the container lifecycle.
+func (b *NodeBuilder) WithHostNetwork(hostNetwork bool) *NodeBuilder {
+	b.hostNetwork = hostNetwork
+	return b
+}
+
+// WithVolumeName overrides the name used for volume creation.
+// By default, Build uses the containerName for the volume. Use this to share
+// a volume with another node (e.g. a deployer and its agent).
+func (b *NodeBuilder) WithVolumeName(volumeName string) *NodeBuilder {
+	b.volumeName = volumeName
+	return b
+}
+
+// Build creates the Node with its lifecycle and volume fully initialized.
+// The containerName is used for the lifecycle and (unless WithVolumeName was called)
+// for the volume. Callers should pass the name that the embedding type will use
+// as its container name.
+func (b *NodeBuilder) Build(ctx context.Context, containerName string) (*Node, error) {
+	if containerName == "" {
+		return nil, fmt.Errorf("containerName cannot be empty")
+	}
+	if b.homeDir == "" {
+		return nil, fmt.Errorf("homeDir cannot be empty")
+	}
+	if !b.hostNetwork && b.networkID == "" {
+		return nil, fmt.Errorf("networkID cannot be empty when host network is disabled")
+	}
+
+	n := NewNode(b.networkID, b.dockerClient, b.testName, b.image, b.homeDir, b.index, b.nodeType, b.logger)
+	lc := NewLifecycle(b.logger, b.dockerClient, containerName)
+	if b.hostNetwork {
+		lc.SetHostNetwork(b.hostNetwork)
+	}
+	n.ContainerLifecycle = lc
+	volName := containerName
+	if b.volumeName != "" {
+		volName = b.volumeName
+	}
+	if err := n.CreateAndSetupVolume(ctx, volName); err != nil {
+		return nil, fmt.Errorf("setup node %q: %w", containerName, err)
+	}
+	return n, nil
+}
+
+// Deprecated: use NewNodeBuilder instead.
 // SetContainerLifecycle sets the container lifecycle for the node
 func (n *Node) SetContainerLifecycle(lifecycle *Lifecycle) {
 	n.ContainerLifecycle = lifecycle
@@ -164,6 +255,7 @@ func (n *Node) GetVolumeName(nodeName string) string {
 	return internal.SanitizeDockerResourceName(n.TestName + "-" + nodeName + "-vol")
 }
 
+// Deprecated: use NewNodeBuilder instead.
 // CreateAndSetupVolume creates a Docker volume for the node and sets up proper ownership.
 // This consolidates the volume creation pattern used across all node types.
 // The nodeName parameter should be the specific name for this node instance.

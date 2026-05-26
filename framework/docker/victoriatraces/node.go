@@ -54,20 +54,29 @@ func New(ctx context.Context, cfg Config, testName string, index int) (*Node, er
 	if homeDir == "" {
 		homeDir = DefaultHomeDir()
 	}
-	n := &Node{cfg: cfg, logger: log, internalHTTPPort: defaultHTTPPort}
-	n.Node = container.NewNode(cfg.DockerNetworkID, cfg.DockerClient, testName, img, homeDir, index, nodeType(0), log)
-	name := n.Name()
-	n.SetContainerLifecycle(container.NewLifecycle(cfg.Logger, cfg.DockerClient, name))
-	if err := n.CreateAndSetupVolume(ctx, name); err != nil {
+	name := nodeName(testName, index)
+	node, err := container.NewNodeBuilder(cfg.DockerClient, testName, img, log).
+		WithNetworkID(cfg.DockerNetworkID).
+		WithHomeDir(homeDir).
+		WithIndex(index).
+		WithNodeType(nodeType(0)).
+		Build(ctx, name)
+	if err != nil {
 		return nil, err
 	}
+	n := &Node{cfg: cfg, logger: log, internalHTTPPort: defaultHTTPPort}
+	n.Node = node
 	n.Internal = scope{hostname: n.HostName(), port: &n.internalHTTPPort}
 	n.External = scope{hostname: "0.0.0.0", port: &n.externalHTTPPort}
 	return n, nil
 }
 
+func nodeName(testName string, index int) string {
+	return fmt.Sprintf("victoriatraces-%d-%s", index, internal.SanitizeDockerResourceName(testName))
+}
+
 func (n *Node) Name() string {
-	return fmt.Sprintf("victoriatraces-%d-%s", n.Index, internal.SanitizeDockerResourceName(n.TestName))
+	return nodeName(n.TestName, n.Index)
 }
 
 func (n *Node) HostName() string {

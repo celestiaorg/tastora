@@ -119,6 +119,7 @@ type ChainNodeParams struct {
 	AdditionalExposedPorts []string
 }
 
+// Deprecated: use container.NewNodeBuilder instead.
 // NewChainNode creates a new ChainNode with injected dependencies
 func NewChainNode(
 	logger *zap.Logger,
@@ -248,9 +249,13 @@ func (cn *ChainNode) GetKeyring() (keyring.Keyring, error) {
 	return internal.NewDockerKeyring(cn.DockerClient, cn.ContainerLifecycle.ContainerID(), containerKeyringDir, cn.EncodingConfig.Codec), nil
 }
 
+func chainNodeName(testName string, index int, chainID string, nodeType types.ConsensusNodeType) string {
+	return fmt.Sprintf("%s-%s-%d-%s", chainID, nodeType.String(), index, internal.SanitizeDockerResourceName(testName))
+}
+
 // Name of the test node container.
 func (cn *ChainNode) Name() string {
-	return fmt.Sprintf("%s-%s-%d-%s", cn.ChainID, cn.NodeType(), cn.Index, internal.SanitizeDockerResourceName(cn.TestName))
+	return chainNodeName(cn.TestName, cn.Index, cn.ChainID, cn.ChainNodeParams.NodeType)
 }
 
 // NodeType returns the type of the ChainNode as a string.
@@ -458,6 +463,18 @@ func (cn *ChainNode) setPeers(ctx context.Context, peers string) error {
 	return config.Modify(ctx, cn, "config/config.toml", func(cfg *cometcfg.Config) {
 		cfg.P2P.PersistentPeers = peers
 	})
+}
+
+// Restart stops, removes, and recreates the node container while preserving volumes.
+// The node rejoins the network with its existing state.
+func (cn *ChainNode) Restart(ctx context.Context) error {
+	if err := cn.Remove(ctx, types.WithPreserveVolumes()); err != nil {
+		return fmt.Errorf("failed to remove container for restart: %w", err)
+	}
+	if err := cn.createNodeContainer(ctx); err != nil {
+		return fmt.Errorf("failed to create container for restart: %w", err)
+	}
+	return cn.startContainer(ctx)
 }
 
 // createNodeContainer initializes but does not start a container for the ChainNode with the specified configuration and context.

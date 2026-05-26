@@ -237,11 +237,30 @@ func (b *NetworkBuilder) newNode(ctx context.Context, nodeConfig NodeConfig, ind
 		nodeConfig.Env = b.env
 	}
 
-	node := NewNode(cfg, b.testName, imageToUse, index, nodeConfig)
+	homeDir := cfg.HomeDir
+	if homeDir == "" {
+		homeDir = DefaultHomeDir()
+	}
 
-	// Create and setup volume using shared logic
-	if err := node.CreateAndSetupVolume(ctx, node.Name()); err != nil {
+	log := b.logger.With(zap.String("node_type", nodeConfig.NodeType.String()))
+	name := daNodeName(b.testName, index, nodeConfig.NodeType)
+	baseNode, err := container.NewNodeBuilder(b.dockerClient, b.testName, imageToUse, log).
+		WithNetworkID(b.dockerNetworkID).
+		WithHomeDir(homeDir).
+		WithIndex(index).
+		WithNodeType(nodeConfig.NodeType).
+		Build(ctx, name)
+	if err != nil {
 		return nil, err
+	}
+
+	node := &Node{
+		cfg:                 cfg,
+		nodeType:            nodeConfig.NodeType,
+		additionalStartArgs: nodeConfig.AdditionalStartArgs,
+		configModifications: nodeConfig.ConfigModifications,
+		internalPorts:       initializeDANodePorts(nodeConfig.InternalPorts),
+		Node:                baseNode,
 	}
 
 	// Run post-init functions if any

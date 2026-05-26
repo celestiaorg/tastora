@@ -26,9 +26,13 @@ type Agent struct {
 }
 
 // Name returns the hostname/container name for the agent container
-func (a *Agent) Name() string {
-	base := fmt.Sprintf("hyperlane-agent-%s-%d-%s", a.agentType, a.Index, internal.SanitizeDockerResourceName(a.TestName))
+func agentNodeName(testName string, agentType AgentType) string {
+	base := fmt.Sprintf("hyperlane-agent-%s-0-%s", agentType, internal.SanitizeDockerResourceName(testName))
 	return internal.CondenseHostName(base)
+}
+
+func (a *Agent) Name() string {
+	return agentNodeName(a.TestName, a.agentType)
 }
 
 // NewAgent creates a new Hyperlane agent that will run with the provided config.
@@ -40,31 +44,22 @@ func NewAgent(ctx context.Context, cfg Config, testName string, agentType AgentT
 		image.UIDGID = hyperlaneDefaultUIDGID
 	}
 
-	node := container.NewNode(
-		cfg.DockerNetworkID,
-		cfg.DockerClient,
-		testName,
-		image,
-		hyperlaneHomeDir,
-		0,
-		AgentNodeType,
-		cfg.Logger,
-	)
-
-	a := &Agent{
-		Node:      node,
-		cfg:       cfg,
-		agentType: agentType,
-	}
-
-	lifecycle := container.NewLifecycle(cfg.Logger, cfg.DockerClient, a.Name())
-	a.SetContainerLifecycle(lifecycle)
-
-	if err := a.CreateAndSetupVolume(ctx, d.Name()); err != nil {
+	name := agentNodeName(testName, agentType)
+	node, err := container.NewNodeBuilder(cfg.DockerClient, testName, image, cfg.Logger).
+		WithNetworkID(cfg.DockerNetworkID).
+		WithHomeDir(hyperlaneHomeDir).
+		WithNodeType(AgentNodeType).
+		WithVolumeName(d.Name()).
+		Build(ctx, name)
+	if err != nil {
 		return nil, err
 	}
 
-	return a, nil
+	return &Agent{
+		Node:      node,
+		cfg:       cfg,
+		agentType: agentType,
+	}, nil
 }
 
 // Start starts the agent container with the relayer config mounted at /workspace/relayer-config.json

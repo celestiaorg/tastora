@@ -79,6 +79,14 @@ func (c *Chain) Start(ctx context.Context) error {
 	return eg.Wait()
 }
 
+// Restart stops, removes, and recreates all node containers while preserving volumes.
+func (c *Chain) Restart(ctx context.Context) error {
+	if err := c.Remove(ctx, types.WithPreserveVolumes()); err != nil {
+		return fmt.Errorf("failed to remove containers for restart: %w", err)
+	}
+	return c.Start(ctx)
+}
+
 // Stop stops all nodes concurrently
 func (c *Chain) Stop(ctx context.Context) error {
 	nodes := c.Nodes()

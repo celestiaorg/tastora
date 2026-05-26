@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 var _ keyring.Keyring = &dockerKeyring{}
@@ -84,11 +85,14 @@ func (d *dockerKeyring) Delete(uid string) error {
 		return err
 	}
 
+	// resolve address before deleting, so we can clean up the .address file
+	record, _ := d.localKeyring.Key(uid)
+
 	if err := d.localKeyring.Delete(uid); err != nil {
 		return fmt.Errorf("failed to delete key from local keyring: %w", err)
 	}
 
-	if err := d.deleteKeyFromContainer(uid); err != nil {
+	if err := d.deleteKeyFromContainer(uid, record); err != nil {
 		return fmt.Errorf("failed to delete key from container: %w", err)
 	}
 
@@ -109,7 +113,7 @@ func (d *dockerKeyring) DeleteByAddress(address sdk.Address) error {
 		return fmt.Errorf("failed to delete key from local keyring: %w", err)
 	}
 
-	if err := d.deleteKeyFromContainer(record.Name); err != nil {
+	if err := d.deleteKeyFromContainer(record.Name, record); err != nil {
 		return fmt.Errorf("failed to delete key from container: %w", err)
 	}
 
@@ -296,7 +300,7 @@ func (d *dockerKeyring) MigrateAll() ([]*keyring.Record, error) {
 	return d.localKeyring.MigrateAll()
 }
 
-// execCommand executes a command in the Docker container.
+// execCommand executes a command in the Docker container and waits for it to complete.
 func (d *dockerKeyring) execCommand(ctx context.Context, cmd []string) error {
 	exec, err := d.dockerClient.ExecCreate(ctx, d.containerID, client.ExecCreateOptions{
 		Cmd: cmd,
@@ -309,15 +313,32 @@ func (d *dockerKeyring) execCommand(ctx context.Context, cmd []string) error {
 		return fmt.Errorf("failed to execute command: %w", err)
 	}
 
-	inspect, err := d.dockerClient.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to inspect exec result: %w", err)
-	}
-	if inspect.ExitCode != 0 {
-		return fmt.Errorf("command %v exited with non-zero status: %d", cmd, inspect.ExitCode)
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
 	}
 
-	return nil
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("exec command %v timed out: %w", cmd, ctx.Err())
+		case <-ticker.C:
+		}
+
+		inspect, err := d.dockerClient.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to inspect exec result: %w", err)
+		}
+		if !inspect.Running {
+			if inspect.ExitCode != 0 {
+				return fmt.Errorf("command %v exited with non-zero status: %d", cmd, inspect.ExitCode)
+			}
+			return nil
+		}
+	}
 }
 
 // ensureInitialized lazily loads the keyring from the Docker container a temp directory for testing.
@@ -420,25 +441,22 @@ func (d *dockerKeyring) persistKeyringToContainer() error {
 	return nil
 }
 
-// deleteKeyFromContainer removes all key-related files from the Docker container
-func (d *dockerKeyring) deleteKeyFromContainer(uid string) error {
-	// delete main key file, .info file, and any .address files related to this key
-	// use a glob pattern to match all files that might be related to this key
+// deleteKeyFromContainer removes all key-related files from the Docker container.
+// record may be nil if the key was not found locally.
+func (d *dockerKeyring) deleteKeyFromContainer(uid string, record *keyring.Record) error {
 	keyPattern := filepath.Join(d.containerKeyringDir, uid+"*")
 
 	if err := d.execCommand(context.TODO(), []string{"sh", "-c", fmt.Sprintf("rm -f %s", keyPattern)}); err != nil {
 		return fmt.Errorf("failed to delete key files: %w", err)
 	}
 
-	// Also need to find and delete the .address file which is named by the address, not the uid
-	// First get the key record to find its address, then delete the corresponding .address file
-	record, err := d.localKeyring.Key(uid)
-	if err == nil && record != nil {
-		// Get the address and delete the corresponding .address file
+	if record != nil {
 		addr, err := record.GetAddress()
 		if err == nil {
 			addrFilePath := filepath.Join(d.containerKeyringDir, addr.String()+".address")
-			_ = d.execCommand(context.TODO(), []string{"rm", "-f", addrFilePath})
+			if err := d.execCommand(context.TODO(), []string{"rm", "-f", addrFilePath}); err != nil {
+				return fmt.Errorf("failed to delete address file %s: %w", addrFilePath, err)
+			}
 		}
 	}
 
