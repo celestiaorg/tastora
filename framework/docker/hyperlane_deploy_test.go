@@ -150,7 +150,7 @@ func TestHyperlaneDeployer_Bootstrap(t *testing.T) {
 	t.Logf("Warp token contract has %d bytes of code", len(warpTokenCode))
 
 	paddedReceiver := evm.PadAddress(evmAddr20)
-	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, paddedReceiver.String())
+	err = d.EnrollRemoteRouterOnCosmos(ctx, broadcaster, faucetWallet, config.TokenID, evmDomain, paddedReceiver)
 	require.NoError(t, err)
 
 	// capture sender utia balance before
