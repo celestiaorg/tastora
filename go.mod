@@ -2,21 +2,11 @@ module github.com/celestiaorg/tastora
 
 go 1.25.8
 
-replace (
-	cosmossdk.io/x/upgrade => github.com/celestiaorg/cosmos-sdk/x/upgrade v0.1.0
-	github.com/ChainSafe/go-schnorrkel => github.com/ChainSafe/go-schnorrkel v0.0.0-20200405005733-88cbf1b4c40d
-	github.com/ChainSafe/go-schnorrkel/1 => github.com/ChainSafe/go-schnorrkel v1.0.0
-	github.com/btcsuite/btcd/btcec/v2 => github.com/btcsuite/btcd/btcec/v2 v2.3.3
-	github.com/cometbft/cometbft => github.com/celestiaorg/celestia-core v0.39.4
-	github.com/cosmos/cosmos-sdk => github.com/celestiaorg/cosmos-sdk v0.51.2
-	github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2
-)
-
 require (
 	cosmossdk.io/math v1.5.1
 	github.com/BurntSushi/toml v1.5.0
 	github.com/avast/retry-go/v4 v4.6.1
-	github.com/bcp-innovations/hyperlane-cosmos v1.0.1
+	github.com/bcp-innovations/hyperlane-cosmos v1.2.0
 	github.com/celestiaorg/go-square/v3 v3.0.0
 	github.com/cometbft/cometbft v0.38.17
 	github.com/containerd/errdefs v1.0.0
@@ -243,4 +233,15 @@ require (
 	nhooyr.io/websocket v1.8.17 // indirect
 	pgregory.net/rapid v1.2.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
+)
+
+replace (
+	cosmossdk.io/x/upgrade => github.com/celestiaorg/cosmos-sdk/x/upgrade v0.1.0
+	github.com/ChainSafe/go-schnorrkel => github.com/ChainSafe/go-schnorrkel v0.0.0-20200405005733-88cbf1b4c40d
+	github.com/ChainSafe/go-schnorrkel/1 => github.com/ChainSafe/go-schnorrkel v1.0.0
+	github.com/btcsuite/btcd/btcec/v2 => github.com/btcsuite/btcd/btcec/v2 v2.3.3
+	github.com/cometbft/cometbft => github.com/celestiaorg/celestia-core v0.39.4
+	github.com/cosmos/cosmos-sdk => github.com/celestiaorg/cosmos-sdk v0.51.2
+	github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2
+	github.com/bcp-innovations/hyperlane-cosmos => github.com/celestiaorg/hyperlane-cosmos v1.2.0
 )
