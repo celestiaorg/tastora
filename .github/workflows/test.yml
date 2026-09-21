@@ -10,6 +10,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -23,4 +26,12 @@ jobs:
         run: go mod download
 
       - name: Run tests
-        run: make test
+        run: go test -timeout=30m -parallel=5 -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@0b35c9ecc4f0529d0eb674914510c22f85b196b4 # v7.1.0
+        with:
+          disable_search: true
+          fail_ci_if_error: true
+          files: ./coverage.txt
+          use_oidc: true
