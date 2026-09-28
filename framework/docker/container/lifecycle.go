@@ -26,12 +26,11 @@ import (
 var panicRe = regexp.MustCompile(`panic:.*\n`)
 
 type Lifecycle struct {
-	log               *zap.Logger
-	client            types.TastoraDockerClient
-	containerName     string
-	id                string
-	preStartListeners port.Listeners
-	hostNetwork       bool
+	log           *zap.Logger
+	client        types.TastoraDockerClient
+	containerName string
+	id            string
+	hostNetwork   bool
 }
 
 func (c *Lifecycle) SetHostNetwork(enabled bool) {
@@ -94,27 +93,35 @@ func (c *Lifecycle) CreateContainer(
 	if c.hostNetwork {
 		hostCfg.NetworkMode = "host"
 	} else {
+		imageInfo, err := c.client.ImageInspect(ctx, imageRef)
+		if err != nil {
+			return fmt.Errorf("inspect image %s: %w", imageRef, err)
+		}
+
 		pS := network.PortSet{}
+		pb := network.PortMap{}
+		localhost := netip.MustParseAddr("127.0.0.1")
+		if imageInfo.Config != nil {
+			for exposedPort := range imageInfo.Config.ExposedPorts {
+				port, parseErr := network.ParsePort(exposedPort)
+				if parseErr != nil {
+					return fmt.Errorf("invalid exposed port %q in image %s: %w", exposedPort, imageRef, parseErr)
+				}
+				pS[port] = struct{}{}
+				pb[port] = []network.PortBinding{{HostIP: localhost}}
+			}
+		}
 		for k := range ports {
 			pS[k] = struct{}{}
+			pb[k] = []network.PortBinding{{HostIP: localhost}}
 		}
 		containerCfg.ExposedPorts = pS
-
-		pb, listeners, err := port.GenerateBindings(ports)
-		if err != nil {
-			return fmt.Errorf("failed to generate port bindings: %w", err)
-		}
-		c.preStartListeners = listeners
-
 		hostCfg.PortBindings = pb
-		hostCfg.PublishAllPorts = true
 
 		var endpointSettings network.EndpointSettings
 		if ipAddr != "" {
 			addr, parseErr := netip.ParseAddr(ipAddr)
 			if parseErr != nil {
-				listeners.CloseAll()
-				c.preStartListeners = port.Listeners{}
 				return fmt.Errorf("invalid container IP %q: %w", ipAddr, parseErr)
 			}
 			endpointSettings = network.EndpointSettings{
@@ -140,8 +147,6 @@ func (c *Lifecycle) CreateContainer(
 		},
 	)
 	if err != nil {
-		c.preStartListeners.CloseAll()
-		c.preStartListeners = port.Listeners{}
 		return err
 	}
 	c.id = cc.ID
@@ -149,14 +154,6 @@ func (c *Lifecycle) CreateContainer(
 }
 
 func (c *Lifecycle) StartContainer(ctx context.Context) error {
-	// lock port allocation for the time between freeing the ports from the
-	// temporary listeners to the consumption of the ports by the container
-	internal.LockPortAssignment()
-	defer internal.UnlockPortAssignment()
-
-	c.preStartListeners.CloseAll()
-	c.preStartListeners = port.Listeners{}
-
 	if err := internal.StartContainer(ctx, c.client, c.id); err != nil {
 		return err
 	}
