@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/netip"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,12 +27,19 @@ import (
 var panicRe = regexp.MustCompile(`panic:.*\n`)
 
 type Lifecycle struct {
-	log               *zap.Logger
-	client            types.TastoraDockerClient
-	containerName     string
-	id                string
-	preStartListeners port.Listeners
-	hostNetwork       bool
+	log           *zap.Logger
+	client        types.TastoraDockerClient
+	containerName string
+	id            string
+	hostNetwork   bool
+
+	// createOpts is retained so the container can be recreated with pinned host ports.
+	createOpts client.ContainerCreateOptions
+	// assignedPorts holds the host ports Docker assigned on the first start.
+	assignedPorts network.PortMap
+	// portsPinned is true once the container's bindings name explicit host ports,
+	// so Docker reuses them on every subsequent start.
+	portsPinned bool
 }
 
 func (c *Lifecycle) SetHostNetwork(enabled bool) {
@@ -94,27 +102,35 @@ func (c *Lifecycle) CreateContainer(
 	if c.hostNetwork {
 		hostCfg.NetworkMode = "host"
 	} else {
+		imageInfo, err := c.client.ImageInspect(ctx, imageRef)
+		if err != nil {
+			return fmt.Errorf("inspect image %s: %w", imageRef, err)
+		}
+
 		pS := network.PortSet{}
+		pb := network.PortMap{}
+		localhost := netip.MustParseAddr("127.0.0.1")
+		if imageInfo.Config != nil {
+			for exposedPort := range imageInfo.Config.ExposedPorts {
+				port, parseErr := network.ParsePort(exposedPort)
+				if parseErr != nil {
+					return fmt.Errorf("invalid exposed port %q in image %s: %w", exposedPort, imageRef, parseErr)
+				}
+				pS[port] = struct{}{}
+				pb[port] = []network.PortBinding{{HostIP: localhost}}
+			}
+		}
 		for k := range ports {
 			pS[k] = struct{}{}
+			pb[k] = []network.PortBinding{{HostIP: localhost}}
 		}
 		containerCfg.ExposedPorts = pS
-
-		pb, listeners, err := port.GenerateBindings(ports)
-		if err != nil {
-			return fmt.Errorf("failed to generate port bindings: %w", err)
-		}
-		c.preStartListeners = listeners
-
 		hostCfg.PortBindings = pb
-		hostCfg.PublishAllPorts = true
 
 		var endpointSettings network.EndpointSettings
 		if ipAddr != "" {
 			addr, parseErr := netip.ParseAddr(ipAddr)
 			if parseErr != nil {
-				listeners.CloseAll()
-				c.preStartListeners = port.Listeners{}
 				return fmt.Errorf("invalid container IP %q: %w", ipAddr, parseErr)
 			}
 			endpointSettings = network.EndpointSettings{
@@ -130,32 +146,32 @@ func (c *Lifecycle) CreateContainer(
 		}
 	}
 
-	cc, err := c.client.ContainerCreate(
-		ctx,
-		client.ContainerCreateOptions{
-			Name:             c.containerName,
-			Config:           containerCfg,
-			HostConfig:       hostCfg,
-			NetworkingConfig: netCfg,
-		},
-	)
+	opts := client.ContainerCreateOptions{
+		Name:             c.containerName,
+		Config:           containerCfg,
+		HostConfig:       hostCfg,
+		NetworkingConfig: netCfg,
+	}
+	cc, err := c.client.ContainerCreate(ctx, opts)
 	if err != nil {
-		c.preStartListeners.CloseAll()
-		c.preStartListeners = port.Listeners{}
 		return err
 	}
 	c.id = cc.ID
+	c.createOpts = opts
+	c.assignedPorts = nil
+	c.portsPinned = len(hostCfg.PortBindings) == 0
 	return nil
 }
 
+// StartContainer starts the container. Docker assigns host ports on the first start;
+// they are recorded, and later starts recreate the container with those ports pinned so
+// host addresses remain stable across stop/start cycles.
 func (c *Lifecycle) StartContainer(ctx context.Context) error {
-	// lock port allocation for the time between freeing the ports from the
-	// temporary listeners to the consumption of the ports by the container
-	internal.LockPortAssignment()
-	defer internal.UnlockPortAssignment()
-
-	c.preStartListeners.CloseAll()
-	c.preStartListeners = port.Listeners{}
+	if c.assignedPorts != nil && !c.portsPinned {
+		if err := c.recreateWithAssignedPorts(ctx); err != nil {
+			return fmt.Errorf("pin host ports for %s: %w", c.containerName, err)
+		}
+	}
 
 	if err := internal.StartContainer(ctx, c.client, c.id); err != nil {
 		return err
@@ -165,8 +181,102 @@ func (c *Lifecycle) StartContainer(ctx context.Context) error {
 		return err
 	}
 
+	if c.assignedPorts == nil && !c.portsPinned {
+		if err := c.recordAssignedPorts(ctx); err != nil {
+			return fmt.Errorf("record host ports for %s: %w", c.containerName, err)
+		}
+	}
+
 	c.log.Info("Container started", zap.String("container", c.containerName))
 	return nil
+}
+
+// recordAssignedPorts saves the host ports Docker assigned to the running container.
+func (c *Lifecycle) recordAssignedPorts(ctx context.Context) error {
+	res, err := c.client.ContainerInspect(ctx, c.id, client.ContainerInspectOptions{})
+	if err != nil {
+		return err
+	}
+	if res.Container.NetworkSettings == nil {
+		return fmt.Errorf("container has no network settings")
+	}
+	assigned := make(network.PortMap, len(c.createOpts.HostConfig.PortBindings))
+	for p, requested := range c.createOpts.HostConfig.PortBindings {
+		hostIP := requested[0].HostIP
+		for _, b := range res.Container.NetworkSettings.Ports[p] {
+			if b.HostIP == hostIP && b.HostPort != "" {
+				assigned[p] = []network.PortBinding{{HostIP: hostIP, HostPort: b.HostPort}}
+				break
+			}
+		}
+		if _, ok := assigned[p]; !ok {
+			return fmt.Errorf("no host port assigned for %s", p)
+		}
+	}
+	c.assignedPorts = assigned
+	return nil
+}
+
+// recreateWithAssignedPorts replaces the stopped container with an identical one whose
+// bindings name the previously assigned host ports. Docker cannot change the bindings of
+// an existing container. Named volumes and bind mounts are reattached; anonymous volumes
+// are carried over by name. Writes to the container filesystem outside volumes are lost.
+func (c *Lifecycle) recreateWithAssignedPorts(ctx context.Context) error {
+	res, err := c.client.ContainerInspect(ctx, c.id, client.ContainerInspectOptions{})
+	if err != nil {
+		return err
+	}
+	if res.Container.State != nil && res.Container.State.Running {
+		// already running with its assigned ports; pin on a later start
+		return nil
+	}
+
+	hostCfg := *c.createOpts.HostConfig
+	hostCfg.PortBindings = c.assignedPorts
+	hostCfg.Mounts = append(slices.Clone(hostCfg.Mounts), anonymousVolumeMounts(res.Container.Mounts, &hostCfg)...)
+
+	if _, err := c.client.ContainerRemove(ctx, c.id, client.ContainerRemoveOptions{}); err != nil {
+		return fmt.Errorf("remove container: %w", err)
+	}
+
+	opts := c.createOpts
+	opts.HostConfig = &hostCfg
+	cc, err := c.client.ContainerCreate(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("create container: %w", err)
+	}
+	c.id = cc.ID
+	c.createOpts = opts
+	c.portsPinned = true
+	return nil
+}
+
+// anonymousVolumeMounts returns mounts for volumes attached to the container that are not
+// declared in hostCfg, such as those created from image VOLUME directives.
+func anonymousVolumeMounts(current []container.MountPoint, hostCfg *container.HostConfig) []mount.Mount {
+	declared := make(map[string]bool)
+	for _, b := range hostCfg.Binds {
+		if parts := strings.Split(b, ":"); len(parts) > 1 {
+			declared[parts[1]] = true
+		}
+	}
+	for _, m := range hostCfg.Mounts {
+		declared[m.Target] = true
+	}
+	var out []mount.Mount
+	for _, mp := range current {
+		if mp.Type != mount.TypeVolume || mp.Name == "" || declared[mp.Destination] {
+			continue
+		}
+		out = append(out, mount.Mount{Type: mount.TypeVolume, Source: mp.Name, Target: mp.Destination, ReadOnly: !mp.RW})
+	}
+	return out
+}
+
+// ContainerName returns the container's name, which stays stable when the container is
+// recreated, unlike its ID.
+func (c *Lifecycle) ContainerName() string {
+	return c.containerName
 }
 
 // checkForFailedStart checks if the container failed to start by analyzing logs and inspecting its state after waiting.

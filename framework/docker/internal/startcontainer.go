@@ -3,16 +3,10 @@ package internal
 import (
 	"context"
 	"github.com/celestiaorg/tastora/framework/types"
-	"sync"
 	"time"
 
 	"github.com/moby/moby/client"
 )
-
-// portAssignmentMu prevents race conditions during the critical window between
-// closing temporary listeners and starting containers. Multiple containers starting
-// concurrently could otherwise claim the same ports.
-var portAssignmentMu sync.Mutex
 
 // StartContainer attempts to start the container with the given ID.
 func StartContainer(ctx context.Context, cli types.TastoraDockerClient, id string) error {
@@ -29,15 +23,4 @@ func StartContainer(ctx context.Context, cli types.TastoraDockerClient, id strin
 	}
 
 	return nil
-}
-
-// LockPortAssignment locks the port assignment mutex to prevent race conditions
-// during the critical window between closing temporary listeners and starting containers.
-func LockPortAssignment() {
-	portAssignmentMu.Lock()
-}
-
-// UnlockPortAssignment unlocks the port assignment mutex.
-func UnlockPortAssignment() {
-	portAssignmentMu.Unlock()
 }

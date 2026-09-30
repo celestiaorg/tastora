@@ -246,7 +246,7 @@ func (cn *ChainNode) getInternalPorts() types.Ports {
 // by the host running the test.
 func (cn *ChainNode) GetKeyring() (keyring.Keyring, error) {
 	containerKeyringDir := path.Join(cn.HomeDir(), "keyring-test")
-	return internal.NewDockerKeyring(cn.DockerClient, cn.ContainerLifecycle.ContainerID(), containerKeyringDir, cn.EncodingConfig.Codec), nil
+	return internal.NewDockerKeyring(cn.DockerClient, cn.ContainerLifecycle.ContainerName(), containerKeyringDir, cn.EncodingConfig.Codec), nil
 }
 
 func chainNodeName(testName string, index int, chainID string, nodeType types.ConsensusNodeType) string {
