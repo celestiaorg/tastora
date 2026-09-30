@@ -177,3 +177,26 @@ func checkPortAddresses(t *testing.T, addresses []string, want int, occupied str
 		seen[address] = true
 	}
 }
+
+func TestDockerPortsStableAcrossRestart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires Docker")
+	}
+	cli, networkID := Setup(t)
+	run := startPortContainers(t, cli, networkID, 1, 2)
+	t.Cleanup(func() { removePortContainers(t, run.containers) })
+	lifecycle := run.containers[0]
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	for i := range 2 {
+		require.NoError(t, lifecycle.StopContainer(ctx))
+		require.NoError(t, lifecycle.StartContainer(ctx), "restart %d", i)
+		mapped, err := lifecycle.GetHostPorts(ctx, "8080/tcp", "8081/tcp")
+		require.NoError(t, err)
+		require.Equal(t, run.ports, mapped, "host ports changed after restart %d", i)
+		conn, err := net.DialTimeout("tcp", mapped[0], 3*time.Second)
+		require.NoError(t, err)
+		require.NoError(t, conn.Close())
+	}
+}
