@@ -187,3 +187,13 @@ make lint-fix
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+PR titles must follow [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) using a standard type such as `fix:`, `feat:`, `build:`, `chore:`, `ci:`, `docs:`, `refactor:`, `perf:`, or `test:` (dependency bumps use `chore(deps):`, not `deps:`). Include an `!` (e.g. `feat!:`) for breaking changes.
+
+The subject must start with `[high]`, `[medium]`, or `[low]` to indicate the review thoroughness needed. For example: `feat!: [high] rename Chain interface methods` or `docs: [low] clarify setup instructions`. Include the same tag in the PR description and explain why you chose it.
+
+- `[high]`: Deep review for breaking API changes, public interfaces in `framework/types` that consumers import, security, or other changes with significant risk.
+- `[medium]`: Standard review for code changes with limited impact and well-understood behavior.
+- `[low]`: Focused review for straightforward docs, tests, or tooling changes with low risk.
+
+Choose the higher level when unsure. A small diff can still need deep review. CI checks the title format; reviewers should confirm the chosen level. Dependabot titles default to `[medium]`.

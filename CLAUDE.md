@@ -19,6 +19,13 @@
 - `make test-short` runs tests in short mode, this does not deploy any docker resources.
 - `make test` run tests for the project (this can take time as it deploys docker resources)
 
+### Pull Requests
+
+- Title format: `type(scope)!: [level] subject` using standard conventional commit types (`chore(deps):`, not `deps:`).
+- Levels: `[high]` for breaking API changes, public interfaces in `framework/types`, or security; `[medium]` for limited-impact code changes; `[low]` for docs, tests, or tooling. See [README.md#contributing](README.md#contributing).
+- Use the higher level when unsure.
+- Include the tag in the description with a brief reason, e.g. `Review level: [low] - documentation only.`
+
 ### Do Not Section
 
 - don't use any emojis.
