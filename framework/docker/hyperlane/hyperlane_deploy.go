@@ -62,10 +62,11 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 		return fmt.Errorf("failed to write %s: %w", fastPollPath, err)
 	}
 
-	eg, egCtx := errgroup.WithContext(ctx)
+	// Exec cancellation does not stop its container, so let sibling deploys finish.
+	var eg errgroup.Group
 	for _, chain := range d.ChainHypKeys {
 		eg.Go(func() error {
-			return d.deployCoreContractsForChain(egCtx, chain)
+			return d.deployCoreContractsForChain(ctx, chain)
 		})
 	}
 	return eg.Wait()
@@ -86,6 +87,15 @@ func (d *Deployer) deployCoreContractsForChain(ctx context.Context, chain ChainH
 	chainRegistry := path.Join("core-registries", chain.ChainName)
 	if err := d.WriteFile(ctx, path.Join(chainRegistry, "chains", chain.ChainName, "metadata.yaml"), metadataBytes); err != nil {
 		return fmt.Errorf("write metadata for %s: %w", chain.ChainName, err)
+	}
+	if entry.Addresses.HasAddresses() {
+		addressesBytes, err := yaml.Marshal(entry.Addresses)
+		if err != nil {
+			return fmt.Errorf("marshal addresses for %s: %w", chain.ChainName, err)
+		}
+		if err := d.WriteFile(ctx, path.Join(chainRegistry, "chains", chain.ChainName, "addresses.yaml"), addressesBytes); err != nil {
+			return fmt.Errorf("write addresses for %s: %w", chain.ChainName, err)
+		}
 	}
 
 	cmd := []string{
