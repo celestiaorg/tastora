@@ -298,17 +298,22 @@ func (c *Lifecycle) WaitReady(ctx context.Context, timeout time.Duration, ready 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("container %s readiness canceled: %w", c.containerName, err)
+		}
 		err := ready(ctx)
 		if err == nil {
 			return nil
 		}
 		res, inspectErr := c.client.ContainerInspect(ctx, c.id, client.ContainerInspectOptions{})
 		if inspectErr == nil && !res.Container.State.Running {
-			return c.checkForFailedStart(ctx, 0)
+			if startErr := c.checkForFailedStart(ctx, 0); startErr != nil {
+				return startErr
+			}
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("container %s not ready within %s: %w", c.containerName, timeout, err)
+			return fmt.Errorf("container %s readiness stopped (timeout %s, last probe: %v): %w", c.containerName, timeout, err, ctx.Err())
 		case <-ticker.C:
 		}
 	}

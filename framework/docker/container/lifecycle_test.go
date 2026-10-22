@@ -3,16 +3,78 @@ package container
 import (
 	"context"
 	"errors"
+	"io"
 	"net/netip"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/celestiaorg/tastora/framework/types"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
+	dockercontainer "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+type readinessClient struct {
+	types.TastoraDockerClient
+	running bool
+}
+
+func (c readinessClient) ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error) {
+	return client.ContainerInspectResult{Container: dockercontainer.InspectResponse{
+		State: &dockercontainer.State{Running: c.running, Status: "exited", ExitCode: 1},
+	}}, nil
+}
+
+func (c readinessClient) ContainerLogs(context.Context, string, client.ContainerLogsOptions) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("startup failed")), nil
+}
+
+func TestWaitReady(t *testing.T) {
+	t.Run("retries until ready", func(t *testing.T) {
+		lifecycle := NewLifecycle(zap.NewNop(), readinessClient{running: true}, "node")
+		attempts := 0
+		err := lifecycle.WaitReady(context.Background(), time.Second, func(context.Context) error {
+			attempts++
+			if attempts < 2 {
+				return errors.New("rpc not ready")
+			}
+			return nil
+		})
+		require.NoError(t, err)
+		require.Equal(t, 2, attempts)
+	})
+	t.Run("canceled before probe", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		lifecycle := NewLifecycle(zap.NewNop(), readinessClient{running: true}, "node")
+		err := lifecycle.WaitReady(ctx, time.Second, func(context.Context) error {
+			t.Fatal("probe called after cancellation")
+			return nil
+		})
+		require.ErrorIs(t, err, context.Canceled)
+	})
+	t.Run("timeout cancels probe", func(t *testing.T) {
+		lifecycle := NewLifecycle(zap.NewNop(), readinessClient{running: true}, "node")
+		err := lifecycle.WaitReady(context.Background(), 10*time.Millisecond, func(ctx context.Context) error {
+			<-ctx.Done()
+			return errors.New("rpc not ready")
+		})
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorContains(t, err, "rpc not ready")
+	})
+	t.Run("exited container includes logs", func(t *testing.T) {
+		lifecycle := NewLifecycle(zap.NewNop(), readinessClient{}, "node")
+		err := lifecycle.WaitReady(context.Background(), time.Second, func(context.Context) error {
+			return errors.New("rpc not ready")
+		})
+		require.ErrorContains(t, err, "exited early")
+		require.ErrorContains(t, err, "startup failed")
+	})
+}
 
 type createClient struct {
 	types.TastoraDockerClient
