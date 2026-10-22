@@ -29,7 +29,7 @@ func (c readinessClient) ContainerInspect(context.Context, string, client.Contai
 	}}, nil
 }
 
-func (c readinessClient) ContainerLogs(context.Context, string, client.ContainerLogsOptions) (io.ReadCloser, error) {
+func (c readinessClient) ContainerLogs(context.Context, string, client.ContainerLogsOptions) (client.ContainerLogsResult, error) {
 	return io.NopCloser(strings.NewReader("startup failed")), nil
 }
 
