@@ -372,7 +372,7 @@ func (cn *ChainNode) logger() *zap.Logger {
 // startContainer starts the container for the ChainNode, initializes its ports, and ensures the node is synced before returning.
 // Returns an error if the container fails to start or ports cannot be set.
 func (cn *ChainNode) startContainer(ctx context.Context) error {
-	if err := cn.StartContainer(ctx); err != nil {
+	if err := cn.ContainerLifecycle.StartContainerNoDelay(ctx); err != nil {
 		return err
 	}
 
@@ -412,7 +412,15 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 		cn.extraPortMappings[internalPort] = externalPort
 	}
 
-	return cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC)
+	if err := cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC); err != nil {
+		return err
+	}
+
+	// RPC starts after the ABCI handshake, so a restart with a long replay can take a while.
+	return cn.ContainerLifecycle.WaitReady(ctx, 2*time.Minute, func(ctx context.Context) error {
+		_, err := cn.Client.Status(ctx)
+		return err
+	})
 }
 
 // initClient creates and assigns a new Tendermint RPC client to the ChainNode.
@@ -453,8 +461,6 @@ func (cn *ChainNode) initClient(addr string) error {
 		return fmt.Errorf("grpc dial: %w", err)
 	}
 	cn.GrpcConn = grpcConn
-
-	time.Sleep(time.Second * 5)
 	return nil
 }
 

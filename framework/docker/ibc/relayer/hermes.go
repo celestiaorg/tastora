@@ -8,6 +8,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	sdkmath "cosmossdk.io/math"
 	"github.com/celestiaorg/tastora/framework/docker/container"
@@ -53,6 +54,8 @@ func NewHermes(ctx context.Context, dockerClient types.TastoraDockerClient, test
 	if err != nil {
 		return nil, err
 	}
+	// hermes runs as PID 1 and ignores SIGTERM, and keeps no state that needs a graceful stop.
+	node.ContainerLifecycle.SetStopTimeout(time.Second)
 
 	return &Hermes{Node: node}, nil
 }

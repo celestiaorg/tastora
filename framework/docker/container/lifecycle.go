@@ -40,6 +40,8 @@ type Lifecycle struct {
 	// portsPinned is true once the container's bindings name explicit host ports,
 	// so Docker reuses them on every subsequent start.
 	portsPinned bool
+	// stopTimeoutSec overrides the default StopContainer timeout when set.
+	stopTimeoutSec *int
 }
 
 func (c *Lifecycle) SetHostNetwork(enabled bool) {
@@ -167,6 +169,16 @@ func (c *Lifecycle) CreateContainer(
 // they are recorded, and later starts recreate the container with those ports pinned so
 // host addresses remain stable across stop/start cycles.
 func (c *Lifecycle) StartContainer(ctx context.Context) error {
+	return c.startContainer(ctx, 2*time.Second)
+}
+
+// StartContainerNoDelay is StartContainer without the fixed failed-start delay.
+// Callers poll readiness with WaitReady instead, which also catches early exits.
+func (c *Lifecycle) StartContainerNoDelay(ctx context.Context) error {
+	return c.startContainer(ctx, 0)
+}
+
+func (c *Lifecycle) startContainer(ctx context.Context, failedStartDelay time.Duration) error {
 	if c.assignedPorts != nil && !c.portsPinned {
 		if err := c.recreateWithAssignedPorts(ctx); err != nil {
 			return fmt.Errorf("pin host ports for %s: %w", c.containerName, err)
@@ -177,7 +189,7 @@ func (c *Lifecycle) StartContainer(ctx context.Context) error {
 		return err
 	}
 
-	if err := c.checkForFailedStart(ctx, time.Second*2); err != nil {
+	if err := c.checkForFailedStart(ctx, failedStartDelay); err != nil {
 		return err
 	}
 
@@ -279,6 +291,29 @@ func (c *Lifecycle) ContainerName() string {
 	return c.containerName
 }
 
+// WaitReady polls ready until it succeeds, returning early with the container logs if the container exits.
+func (c *Lifecycle) WaitReady(ctx context.Context, timeout time.Duration, ready func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		err := ready(ctx)
+		if err == nil {
+			return nil
+		}
+		res, inspectErr := c.client.ContainerInspect(ctx, c.id, client.ContainerInspectOptions{})
+		if inspectErr == nil && !res.Container.State.Running {
+			return c.checkForFailedStart(ctx, 0)
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("container %s not ready within %s: %w", c.containerName, timeout, err)
+		case <-ticker.C:
+		}
+	}
+}
+
 // checkForFailedStart checks if the container failed to start by analyzing logs and inspecting its state after waiting.
 func (c *Lifecycle) checkForFailedStart(ctx context.Context, wait time.Duration) error {
 	time.Sleep(wait)
@@ -344,8 +379,17 @@ func (c *Lifecycle) UnpauseContainer(ctx context.Context) error {
 	return err
 }
 
+// SetStopTimeout sets how long StopContainer waits after SIGTERM before killing the container (default 30s).
+func (c *Lifecycle) SetStopTimeout(d time.Duration) {
+	sec := int(d.Seconds())
+	c.stopTimeoutSec = &sec
+}
+
 func (c *Lifecycle) StopContainer(ctx context.Context) error {
 	timeoutSec := 30
+	if c.stopTimeoutSec != nil {
+		timeoutSec = *c.stopTimeoutSec
+	}
 	_, err := c.client.ContainerStop(ctx, c.id, client.ContainerStopOptions{Timeout: &timeoutSec})
 	if err != nil && errdefs.IsNotModified(err) {
 		// container is already stopped, this is not an error
