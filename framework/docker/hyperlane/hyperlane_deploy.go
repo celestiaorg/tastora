@@ -31,11 +31,34 @@ const (
 	// ownerAddr is the address corresponding to the HYP_KEY environment variable private key.
 	// it is present in the default evolve genesis as a pre-funded account.
 	ownerAddr = "0xaF9053bB6c4346381C77C2FeD279B17ABAfCDf4d"
+
+	fastPollPath = "ethers-fast-poll.js"
 )
+
+// fastPollJS is preloaded into the CLI: ethers v5 polls receipts every 4s regardless of chain
+// metadata, which sets a ~4s floor per deploy tx on chains with 1s blocks.
+const fastPollJS = `Object.defineProperty(Object.prototype, "_pollingInterval", {
+  configurable: true,
+  set(v) {
+    Object.defineProperty(this, "_pollingInterval", { value: v === 4000 ? 250 : v, writable: true, configurable: true, enumerable: true });
+  },
+});
+`
+
+// cliEnv returns the environment for a Hyperlane CLI exec signing with privKeyHex.
+func cliEnv(privKeyHex string) []string {
+	return []string{
+		fmt.Sprintf("HYP_KEY=%s", privKeyHex),
+		fmt.Sprintf("NODE_OPTIONS=--require=%s", path.Join(hyperlaneHomeDir, fastPollPath)),
+	}
+}
 
 func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 	if err := d.writeCoreConfig(ctx); err != nil {
 		return fmt.Errorf("failed to write core config: %w", err)
+	}
+	if err := d.WriteFile(ctx, fastPollPath, []byte(fastPollJS)); err != nil {
+		return fmt.Errorf("failed to write %s: %w", fastPollPath, err)
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -72,11 +95,7 @@ func (d *Deployer) deployCoreContractsForChain(ctx context.Context, chain ChainH
 		"--yes",
 	}
 
-	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", chain.PrivKeyHex),
-	}
-
-	if _, _, err := d.Exec(ctx, d.Logger, cmd, env); err != nil {
+	if _, _, err := d.Exec(ctx, d.Logger, cmd, cliEnv(chain.PrivKeyHex)); err != nil {
 		return fmt.Errorf("core deploy failed for %s: %w", chain.ChainName, err)
 	}
 
@@ -135,11 +154,7 @@ func (d *Deployer) deployWarpRoutes(ctx context.Context) error {
 		return fmt.Errorf("no hyperlane signer configured for warp deploy")
 	}
 
-	env := []string{
-		fmt.Sprintf("HYP_KEY=%s", d.ChainHypKeys[0].PrivKeyHex),
-	}
-
-	_, _, err := d.Exec(ctx, d.Logger, cmd, env)
+	_, _, err := d.Exec(ctx, d.Logger, cmd, cliEnv(d.ChainHypKeys[0].PrivKeyHex))
 	if err != nil {
 		return fmt.Errorf("warp deploy failed: %w", err)
 	}
