@@ -35,12 +35,13 @@ const (
 	fastPollPath = "ethers-fast-poll.js"
 )
 
-// fastPollJS is preloaded into the CLI: ethers v5 polls receipts every 4s regardless of chain
-// metadata, which sets a ~4s floor per deploy tx on chains with 1s blocks.
+// The pinned CLI bundles ethers v5 without a polling option. Restrict this preload
+// to provider instances; unrelated objects and explicit intervals keep their values.
 const fastPollJS = `Object.defineProperty(Object.prototype, "_pollingInterval", {
   configurable: true,
   set(v) {
-    Object.defineProperty(this, "_pollingInterval", { value: v === 4000 ? 250 : v, writable: true, configurable: true, enumerable: true });
+    const isProvider = this._isProvider === true && typeof this.poll === "function" && typeof this.getBlockNumber === "function";
+    Object.defineProperty(this, "_pollingInterval", { value: isProvider && v === 4000 ? 250 : v, writable: true, configurable: true, enumerable: true });
   },
 });
 `
