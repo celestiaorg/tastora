@@ -20,6 +20,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,38 +38,60 @@ func (d *Deployer) deployCoreContracts(ctx context.Context) error {
 		return fmt.Errorf("failed to write core config: %w", err)
 	}
 
+	eg, egCtx := errgroup.WithContext(ctx)
 	for _, chain := range d.ChainHypKeys {
-		cmd := []string{
-			"hyperlane", "core", "deploy",
-			"--config", path.Join(configsPath, "core-config.yaml"),
-			"--chain", chain.ChainName,
-			"--registry", registryPath,
-			"--yes",
-		}
+		eg.Go(func() error {
+			return d.deployCoreContractsForChain(egCtx, chain)
+		})
+	}
+	return eg.Wait()
+}
 
-		env := []string{
-			fmt.Sprintf("HYP_KEY=%s", chain.PrivKeyHex),
-		}
-
-		_, _, err := d.Exec(ctx, d.Logger, cmd, env)
-		if err != nil {
-			return fmt.Errorf("core deploy failed for %s: %w", chain.ChainName, err)
-		}
-
-		d.Logger.Info("core contracts deployed", zap.String("chain", chain.ChainName))
-
-		if err := d.writeFactoryAddresses(ctx, chain.ChainName); err != nil {
-			return fmt.Errorf("failed to write factory addresses for %s: %w", chain.ChainName, err)
-		}
+// deployCoreContractsForChain runs core deploy against a registry holding only this chain,
+// so concurrent deploys never touch the same registry files, then merges the addresses back.
+func (d *Deployer) deployCoreContractsForChain(ctx context.Context, chain ChainHypKey) error {
+	entry, ok := d.registry.Chains[chain.ChainName]
+	if !ok {
+		return fmt.Errorf("no registry entry for %s", chain.ChainName)
+	}
+	metadataBytes, err := yaml.Marshal(entry.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata for %s: %w", chain.ChainName, err)
 	}
 
+	chainRegistry := path.Join("core-registries", chain.ChainName)
+	if err := d.WriteFile(ctx, path.Join(chainRegistry, "chains", chain.ChainName, "metadata.yaml"), metadataBytes); err != nil {
+		return fmt.Errorf("write metadata for %s: %w", chain.ChainName, err)
+	}
+
+	cmd := []string{
+		"hyperlane", "core", "deploy",
+		"--config", path.Join(configsPath, "core-config.yaml"),
+		"--chain", chain.ChainName,
+		"--registry", path.Join(hyperlaneHomeDir, chainRegistry),
+		"--yes",
+	}
+
+	env := []string{
+		fmt.Sprintf("HYP_KEY=%s", chain.PrivKeyHex),
+	}
+
+	if _, _, err := d.Exec(ctx, d.Logger, cmd, env); err != nil {
+		return fmt.Errorf("core deploy failed for %s: %w", chain.ChainName, err)
+	}
+
+	d.Logger.Info("core contracts deployed", zap.String("chain", chain.ChainName))
+
+	if err := d.writeFactoryAddresses(ctx, chainRegistry, chain.ChainName); err != nil {
+		return fmt.Errorf("failed to write factory addresses for %s: %w", chain.ChainName, err)
+	}
 	return nil
 }
 
-func (d *Deployer) writeFactoryAddresses(ctx context.Context, chainName string) error {
-	addressesPath := path.Join("registry", "chains", chainName, "addresses.yaml")
-
-	existingBytes, err := d.ReadFile(ctx, addressesPath)
+// writeFactoryAddresses reads the addresses core deploy wrote to srcRegistry and writes them,
+// plus the factory addresses, to the shared registry.
+func (d *Deployer) writeFactoryAddresses(ctx context.Context, srcRegistry, chainName string) error {
+	existingBytes, err := d.ReadFile(ctx, path.Join(srcRegistry, "chains", chainName, "addresses.yaml"))
 	if err != nil {
 		return fmt.Errorf("read deployed addresses: %w", err)
 	}
@@ -92,7 +115,7 @@ func (d *Deployer) writeFactoryAddresses(ctx context.Context, chainName string) 
 		return fmt.Errorf("marshal addresses: %w", err)
 	}
 
-	if err := d.WriteFile(ctx, addressesPath, bz); err != nil {
+	if err := d.WriteFile(ctx, path.Join("registry", "chains", chainName, "addresses.yaml"), bz); err != nil {
 		return fmt.Errorf("write addresses: %w", err)
 	}
 
