@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"time"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
@@ -54,6 +55,8 @@ func NewAgent(ctx context.Context, cfg Config, testName string, agentType AgentT
 	if err != nil {
 		return nil, err
 	}
+	// relayer state is never reused after a stop, so skip the 30s graceful shutdown.
+	node.ContainerLifecycle.SetStopTimeout(time.Second)
 
 	return &Agent{
 		Node:      node,

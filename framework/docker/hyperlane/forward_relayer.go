@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/docker/internal"
@@ -135,6 +136,8 @@ func NewForwardRelayer(ctx context.Context, cfg ForwardRelayerConfig, testName s
 	if err != nil {
 		return nil, err
 	}
+	// relayer state is never reused after a stop, so skip the 30s graceful shutdown.
+	node.ContainerLifecycle.SetStopTimeout(time.Second)
 
 	return &ForwardRelayer{
 		Node:   node,

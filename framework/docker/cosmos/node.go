@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	internal "github.com/celestiaorg/tastora/framework/docker/internal"
 	"github.com/celestiaorg/tastora/framework/testutil/config"
@@ -34,6 +35,7 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -372,7 +374,7 @@ func (cn *ChainNode) logger() *zap.Logger {
 // startContainer starts the container for the ChainNode, initializes its ports, and ensures the node is synced before returning.
 // Returns an error if the container fails to start or ports cannot be set.
 func (cn *ChainNode) startContainer(ctx context.Context) error {
-	if err := cn.StartContainer(ctx); err != nil {
+	if err := cn.ContainerLifecycle.StartContainerNoDelay(ctx); err != nil {
 		return err
 	}
 
@@ -412,7 +414,59 @@ func (cn *ChainNode) startContainer(ctx context.Context) error {
 		cn.extraPortMappings[internalPort] = externalPort
 	}
 
-	return cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC)
+	if err := cn.initClient("tcp://0.0.0.0:" + cn.externalPorts.RPC); err != nil {
+		return err
+	}
+	appConfig, err := cn.ReadFile(ctx, "config/app.toml")
+	if err != nil {
+		return fmt.Errorf("read SDK readiness config: %w", err)
+	}
+	grpcEnabled, err := sdkGRPCEnabled(appConfig, cn.AdditionalStartArgs)
+	if err != nil {
+		return err
+	}
+
+	// RPC starts after the ABCI handshake, so a restart with a long replay can take a while.
+	return cn.ContainerLifecycle.WaitReady(ctx, 2*time.Minute, func(ctx context.Context) error {
+		return cn.checkReady(ctx, grpcEnabled)
+	})
+}
+
+func sdkGRPCEnabled(appConfig []byte, startArgs []string) (bool, error) {
+	var cfg struct {
+		GRPC struct {
+			Enable bool `toml:"enable"`
+		} `toml:"grpc"`
+	}
+	cfg.GRPC.Enable = true
+	if err := toml.Unmarshal(appConfig, &cfg); err != nil {
+		return false, fmt.Errorf("parse SDK readiness config: %w", err)
+	}
+	if value, ok := internal.ParseCommandLineArgs(startArgs)["grpc.enable"]; ok {
+		if value == "" {
+			return true, nil
+		}
+		enabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return false, fmt.Errorf("parse --grpc.enable: %w", err)
+		}
+		return enabled, nil
+	}
+	return cfg.GRPC.Enable, nil
+}
+
+func (cn *ChainNode) checkReady(ctx context.Context, grpcEnabled bool) error {
+	if _, err := cn.Client.Status(ctx); err != nil {
+		return err
+	}
+	// The SDK starts gRPC after Comet, so RPC readiness alone can return too early.
+	if grpcEnabled {
+		cn.GrpcConn.Connect()
+		if state := cn.GrpcConn.GetState(); state != connectivity.Ready {
+			return fmt.Errorf("SDK gRPC not ready: %s", state)
+		}
+	}
+	return nil
 }
 
 // initClient creates and assigns a new Tendermint RPC client to the ChainNode.
@@ -453,8 +507,6 @@ func (cn *ChainNode) initClient(addr string) error {
 		return fmt.Errorf("grpc dial: %w", err)
 	}
 	cn.GrpcConn = grpcConn
-
-	time.Sleep(time.Second * 5)
 	return nil
 }
 
@@ -491,7 +543,7 @@ func (cn *ChainNode) createNodeContainer(ctx context.Context) error {
 		network.MustParsePort(internalPorts.RPC + "/tcp"):  {},
 		network.MustParsePort(internalPorts.GRPC + "/tcp"): {},
 		network.MustParsePort(internalPorts.API + "/tcp"):  {},
-		network.MustParsePort(privValPortID):                 {},
+		network.MustParsePort(privValPortID):               {},
 	}
 
 	for _, port := range cn.AdditionalExposedPorts {

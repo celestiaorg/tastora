@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
@@ -169,7 +170,7 @@ func (n *Node) Start(ctx context.Context) error {
 		return fmt.Errorf("create node container: %w", err)
 	}
 
-	if err := n.ContainerLifecycle.StartContainer(ctx); err != nil {
+	if err := n.ContainerLifecycle.StartContainerNoDelay(ctx); err != nil {
 		return fmt.Errorf("start node container: %w", err)
 	}
 
@@ -180,6 +181,19 @@ func (n *Node) Start(ctx context.Context) error {
 		return fmt.Errorf("get host ports: %w", err)
 	}
 	n.external = types.Ports{RPC: internal.MustExtractPort(hostPorts[0]), P2P: internal.MustExtractPort(hostPorts[1]), API: internal.MustExtractPort(hostPorts[2]), Engine: internal.MustExtractPort(hostPorts[3]), Metrics: internal.MustExtractPort(hostPorts[4])}
+
+	rpcURL := fmt.Sprintf("http://0.0.0.0:%s", n.external.RPC)
+	if err := n.ContainerLifecycle.WaitReady(ctx, time.Minute, func(ctx context.Context) error {
+		c, err := gethrpc.DialContext(ctx, rpcURL)
+		if err != nil {
+			return err
+		}
+		defer c.Close()
+		var chainID string
+		return c.CallContext(ctx, &chainID, "eth_chainId")
+	}); err != nil {
+		return fmt.Errorf("wait for node rpc: %w", err)
+	}
 
 	n.started = true
 	return nil

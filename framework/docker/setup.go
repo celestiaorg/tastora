@@ -7,6 +7,7 @@ import (
 	"github.com/celestiaorg/tastora/framework/types"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	tastoraclient "github.com/celestiaorg/tastora/framework/docker/client"
@@ -98,46 +99,57 @@ func CleanupWithLabel(t SetupTestingT, cli types.TastoraDockerClient, cleanupLab
 				logOptions := configureLogOptions(t.Failed(), containerLogTail)
 				displayContainerLogs(ctx, t, cli, c.ID, c.Names, logOptions)
 			}
-			if !keepContainers {
-				var stopTimeout client.ContainerStopOptions
-				timeout := 10
-				timeoutDur := time.Duration(timeout * int(time.Second))
-				deadline := time.Now().Add(timeoutDur)
-				stopTimeout.Timeout = &timeout
-				if _, err := cli.ContainerStop(ctx, c.ID, stopTimeout); IsLoggableStopError(err) {
-					t.Logf("Failed to stop container %s during docker cleanup: %v", c.ID, err)
-				}
-
-				waitCtx, cancel := context.WithDeadline(ctx, deadline.Add(500*time.Millisecond))
-				waitResult := cli.ContainerWait(waitCtx, c.ID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
-				select {
-				case <-waitCtx.Done():
-					t.Logf("Timed out waiting for container %s", c.ID)
-				case err := <-waitResult.Error:
-					t.Logf("Failed to wait for container %s during docker cleanup: %v", c.ID, err)
-				case res := <-waitResult.Result:
-					if res.Error != nil {
-						t.Logf("Error while waiting for container %s during docker cleanup: %s", c.ID, res.Error.Message)
-					}
-					// Ignoring statuscode for now.
-				}
-				cancel()
-
-				if _, err := cli.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{
-					// Not removing volumes with the container, because we separately handle them conditionally.
-					Force: true,
-				}); err != nil {
-					t.Logf("Failed to remove container %s during docker cleanup: %v", c.ID, err)
-				}
-			}
 		}
 
 		if !keepContainers {
+			// stop concurrently so containers that ignore SIGTERM don't each add the full stop timeout.
+			var wg sync.WaitGroup
+			for _, c := range cs.Items {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					stopAndRemoveContainer(ctx, t, cli, c.ID)
+				}()
+			}
+			wg.Wait()
 			PruneVolumesWithRetryAndCleanupLabel(ctx, t, cli, cleanupLabel)
 			PruneNetworksWithRetryAndCleanupLabel(ctx, t, cli, cleanupLabel)
 		} else {
 			t.Logf("Keeping containers - Docker cleanup skipped")
 		}
+	}
+}
+
+func stopAndRemoveContainer(ctx context.Context, t SetupTestingT, cli types.TastoraDockerClient, id string) {
+	var stopTimeout client.ContainerStopOptions
+	timeout := 10
+	timeoutDur := time.Duration(timeout * int(time.Second))
+	deadline := time.Now().Add(timeoutDur)
+	stopTimeout.Timeout = &timeout
+	if _, err := cli.ContainerStop(ctx, id, stopTimeout); IsLoggableStopError(err) {
+		t.Logf("Failed to stop container %s during docker cleanup: %v", id, err)
+	}
+
+	waitCtx, cancel := context.WithDeadline(ctx, deadline.Add(500*time.Millisecond))
+	defer cancel()
+	waitResult := cli.ContainerWait(waitCtx, id, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
+	select {
+	case <-waitCtx.Done():
+		t.Logf("Timed out waiting for container %s", id)
+	case err := <-waitResult.Error:
+		t.Logf("Failed to wait for container %s during docker cleanup: %v", id, err)
+	case res := <-waitResult.Result:
+		if res.Error != nil {
+			t.Logf("Error while waiting for container %s during docker cleanup: %s", id, res.Error.Message)
+		}
+		// Ignoring statuscode for now.
+	}
+
+	if _, err := cli.ContainerRemove(ctx, id, client.ContainerRemoveOptions{
+		// Not removing volumes with the container, because we separately handle them conditionally.
+		Force: true,
+	}); err != nil {
+		t.Logf("Failed to remove container %s during docker cleanup: %v", id, err)
 	}
 }
 

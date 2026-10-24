@@ -268,7 +268,7 @@ func (b *broadcaster) BroadcastMessages(ctx context.Context, signingWallet *type
 	}
 
 	// Wait for transaction to be available in response buffer
-	err = wait.ForCondition(ctx, time.Second*30, time.Second*1, func() (bool, error) {
+	err = wait.ForCondition(ctx, time.Second*30, 100*time.Millisecond, func() (bool, error) {
 		txBytes, err := b.GetTxResponseBytes(ctx, signingWallet)
 		if err != nil {
 			return false, nil
@@ -308,7 +308,7 @@ func (b *broadcaster) BroadcastMessages(ctx context.Context, signingWallet *type
 func getFullyPopulatedResponse(ctx context.Context, cc client.Context, txHash string) (sdk.TxResponse, error) {
 	var resp sdk.TxResponse
 	var queryErr error
-	err := wait.ForCondition(ctx, time.Second*120, time.Second*3, func() (bool, error) {
+	err := wait.ForCondition(ctx, time.Second*120, 250*time.Millisecond, func() (bool, error) {
 		fullyPopulatedTxResp, err := authtx.QueryTx(cc, txHash)
 		if err != nil {
 			queryErr = err

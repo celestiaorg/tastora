@@ -3,7 +3,6 @@ package evmsingle
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"path"
 	"path/filepath"
@@ -113,7 +112,7 @@ func (n *Node) Start(ctx context.Context) error {
 		return fmt.Errorf("create node container: %w", err)
 	}
 
-	if err := n.StartContainer(ctx); err != nil {
+	if err := n.ContainerLifecycle.StartContainerNoDelay(ctx); err != nil {
 		return fmt.Errorf("start container: %w", err)
 	}
 
@@ -240,32 +239,20 @@ func (n *Node) createNodeContainer(ctx context.Context) error {
 
 // waitForSelfReady polls the HTTP health endpoint until the node is ready
 func (n *Node) waitForSelfReady(ctx context.Context) error {
-	deadline := time.Now().Add(120 * time.Second)
 	httpURL := fmt.Sprintf("http://0.0.0.0:%s/health/ready", n.external.RPC)
-	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("evm-single health not ready within timeout at %s", httpURL)
+	return n.ContainerLifecycle.WaitReady(ctx, 120*time.Second, func(ctx context.Context) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, httpURL, nil)
+		if err != nil {
+			return err
 		}
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context canceled: %w", ctx.Err())
-		default:
-		}
-
-		if c, err := net.DialTimeout("tcp", fmt.Sprintf("0.0.0.0:%s", n.external.RPC), 2*time.Second); err == nil {
-			_ = c.Close()
-		} else {
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, httpURL, nil)
 		resp, err := http.DefaultClient.Do(req)
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return nil
-			}
+		if err != nil {
+			return err
 		}
-		time.Sleep(1 * time.Second)
-	}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("evm-single health at %s: status %d", httpURL, resp.StatusCode)
+		}
+		return nil
+	})
 }
