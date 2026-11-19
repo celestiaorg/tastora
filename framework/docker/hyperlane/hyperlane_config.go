@@ -15,6 +15,11 @@ type Config struct {
 
 	// HyperlaneImage for hyperlane CLI (contains hyperlane binary)
 	HyperlaneImage container.Image
+
+	// DefaultIsm is the default ISM of the EVM mailboxes that Deploy creates.
+	// Nil deploys a testIsm, which accepts every message. A multisig ISM needs
+	// running validator agents; see Deployer.WriteValidatorConfig.
+	DefaultIsm *IsmCfg
 }
 
 // DefaultDeployerImage returns the default hyperlane CLI image

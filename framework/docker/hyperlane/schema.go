@@ -98,6 +98,10 @@ type RelayerConfig struct {
 	Chains                  map[string]RelayerChainConfig `json:"chains" yaml:"chains"`
 	DefaultRpcConsensusType string                        `json:"defaultRpcConsensusType" yaml:"defaultRpcConsensusType"`
 	RelayChains             string                        `json:"relayChains" yaml:"relayChains"`
+	// AllowLocalCheckpointSyncers lets the relayer read checkpoints that
+	// validators write to a local directory, as validator agents started by
+	// tastora do.
+	AllowLocalCheckpointSyncers bool `json:"allowLocalCheckpointSyncers,omitempty" yaml:"allowLocalCheckpointSyncers,omitempty"`
 }
 
 // RelayerChainConfig represents a single chain's relayer config (relayer/chains/<name>.json).

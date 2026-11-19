@@ -65,13 +65,19 @@ func NewAgent(ctx context.Context, cfg Config, testName string, agentType AgentT
 	}, nil
 }
 
-// Start starts the agent container with the relayer config mounted at /workspace/relayer-config.json
+// Start starts the agent container. A relayer reads /workspace/relayer-config.json;
+// a validator reads that file for the chains and /workspace/validator-config.json,
+// written by Deployer.WriteValidatorConfig.
 func (a *Agent) Start(ctx context.Context) error {
 	// Use the agent binary entrypoint with CONFIG_FILES env to point at the config,
 	// matching docker-compose pattern for hyperlane-agent images.
 	// Some images expect /app/config/config.json; bind our file path via CONFIG_FILES.
 	cfgPath := path.Join(hyperlaneHomeDir, "relayer-config.json")
 	cmd := []string{"/app/relayer"}
+	if a.agentType == AgentTypeValidator {
+		cmd = []string{"/app/validator"}
+		cfgPath += "," + path.Join(hyperlaneHomeDir, validatorConfigFile)
+	}
 	env := []string{
 		fmt.Sprintf("CONFIG_FILES=%s", cfgPath),
 		// Provide other common env flags as no-ops to reduce surprises
