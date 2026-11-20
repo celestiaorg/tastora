@@ -3,9 +3,11 @@ package docker
 import (
 	"context"
 	"testing"
+	"time"
 
 	"cosmossdk.io/math"
 	"github.com/celestiaorg/tastora/framework/docker/cosmos"
+	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -103,11 +105,22 @@ func TestGetFaucetWalletOnNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	// test broadcasting from validator[0] using faucet wallet
-	err = testFaucetBroadcast(chain, chain.Validators[0], faucetWallet1, testWallet)
+	resp, err := testFaucetBroadcast(chain, chain.Validators[0], faucetWallet1, testWallet)
+	require.NoError(t, err)
+
+	// validator[1] reads the faucet sequence from its own state, so it must
+	// commit the first tx's block or it signs a duplicate of the first tx.
+	err = wait.ForCondition(testCfg.Ctx, time.Minute, 100*time.Millisecond, func() (bool, error) {
+		height, err := chain.Validators[1].Height(testCfg.Ctx)
+		if err != nil {
+			return false, nil
+		}
+		return height >= resp.Height, nil
+	})
 	require.NoError(t, err)
 
 	// test broadcasting from validator[1] using faucet wallet
-	err = testFaucetBroadcast(chain, chain.Validators[1], faucetWallet2, testWallet)
+	_, err = testFaucetBroadcast(chain, chain.Validators[1], faucetWallet2, testWallet)
 	require.NoError(t, err)
 }
 
@@ -137,7 +150,7 @@ func TestCreateWallet(t *testing.T) {
 }
 
 // testFaucetBroadcast helper function to test broadcasting a bank send transaction using the faucet wallet on a specific node
-func testFaucetBroadcast(chain *cosmos.Chain, node *cosmos.ChainNode, faucetWallet, recipientWallet *types.Wallet) error {
+func testFaucetBroadcast(chain *cosmos.Chain, node *cosmos.ChainNode, faucetWallet, recipientWallet *types.Wallet) (sdk.TxResponse, error) {
 	// create a bank send message
 	sendAmount := sdk.NewCoins(sdk.NewCoin(chain.Config.Denom, math.NewInt(1000)))
 	msg := &banktypes.MsgSend{
@@ -150,6 +163,5 @@ func testFaucetBroadcast(chain *cosmos.Chain, node *cosmos.ChainNode, faucetWall
 	broadcaster := node.GetBroadcaster(chain)
 
 	// broadcast the transaction using the node-specific broadcaster
-	_, err := broadcaster.BroadcastMessages(context.Background(), faucetWallet, msg)
-	return err
+	return broadcaster.BroadcastMessages(context.Background(), faucetWallet, msg)
 }
