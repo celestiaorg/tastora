@@ -95,6 +95,11 @@ func (d *Deployer) init(ctx context.Context) error {
 		return fmt.Errorf("failed to build relayer config: %w", err)
 	}
 	d.relayerCfg = relayerCfg
+	// Validator agents write checkpoints to a local directory on the shared
+	// volume; a multisig ISM makes the relayer read them.
+	if d.cfg.DefaultIsm != nil && len(d.cfg.DefaultIsm.Validators) > 0 {
+		d.relayerCfg.AllowLocalCheckpointSyncers = true
+	}
 
 	chainHypKeys := make([]ChainHypKey, 0)
 	for _, chainCfg := range d.relayerCfg.Chains {
@@ -150,6 +155,14 @@ func (d *Deployer) Deploy(ctx context.Context) error {
 		return fmt.Errorf("failed to deploy core contracts: %w", err)
 	}
 
+	// The chain providers hard-code the EVM addresses of the default
+	// deployment; another default ISM can deploy the contracts elsewhere.
+	if d.cfg.DefaultIsm != nil {
+		if err := d.syncEVMAddresses(ctx); err != nil {
+			return fmt.Errorf("failed to sync deployed EVM addresses: %w", err)
+		}
+	}
+
 	if err := d.deployWarpRoutes(ctx); err != nil {
 		return fmt.Errorf("failed to deploy warp routes: %w", err)
 	}
@@ -157,6 +170,41 @@ func (d *Deployer) Deploy(ctx context.Context) error {
 	d.deployed = true
 	d.Logger.Info("hyperlane deployment completed successfully")
 	return nil
+}
+
+// syncEVMAddresses replaces the EVM core addresses in the relayer config with
+// the ones the core deploy wrote to the registry, and writes the relayer and
+// warp configs again.
+func (d *Deployer) syncEVMAddresses(ctx context.Context) error {
+	for name, c := range d.relayerCfg.Chains {
+		if c.Protocol != "ethereum" {
+			continue
+		}
+		meta, err := d.readMetadataFromDisk(ctx, name)
+		if err != nil {
+			return fmt.Errorf("read %s metadata: %w", name, err)
+		}
+		addrs, err := d.readAddressFromDisk(ctx, meta)
+		if err != nil {
+			return fmt.Errorf("read %s addresses: %w", name, err)
+		}
+		set := func(dst *string, src QuotedHexAddress) {
+			if src != "" {
+				*dst = string(src)
+			}
+		}
+		set(&c.Mailbox, addrs.Mailbox)
+		set(&c.MerkleTreeHook, addrs.MerkleTreeHook)
+		set(&c.ValidatorAnnounce, addrs.ValidatorAnnounce)
+		set(&c.InterchainGasPaymaster, addrs.InterchainGasPaymaster)
+		set(&c.InterchainSecurityModule, addrs.InterchainSecurityModule)
+		set(&c.ProxyAdmin, addrs.ProxyAdmin)
+		d.relayerCfg.Chains[name] = c
+	}
+	if err := d.writeRelayerConfig(ctx); err != nil {
+		return err
+	}
+	return d.writeWarpConfig(ctx)
 }
 
 func (d *Deployer) writeRelayerConfig(ctx context.Context) error {
@@ -211,6 +259,13 @@ func (d *Deployer) writeWarpConfig(ctx context.Context) error {
 			registryEntry, err := chain.GetHyperlaneRegistryEntry(ctx)
 			if err != nil {
 				return fmt.Errorf("failed to get registry entry: %w", err)
+			}
+			if rc, ok := d.relayerCfg.Chains[registryEntry.Metadata.Name]; ok && rc.Protocol == "ethereum" && rc.Mailbox != "" {
+				entry.Mailbox = QuotedHexAddress(rc.Mailbox)
+			}
+			// The warp router uses the mailbox default ISM unless it sets its own.
+			if d.cfg.DefaultIsm != nil {
+				entry.InterchainSecurityModule = ""
 			}
 			warpConfig[registryEntry.Metadata.Name] = entry
 		}
@@ -316,4 +371,45 @@ func (d *Deployer) readAddressFromDisk(ctx context.Context, meta ChainMetadata) 
 // The address is deterministic due to CREATE2 deployment.
 func (d *Deployer) GetEVMWarpTokenAddress() (common.Address, error) {
 	return common.HexToAddress("0x345a583028762De4d733852c9D4f419077093A48"), nil
+}
+
+// EVMWarpTokenAddress returns the address of the EVM warp token from the warp
+// route artifact that warp deploy writes to the registry. Without an artifact
+// it returns GetEVMWarpTokenAddress.
+func (d *Deployer) EVMWarpTokenAddress(ctx context.Context) (common.Address, error) {
+	stdout, _, err := d.Exec(ctx, d.Logger, []string{"sh", "-c", "cat " + registryPath + "/deployments/warp_routes/*/*-config.yaml 2>/dev/null || true"}, nil)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("read warp route artifact: %w", err)
+	}
+	addr, ok, err := evmWarpTokenFromArtifact(stdout, d.relayerCfg.Chains)
+	if err != nil {
+		return common.Address{}, err
+	}
+	if !ok {
+		return d.GetEVMWarpTokenAddress()
+	}
+	return addr, nil
+}
+
+// evmWarpTokenFromArtifact finds the token of an ethereum chain in a warp
+// route artifact.
+func evmWarpTokenFromArtifact(artifact []byte, chains map[string]RelayerChainConfig) (common.Address, bool, error) {
+	if len(strings.TrimSpace(string(artifact))) == 0 {
+		return common.Address{}, false, nil
+	}
+	var route struct {
+		Tokens []struct {
+			ChainName      string `yaml:"chainName"`
+			AddressOrDenom string `yaml:"addressOrDenom"`
+		} `yaml:"tokens"`
+	}
+	if err := yaml.Unmarshal(artifact, &route); err != nil {
+		return common.Address{}, false, fmt.Errorf("parse warp route artifact: %w", err)
+	}
+	for _, token := range route.Tokens {
+		if c, ok := chains[token.ChainName]; ok && c.Protocol == "ethereum" && common.IsHexAddress(token.AddressOrDenom) {
+			return common.HexToAddress(token.AddressOrDenom), true, nil
+		}
+	}
+	return common.Address{}, false, nil
 }

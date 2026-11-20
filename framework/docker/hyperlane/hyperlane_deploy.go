@@ -137,12 +137,16 @@ func (d *Deployer) writeCoreConfig(ctx context.Context) error {
 			ProtocolFee:    "0",
 			Type:           "protocolFee",
 		},
-		DefaultIsm: TestIsmCfg{
+		DefaultIsm: IsmCfg{
 			Type: "testIsm",
 		},
 		RequiredHook: MerkleTreeHookCfg{
 			Type: "merkleTreeHook",
 		},
+	}
+
+	if d.cfg.DefaultIsm != nil {
+		core.DefaultIsm = *d.cfg.DefaultIsm
 	}
 
 	bz, err := yaml.Marshal(core)

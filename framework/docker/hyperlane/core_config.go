@@ -28,10 +28,18 @@ type HookCfg struct {
 	Type    string           `yaml:"type"`
 }
 
-type TestIsmCfg struct {
-	Address QuotedHexAddress `yaml:"address,omitempty"`
-	Type    string           `yaml:"type"`
+// IsmCfg models an interchain security module in the core config. A multisig
+// ISM (type messageIdMultisigIsm or merkleRootMultisigIsm) also takes the
+// validator addresses and the threshold.
+type IsmCfg struct {
+	Address    QuotedHexAddress   `yaml:"address,omitempty"`
+	Type       string             `yaml:"type"`
+	Validators []QuotedHexAddress `yaml:"validators,omitempty"`
+	Threshold  int                `yaml:"threshold,omitempty"`
 }
+
+// TestIsmCfg is the former name of IsmCfg.
+type TestIsmCfg = IsmCfg
 
 type MerkleTreeHookCfg struct {
 	Address QuotedHexAddress `yaml:"address,omitempty"`
@@ -61,7 +69,7 @@ type InterchainAccountRouterCfg struct {
 type CoreConfig struct {
 	DefaultHook             ProtocolFeeHookCfg         `yaml:"defaultHook"`
 	RequiredHook            MerkleTreeHookCfg          `yaml:"requiredHook"`
-	DefaultIsm              TestIsmCfg                 `yaml:"defaultIsm"`
+	DefaultIsm              IsmCfg                     `yaml:"defaultIsm"`
 	InterchainAccountRouter InterchainAccountRouterCfg `yaml:"interchainAccountRouter,omitempty"`
 	Owner                   QuotedHexAddress           `yaml:"owner"`
 	ProxyAdmin              ProxyAdminCfg              `yaml:"proxyAdmin,omitempty"`
